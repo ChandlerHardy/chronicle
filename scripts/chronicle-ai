@@ -1,0 +1,122 @@
+#!/usr/bin/env bash
+# Chronicle AI Wrapper Script
+# Logs AI interactions and passes through to actual CLI tools
+
+set -euo pipefail
+
+# Configuration
+CHRONICLE_DB="${HOME}/.ai-session/sessions.db"
+LOG_DIR="${HOME}/.ai-session/logs"
+mkdir -p "$LOG_DIR"
+
+# Check if we have required arguments
+if [ $# -lt 2 ]; then
+    echo "Usage: chronicle-ai <ai-tool> <prompt> [additional args...]"
+    echo ""
+    echo "Supported AI tools:"
+    echo "  gemini    - Gemini CLI"
+    echo "  qwen      - Qwen CLI"
+    echo "  claude    - Claude CLI (future)"
+    echo ""
+    echo "Examples:"
+    echo "  chronicle-ai gemini 'explain this code'"
+    echo "  chronicle-ai qwen 'review my changes'"
+    exit 1
+fi
+
+# Get AI tool and prompt
+AI_TOOL="$1"
+shift
+PROMPT="$*"
+
+# Start timing
+START_TIME=$(date +%s%3N)
+
+# Create temp file for response
+RESPONSE_FILE=$(mktemp)
+trap "rm -f $RESPONSE_FILE" EXIT
+
+# Function to log interaction to database
+log_interaction() {
+    local ai_tool="$1"
+    local prompt="$2"
+    local response="$3"
+    local duration_ms="$4"
+
+    # Use Python to log to database
+    python3 -c "
+import sys
+sys.path.insert(0, '$(dirname "$(dirname "$(readlink -f "$0" 2>/dev/null || echo "$0")")")')
+
+from backend.database.models import get_session
+from backend.services.ai_tracker import AITracker
+
+db = get_session()
+tracker = AITracker(db)
+
+# Escape single quotes in prompt and response
+prompt = '''$prompt'''.replace(\"'\", \"''\")
+response = '''$response'''.replace(\"'\", \"''\")
+
+tracker.log_interaction(
+    ai_tool='${ai_tool}-cli',
+    prompt=prompt,
+    response=response,
+    duration_ms=$duration_ms
+)
+
+db.close()
+" 2>/dev/null || echo "Warning: Failed to log interaction" >&2
+}
+
+# Execute the appropriate CLI tool
+case "$AI_TOOL" in
+    gemini)
+        # Check if gemini CLI exists
+        if ! command -v gemini &> /dev/null; then
+            echo "Error: gemini CLI not found. Please install it first."
+            exit 1
+        fi
+
+        # Run gemini and capture output
+        gemini "$PROMPT" 2>&1 | tee "$RESPONSE_FILE"
+        EXIT_CODE=${PIPESTATUS[0]}
+        ;;
+
+    qwen)
+        # Check if qwen CLI exists
+        if ! command -v qwen &> /dev/null; then
+            echo "Error: qwen CLI not found. Please install it first."
+            exit 1
+        fi
+
+        # Run qwen and capture output
+        qwen "$PROMPT" 2>&1 | tee "$RESPONSE_FILE"
+        EXIT_CODE=${PIPESTATUS[0]}
+        ;;
+
+    claude)
+        echo "Error: Claude CLI integration coming soon!"
+        echo "For now, Claude Code sessions are tracked via git commits."
+        exit 1
+        ;;
+
+    *)
+        echo "Error: Unknown AI tool '$AI_TOOL'"
+        echo "Supported tools: gemini, qwen"
+        exit 1
+        ;;
+esac
+
+# Calculate duration
+END_TIME=$(date +%s%3N)
+DURATION=$((END_TIME - START_TIME))
+
+# Get response content
+RESPONSE=$(cat "$RESPONSE_FILE")
+
+# Log to database (in background to not slow down user)
+log_interaction "$AI_TOOL" "$PROMPT" "$RESPONSE" "$DURATION" &
+
+# Exit with same code as the CLI tool
+exit $EXIT_CODE
