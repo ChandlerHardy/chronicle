@@ -265,17 +265,19 @@ def ask(prompt: str, tool: str, log_only: bool):
 
 
 @cli.command()
-@click.argument('tool', type=click.Choice(['claude', 'vim', 'other']))
+@click.argument('tool', type=click.Choice(['claude', 'gemini', 'qwen', 'vim', 'other']))
 @click.option('--command', help='Custom command to run (overrides tool name)')
 def start(tool: str, command: str = None):
     """Start an interactive session with a tool.
-    
+
     This launches the tool and records all activity in a session.
     When you exit the tool, Chronicle saves the full transcript.
-    
+
     Examples:
-        chronicle start claude
-        chronicle start vim
+        chronicle start claude      # Claude Code
+        chronicle start gemini      # Gemini CLI
+        chronicle start qwen        # Qwen Code CLI
+        chronicle start vim         # Vim editor
         chronicle start other --command "python -i"
     """
     from backend.services.session_manager import SessionManager
@@ -286,6 +288,8 @@ def start(tool: str, command: str = None):
     # Map tool names to actual commands
     tool_commands = {
         'claude': 'claude',
+        'gemini': 'gemini',
+        'qwen': 'qwen-code',
         'vim': 'vim',
         'other': command or 'bash'
     }
