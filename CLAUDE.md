@@ -562,13 +562,14 @@ Integrate Chronicle with Obsidian via MCP (Model Context Protocol) to create a s
    - **Pivoted to bitbonsai/mcp-obsidian** - simpler, no plugin required, works directly with file system
 
 2. **Set Up MCP Server** ✅
-   - Configured `.mcp.json` with bitbonsai server
+   - Configured global `~/.mcp.json` for access from any directory
+   - Configured local `.mcp.json` with bitbonsai server (project-specific override)
    - Added `.mcp.json` to `.gitignore` (contains vault path)
    - Created `.mcp.json.example` template for other devs
-   - Ready to test after Claude Code restart
 
 3. **Configuration Files Created** ✅
-   - `.mcp.json` - Local config with vault path (not committed)
+   - `~/.mcp.json` - **Global config** (recommended) - available in all Claude Code sessions
+   - `.mcp.json` - Local config with vault path (not committed, project-specific)
    - `.mcp.json.example` - Template for setup instructions
    - User's Obsidian vault: `~/Library/Mobile Documents/com~apple~CloudDocs/Documents/Chronicle`
 
@@ -577,6 +578,7 @@ Integrate Chronicle with Obsidian via MCP (Model Context Protocol) to create a s
    - Successfully created test session note with frontmatter and wikilinks
    - Confirmed nested directory creation (`Chronicle/Sessions/`)
    - Search functionality working across vault
+   - Created Session-10.md with full summary (83,420 lines → chunked summary)
    - **Status**: MCP server fully operational, ready for production use
 
 ### What's Next
@@ -706,18 +708,16 @@ chmod -R u+rw "/path/to/your/obsidian/vault"
 
 ### Setup Instructions for Other Developers
 
+**Recommended: Global Configuration** (available in all Claude Code sessions)
+
 1. **Install Node.js** (if not already installed):
    ```bash
    brew install node  # macOS
    ```
 
-2. **Copy the example config**:
+2. **Create global MCP config** at `~/.mcp.json`:
    ```bash
-   cp .mcp.json.example .mcp.json
-   ```
-
-3. **Edit `.mcp.json`** and replace `/path/to/your/obsidian/vault` with your actual vault path:
-   ```json
+   cat > ~/.mcp.json << 'EOF'
    {
      "mcpServers": {
        "chronicle-obsidian": {
@@ -729,8 +729,19 @@ chmod -R u+rw "/path/to/your/obsidian/vault"
        }
      }
    }
+   EOF
    ```
+
+3. **Edit the file** to replace `/Users/yourusername/Documents/YourVault` with your actual vault path
 
 4. **Restart Claude Code** to load the MCP server
 
-5. **Test with `/mcp`** to verify the server is loaded
+5. **Test with `/mcp`** from any directory to verify the server is loaded globally
+
+**Alternative: Project-Specific Configuration** (only works in chronicle directory)
+
+1. Copy the example config: `cp .mcp.json.example .mcp.json`
+2. Edit `.mcp.json` with your vault path
+3. Restart Claude Code
+
+**Note:** Global configuration (`~/.mcp.json`) is recommended because it allows you to access your Chronicle Obsidian vault from any project, not just the chronicle repository.
