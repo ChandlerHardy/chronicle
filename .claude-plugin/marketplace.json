@@ -1,0 +1,24 @@
+{
+  "name": "chronicle-skills",
+  "owner": {
+    "name": "Chandler Hardy",
+    "email": "hardych04@gmail.com"
+  },
+  "metadata": {
+    "description": "Skills for working with Chronicle - a local-first development session recorder",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "chronicle-workflow-skills",
+      "description": "Complete Chronicle workflow skills including session documentation, context retrieval, and development tracking",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./chronicle-skills/chronicle-workflow",
+        "./chronicle-skills/chronicle-session-documenter",
+        "./chronicle-skills/chronicle-context-retriever"
+      ]
+    }
+  ]
+}
