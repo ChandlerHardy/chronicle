@@ -1,9 +1,9 @@
 # Chronicle - Context for AI Assistants
 
 > **Last Updated**: October 20, 2025
-> **Project Status**: Phase 3 Complete + Starting Phase 4 (Obsidian Integration)
+> **Project Status**: Phase 3 Complete + Phase 4 (Obsidian Integration + Claude Skills)
 > **Tests**: 16 passing (8 git + 8 AI tracking)
-> **Current Work**: Setting up Obsidian MCP server integration for knowledge graph
+> **Claude Skills**: 3 skills available for workflow automation
 
 ## 🤖 For AI Coding Assistants: How to Use Chronicle
 
@@ -19,6 +19,36 @@
 4. When done: exit
 5. View summary: chronicle session <id>
 ```
+
+### 🎯 Chronicle Skills Available
+
+Chronicle provides Claude Skills that teach Claude how to work with Chronicle automatically. Once installed, Claude will use these skills when relevant:
+
+**📝 chronicle-session-documenter**
+- Automatically documents sessions to Obsidian vault
+- Creates structured notes with metadata and wikilinks
+- Triggered when user asks to document a session
+
+**🔍 chronicle-context-retriever**
+- Searches past sessions for relevant context
+- Retrieves previous decisions and approaches
+- Triggered when user asks "how did I..." or "what did I..."
+
+**🔄 chronicle-workflow**
+- Complete Chronicle workflow guidance
+- Best practices and multi-project tracking
+- Triggered when starting new work or asking about Chronicle
+
+**Installation:**
+```bash
+# One-time setup
+/plugin marketplace add ChandlerHardy/chronicle
+/plugin install chronicle-workflow-skills@chronicle-skills
+
+# Skills are now available globally in all Claude Code sessions!
+```
+
+See `chronicle-skills/README.md` for detailed skill documentation.
 
 ### Understanding Chronicle Sessions
 
