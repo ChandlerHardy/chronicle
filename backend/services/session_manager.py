@@ -39,6 +39,10 @@ class SessionManager:
         if tool_command is None:
             tool_command = tool
 
+        # Detect current working directory and git repo
+        cwd = os.getcwd()
+        repo_path = self._find_git_root(cwd)
+
         # Create session record immediately
         session = AIInteraction(
             timestamp=datetime.now(),
@@ -48,6 +52,8 @@ class SessionManager:
             is_session=1,
             summary_generated=0,
             session_transcript=None,
+            working_directory=cwd,
+            repo_path=repo_path,
         )
         self.db.add(session)
         self.db.commit()
@@ -232,3 +238,23 @@ class SessionManager:
             return False
 
         return session.summary_generated == 0 and session.session_transcript is not None
+
+    def _find_git_root(self, start_path: str) -> Optional[str]:
+        """Find the git repository root from a starting path.
+
+        Args:
+            start_path: Directory to start searching from
+
+        Returns:
+            Git repository root path or None if not in a git repo
+        """
+        current = Path(start_path).resolve()
+
+        # Walk up directory tree looking for .git
+        while current != current.parent:
+            git_dir = current / ".git"
+            if git_dir.exists():
+                return str(current)
+            current = current.parent
+
+        return None

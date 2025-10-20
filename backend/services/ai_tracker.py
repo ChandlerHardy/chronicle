@@ -26,6 +26,8 @@ class AITracker:
         response: str = None,
         duration_ms: int = None,
         files_mentioned: List[str] = None,
+        working_directory: str = None,
+        repo_path: str = None,
     ) -> AIInteraction:
         """Log an AI interaction.
 
@@ -35,10 +37,19 @@ class AITracker:
             response: The AI's response (optional)
             duration_ms: Duration in milliseconds (optional)
             files_mentioned: List of files mentioned in interaction (optional)
+            working_directory: Directory where interaction occurred (optional)
+            repo_path: Git repository root (optional)
 
         Returns:
             Created AIInteraction object
         """
+        # Auto-detect working directory and repo if not provided
+        if working_directory is None:
+            import os
+            working_directory = os.getcwd()
+        if repo_path is None:
+            repo_path = self._find_git_root(working_directory)
+
         # Create response summary (first 500 chars)
         response_summary = None
         if response:
@@ -53,6 +64,8 @@ class AITracker:
             files_mentioned=None,
             duration_ms=duration_ms,
             related_commit_id=None,
+            working_directory=working_directory,
+            repo_path=repo_path,
         )
 
         if files_mentioned:
@@ -89,11 +102,12 @@ class AITracker:
             interaction.related_commit_id = recent_commit.id
             self.db.commit()
 
-    def get_interactions_today(self, ai_tool: str = None) -> List[AIInteraction]:
+    def get_interactions_today(self, ai_tool: str = None, repo_path: str = None) -> List[AIInteraction]:
         """Get all AI interactions from today.
 
         Args:
             ai_tool: Optional filter by AI tool
+            repo_path: Optional filter by repository path
 
         Returns:
             List of AIInteraction objects from today
@@ -104,6 +118,9 @@ class AITracker:
         if ai_tool:
             query = query.filter_by(ai_tool=ai_tool)
 
+        if repo_path:
+            query = query.filter_by(repo_path=repo_path)
+
         return query.order_by(AIInteraction.timestamp.desc()).all()
 
     def get_interactions_by_date(
@@ -111,6 +128,7 @@ class AITracker:
         start_date: datetime,
         end_date: Optional[datetime] = None,
         ai_tool: Optional[str] = None,
+        repo_path: Optional[str] = None,
     ) -> List[AIInteraction]:
         """Get AI interactions within a date range.
 
@@ -118,6 +136,7 @@ class AITracker:
             start_date: Start of date range
             end_date: End of date range (defaults to now)
             ai_tool: Optional filter by AI tool
+            repo_path: Optional filter by repository path
 
         Returns:
             List of AIInteraction objects
@@ -129,6 +148,9 @@ class AITracker:
 
         if ai_tool:
             query = query.filter_by(ai_tool=ai_tool)
+
+        if repo_path:
+            query = query.filter_by(repo_path=repo_path)
 
         return query.order_by(AIInteraction.timestamp.desc()).all()
 
@@ -192,3 +214,25 @@ class AITracker:
             commit = self.db.query(Commit).filter_by(id=interaction.related_commit_id).first()
 
         return interaction, commit
+
+    def _find_git_root(self, start_path: str) -> Optional[str]:
+        """Find the git repository root from a starting path.
+
+        Args:
+            start_path: Directory to start searching from
+
+        Returns:
+            Git repository root path or None if not in a git repo
+        """
+        from pathlib import Path
+
+        current = Path(start_path).resolve()
+
+        # Walk up directory tree looking for .git
+        while current != current.parent:
+            git_dir = current / ".git"
+            if git_dir.exists():
+                return str(current)
+            current = current.parent
+
+        return None

@@ -61,6 +61,10 @@ class AIInteraction(Base):
     session_transcript = Column(Text)  # Full session transcript for interactive sessions
     summary_generated = Column(Integer, default=0)  # 0 = not summarized, 1 = summarized
 
+    # Project/repo tracking
+    working_directory = Column(String(500))  # Directory where session was started
+    repo_path = Column(String(500))  # Git repository root (if in a git repo)
+
     # Relationship
     commit = relationship("Commit", back_populates="ai_interactions")
 

@@ -50,6 +50,9 @@ class Config:
                 "gemini_api_key": None,
                 "default_model": "gemini-2.0-flash-exp",
                 "auto_summarize_sessions": False,
+                "summarization_provider": "gemini",  # "gemini" or "ollama"
+                "ollama_model": "qwen2.5:32b",
+                "ollama_host": "http://localhost:11434",
             },
             "retention": {
                 "raw_data_days": 7,
@@ -156,6 +159,21 @@ class Config:
     def auto_summarize_sessions(self) -> bool:
         """Whether to auto-summarize sessions on exit."""
         return self.get("ai.auto_summarize_sessions", False)
+
+    @property
+    def summarization_provider(self) -> str:
+        """Get summarization provider (gemini or ollama)."""
+        return self.get("ai.summarization_provider", "gemini")
+
+    @property
+    def ollama_model(self) -> str:
+        """Get Ollama model name."""
+        return self.get("ai.ollama_model", "qwen2.5:32b")
+
+    @property
+    def ollama_host(self) -> str:
+        """Get Ollama host URL."""
+        return self.get("ai.ollama_host", "http://localhost:11434")
 
     @property
     def repositories(self) -> list:

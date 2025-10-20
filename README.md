@@ -64,13 +64,16 @@ chronicle start qwen        # Qwen Code CLI
 
 # View all sessions
 chronicle sessions
+chronicle sessions --limit 20                   # Show more sessions
+chronicle sessions --repo /path/to/project      # Filter by repository
 
 # View a session with AI-generated summary
 chronicle session 5
 
 # AI-powered summaries of your work
-chronicle summarize today       # Today's accomplishments
-chronicle summarize week        # Weekly digest
+chronicle summarize today                       # Today's accomplishments
+chronicle summarize week                        # Weekly digest
+chronicle summarize today --repo /path/repo     # Per-project summaries
 
 # See combined timeline
 chronicle timeline today
@@ -196,7 +199,10 @@ chronicle config ai.default_model               # View default model
 
 **Available settings:**
 - `ai.gemini_api_key` - Gemini API key for summarization
-- `ai.default_model` - Default Gemini model (gemini-2.5-flash)
+- `ai.default_model` - Default Gemini model (gemini-2.0-flash-exp)
+- `ai.summarization_provider` - Summarization provider (gemini or ollama)
+- `ai.ollama_model` - Ollama model name (qwen2.5:32b)
+- `ai.ollama_host` - Ollama host URL (http://localhost:11434)
 - `ai.auto_summarize_sessions` - Auto-summarize on session exit
 - `retention.raw_data_days` - How long to keep raw transcripts (7 days)
 - `retention.summaries_days` - How long to keep summaries (90 days)
@@ -210,17 +216,30 @@ chronicle config ai.default_model               # View default model
 
 ### ✅ Phase 3: AI Summarization (COMPLETE)
 
-AI-powered summarization with Google Gemini for intelligent insights:
+AI-powered summarization with multiple provider options:
 
 #### Setup
 
+**Option 1: Gemini (Cloud, 1M token context)**
 ```bash
 # Configure Gemini API key
 chronicle config ai.gemini_api_key YOUR_KEY
-chronicle config ai.default_model gemini-2.5-flash
+chronicle config ai.summarization_provider gemini
+chronicle config ai.default_model gemini-2.0-flash-exp
 
 # Test connection
 chronicle test-gemini
+```
+
+**Option 2: Ollama (Local, unlimited)**
+```bash
+# Install and run Ollama first: https://ollama.ai
+ollama pull qwen2.5:32b
+
+# Configure Chronicle
+chronicle config ai.summarization_provider ollama
+chronicle config ai.ollama_model qwen2.5:32b
+chronicle config ai.ollama_host http://localhost:11434
 ```
 
 #### View Session with Auto-Summary
@@ -241,6 +260,8 @@ chronicle summarize week        # AI summary of last 7 days
 ```
 
 **Features:**
+- **Multi-provider support** - Choose between Gemini (cloud, 1M context) or Ollama (local, unlimited)
+- **Transcript cleaning** - Removes ANSI codes and duplicates (typically 50-90% size reduction)
 - **Lazy summarization** - Summaries generated on-demand, not blocking
 - **Auto-caching** - Generate once, view instantly forever
 - **Intelligent prompts** - Extracts key decisions, files modified, blockers
@@ -262,6 +283,47 @@ chronicle summarize week        # AI summary of last 7 days
 - backend/cli/formatters.py
 - backend/services/summarizer.py
 ```
+
+---
+
+### 🗂️ Multi-Project Organization
+
+Chronicle automatically tracks which repository each session belongs to:
+
+#### Automatic Repository Detection
+
+When you start a session, Chronicle automatically:
+- Detects your current working directory
+- Finds the git repository root (if in a git repo)
+- Associates the session with that project
+
+```bash
+cd /Users/you/repos/my-app
+chronicle start claude
+# Session automatically tagged with "my-app" repository
+```
+
+#### Filter by Repository
+
+View sessions, timelines, and summaries for specific projects:
+
+```bash
+# View sessions for a specific project
+chronicle sessions --repo /Users/you/repos/my-app
+
+# Summarize work on specific project
+chronicle summarize today --repo /Users/you/repos/my-app
+chronicle summarize week --repo /Users/you/repos/other-project
+
+# Timeline for specific project
+chronicle timeline today --repo /Users/you/repos/my-app
+```
+
+**Benefits:**
+- Track work across multiple projects separately
+- "What did I do on project X this week?"
+- Organize sessions by codebase
+- Perfect for contractors juggling multiple clients
 
 ---
 

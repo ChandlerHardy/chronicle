@@ -264,15 +264,17 @@ def session(session_id: int):
 
 @cli.command()
 @click.argument('action', type=click.Choice(['today', 'week']))
-def summarize(action: str):
+@click.option('--repo', help='Filter by repository path')
+def summarize(action: str, repo: str = None):
     """Generate AI-powered summaries of your development activity.
 
     This command uses Gemini to analyze your commits and AI sessions
     and generate concise summaries of what you accomplished.
 
     Examples:
-        chronicle summarize today    # Summarize today's work
-        chronicle summarize week     # Summarize last 7 days
+        chronicle summarize today                    # Summarize today's work
+        chronicle summarize week                     # Summarize last 7 days
+        chronicle summarize today --repo /path/repo  # Today's work on specific repo
     """
     from backend.services.summarizer import Summarizer
 
@@ -282,15 +284,23 @@ def summarize(action: str):
 
     # Get data based on timeframe
     if action == 'today':
-        commits = monitor.get_commits_today()
-        interactions = tracker.get_interactions_today()
+        commits = monitor.get_commits_today(repo_path=repo)
+        interactions = tracker.get_interactions_today(repo_path=repo)
         title = f"Summary for {datetime.now().strftime('%B %d, %Y')}"
+        if repo:
+            from pathlib import Path
+            repo_name = Path(repo).name
+            title += f" - {repo_name}"
 
     elif action == 'week':
         week_start = datetime.now() - timedelta(days=7)
-        commits = monitor.get_commits_by_date(week_start)
-        interactions = tracker.get_interactions_by_date(week_start)
+        commits = monitor.get_commits_by_date(week_start, repo_path=repo)
+        interactions = tracker.get_interactions_by_date(week_start, repo_path=repo)
         title = "Summary for Last 7 Days"
+        if repo:
+            from pathlib import Path
+            repo_name = Path(repo).name
+            title += f" - {repo_name}"
 
     # Check if we have any data
     if not commits and not interactions:
@@ -446,17 +456,31 @@ def start(tool: str, command: str = None):
 
 
 @cli.command()
-def sessions():
-    """List recent sessions."""
+@click.option('--repo', help='Filter by repository path')
+@click.option('--limit', default=10, help='Number of sessions to show (default: 10)')
+def sessions(repo: str = None, limit: int = 10):
+    """List recent sessions.
+
+    Examples:
+        chronicle sessions                          # Last 10 sessions
+        chronicle sessions --limit 20               # Last 20 sessions
+        chronicle sessions --repo /path/to/project  # Sessions for specific repo
+    """
     db_session = get_session()
-    
-    # Get recent sessions (last 10)
+
+    # Get recent sessions (last N)
     from backend.services.ai_tracker import AITracker
     tracker = AITracker(db_session)
-    
-    interactions = db_session.query(AIInteraction).filter_by(is_session=1).order_by(
+
+    query = db_session.query(AIInteraction).filter_by(is_session=1)
+
+    # Filter by repo if specified
+    if repo:
+        query = query.filter(AIInteraction.repo_path == repo)
+
+    interactions = query.order_by(
         AIInteraction.timestamp.desc()
-    ).limit(10).all()
+    ).limit(limit).all()
     
     if not interactions:
         console.print("[yellow]No sessions recorded yet.[/yellow]")

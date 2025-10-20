@@ -337,6 +337,14 @@ def format_session_detail(interaction: AIInteraction) -> None:
         duration_min = interaction.duration_ms / 1000.0 / 60.0
         metadata_text += f"[bold]Duration:[/bold] {duration_min:.1f} minutes\n"
 
+    if interaction.repo_path:
+        from pathlib import Path
+        repo_name = Path(interaction.repo_path).name
+        metadata_text += f"[bold]Repository:[/bold] {repo_name}\n"
+        metadata_text += f"[dim]   {interaction.repo_path}[/dim]\n"
+    elif interaction.working_directory:
+        metadata_text += f"[bold]Working Directory:[/bold] {interaction.working_directory}\n"
+
     if interaction.commit:
         commit = interaction.commit
         metadata_text += f"[bold]Linked Commit:[/bold] {commit.sha[:8]} - {commit.message.split(chr(10))[0][:50]}\n"
