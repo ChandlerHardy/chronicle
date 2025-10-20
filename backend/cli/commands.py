@@ -197,6 +197,137 @@ def ai_stats(days: int):
 
 
 @cli.command()
+@click.argument('session_id', type=int)
+def session(session_id: int):
+    """View a session with auto-generated summary.
+
+    This command displays a session's details. If the session hasn't been
+    summarized yet, it will automatically generate a summary using Gemini.
+
+    Examples:
+        chronicle session 5      # View session #5
+        chronicle sessions       # List all sessions first
+    """
+    from backend.services.summarizer import Summarizer
+    from backend.cli.formatters import format_session_detail
+
+    db_session = get_session()
+
+    # Get the session
+    interaction = db_session.query(AIInteraction).filter_by(id=session_id).first()
+
+    if not interaction:
+        console.print(f"[red]Error:[/red] Session {session_id} not found")
+        db_session.close()
+        raise click.Abort()
+
+    if not interaction.is_session:
+        console.print(f"[yellow]Warning:[/yellow] Interaction {session_id} is not a full session")
+        console.print("[dim]Showing details anyway...[/dim]\n")
+
+    # Check if we need to generate a summary
+    if interaction.is_session and not interaction.summary_generated:
+        console.print(f"[dim]Generating summary for session {session_id}...[/dim]")
+
+        try:
+            summarizer = Summarizer()
+
+            # Read transcript file
+            session_dir = Path.home() / ".ai-session" / "sessions"
+            transcript_file = session_dir / f"session_{session_id}.log"
+
+            if transcript_file.exists():
+                transcript = transcript_file.read_text()
+                summary = summarizer.summarize_session(transcript)
+
+                # Update database
+                interaction.response_summary = summary
+                interaction.summary_generated = 1
+                db_session.commit()
+
+                console.print("[green]✓[/green] Summary generated!\n")
+            else:
+                console.print(f"[yellow]Warning:[/yellow] Transcript file not found: {transcript_file}\n")
+
+        except ValueError as e:
+            console.print(f"[yellow]Warning:[/yellow] {e}")
+            console.print("[dim]Showing session without summary...[/dim]\n")
+        except Exception as e:
+            console.print(f"[yellow]Warning:[/yellow] Failed to generate summary: {e}")
+            console.print("[dim]Showing session without summary...[/dim]\n")
+
+    # Display the session
+    format_session_detail(interaction)
+
+    db_session.close()
+
+
+@cli.command()
+@click.argument('action', type=click.Choice(['today', 'week']))
+def summarize(action: str):
+    """Generate AI-powered summaries of your development activity.
+
+    This command uses Gemini to analyze your commits and AI sessions
+    and generate concise summaries of what you accomplished.
+
+    Examples:
+        chronicle summarize today    # Summarize today's work
+        chronicle summarize week     # Summarize last 7 days
+    """
+    from backend.services.summarizer import Summarizer
+
+    db_session = get_session()
+    monitor = GitMonitor(db_session)
+    tracker = AITracker(db_session)
+
+    # Get data based on timeframe
+    if action == 'today':
+        commits = monitor.get_commits_today()
+        interactions = tracker.get_interactions_today()
+        title = f"Summary for {datetime.now().strftime('%B %d, %Y')}"
+
+    elif action == 'week':
+        week_start = datetime.now() - timedelta(days=7)
+        commits = monitor.get_commits_by_date(week_start)
+        interactions = tracker.get_interactions_by_date(week_start)
+        title = "Summary for Last 7 Days"
+
+    # Check if we have any data
+    if not commits and not interactions:
+        console.print(f"[yellow]No activity found for {action}[/yellow]")
+        db_session.close()
+        return
+
+    # Build context for summarization
+    commit_messages = [f"{c.message}" for c in commits]
+    interaction_prompts = [f"{i.prompt}" for i in interactions if i.prompt]
+
+    console.print(f"[dim]Generating summary for {len(commits)} commits and {len(interactions)} AI interactions...[/dim]\n")
+
+    try:
+        summarizer = Summarizer()
+        summary = summarizer.summarize_day(commit_messages, interaction_prompts)
+
+        # Display the summary
+        console.print(f"[bold cyan]{title}[/bold cyan]")
+        console.print("═" * 60)
+        console.print()
+        console.print(summary)
+        console.print()
+        console.print("═" * 60)
+        console.print(f"[dim]Based on {len(commits)} commits and {len(interactions)} AI interactions[/dim]")
+
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        console.print("[dim]Make sure you've configured your Gemini API key:[/dim]")
+        console.print("[dim]  chronicle config ai.gemini_api_key YOUR_KEY[/dim]")
+    except Exception as e:
+        console.print(f"[red]Error generating summary:[/red] {e}")
+
+    db_session.close()
+
+
+@cli.command()
 @click.argument('action', type=click.Choice(['today', 'yesterday', 'week']))
 @click.option('--repo', help='Filter by repository path')
 def timeline(action: str, repo: str = None):
@@ -375,55 +506,6 @@ def sessions():
     
     console.print(table)
     console.print(f"\n[dim]Use 'chronicle session <id>' to view full details[/dim]")
-    
-    db_session.close()
-
-
-@cli.command()
-@click.argument('session_id', type=int)
-def session(session_id: int):
-    """View details of a specific session."""
-    db_session = get_session()
-    
-    interaction = db_session.query(AIInteraction).filter_by(id=session_id).first()
-    
-    if not interaction or not interaction.is_session:
-        console.print(f"[red]Error:[/red] Session #{session_id} not found")
-        db_session.close()
-        raise click.Abort()
-    
-    # Display session info
-    console.print(f"\n[bold cyan]Session #{session_id}[/bold cyan]")
-    console.print("═" * 80)
-    
-    tool = interaction.ai_tool.replace("-session", "").title()
-    console.print(f"[bold]Tool:[/bold] {tool}")
-    console.print(f"[bold]Started:[/bold] {interaction.timestamp.strftime('%B %d, %Y at %I:%M %p')}")
-    
-    if interaction.duration_ms:
-        duration_min = interaction.duration_ms / 1000 / 60
-        console.print(f"[bold]Duration:[/bold] {duration_min:.1f} minutes")
-    
-    if interaction.related_commit_id:
-        console.print(f"[bold]Linked Commit:[/bold] Yes (#{interaction.related_commit_id})")
-    
-    console.print()
-    
-    # Show summary if available
-    if interaction.response_summary:
-        console.print("[bold]Summary:[/bold]")
-        console.print(interaction.response_summary)
-    elif interaction.session_transcript:
-        console.print("[yellow]⏳ No summary yet - generating...[/yellow]")
-        console.print()
-        console.print("[bold]Transcript Preview:[/bold]")
-        # Show first 1000 chars of transcript
-        preview = interaction.session_transcript[:1000]
-        console.print(f"[dim]{preview}...[/dim]")
-        console.print()
-        console.print("[dim]Full transcript stored. Use 'chronicle summarize' to generate summary.[/dim]")
-    else:
-        console.print("[yellow]Session still active or transcript not available[/yellow]")
     
     db_session.close()
 

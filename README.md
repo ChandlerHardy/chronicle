@@ -24,9 +24,9 @@ Modern developers use multiple AI coding assistants, but:
 Chronicle is a **local-first session recorder** that:
 - ✅ **Records full AI sessions** - Capture complete conversations with Claude Code, Gemini CLI, Qwen Code
 - ✅ **Tracks git commits** - Link commits to the AI sessions that created them
+- ✅ **AI-powered summaries** - Gemini generates intelligent summaries of your sessions and daily work
 - ✅ **Unified timeline** - See what ALL your AI tools did, in one place
 - ✅ **Searchable history** - Query past decisions, conversations, and changes
-- ✅ **Lazy summarization** - AI-powered summaries with Gemini (generated on-demand)
 - ✅ **Privacy-first** - Everything stored locally in SQLite
 
 ---
@@ -64,6 +64,13 @@ chronicle start qwen        # Qwen Code CLI
 
 # View all sessions
 chronicle sessions
+
+# View a session with AI-generated summary
+chronicle session 5
+
+# AI-powered summaries of your work
+chronicle summarize today       # Today's accomplishments
+chronicle summarize week        # Weekly digest
 
 # See combined timeline
 chronicle timeline today
@@ -201,21 +208,60 @@ chronicle config ai.default_model               # View default model
 
 ---
 
-### 🤖 Gemini Integration (Phase 3 Preview)
+### ✅ Phase 3: AI Summarization (COMPLETE)
 
-AI-powered summarization with Google Gemini:
+AI-powered summarization with Google Gemini for intelligent insights:
+
+#### Setup
 
 ```bash
-chronicle test-gemini           # Test API connection
+# Configure Gemini API key
 chronicle config ai.gemini_api_key YOUR_KEY
 chronicle config ai.default_model gemini-2.5-flash
+
+# Test connection
+chronicle test-gemini
 ```
 
-**Coming in Phase 3:**
-- `chronicle summarize` - Generate summaries for sessions/days
-- Automatic session summarization on first view
-- Topic extraction from conversations
-- Weekly digest generation
+#### View Session with Auto-Summary
+
+```bash
+chronicle sessions              # List all sessions
+chronicle session 5             # View session #5
+
+# First time: Automatically generates AI summary
+# Subsequent views: Shows cached summary (instant!)
+```
+
+#### Generate Daily/Weekly Summaries
+
+```bash
+chronicle summarize today       # AI summary of today's work
+chronicle summarize week        # AI summary of last 7 days
+```
+
+**Features:**
+- **Lazy summarization** - Summaries generated on-demand, not blocking
+- **Auto-caching** - Generate once, view instantly forever
+- **Intelligent prompts** - Extracts key decisions, files modified, blockers
+- **Markdown formatting** - Beautiful, structured summaries
+- **Multi-source analysis** - Analyzes both git commits and AI sessions
+
+**Example Summary:**
+```
+## What Was Built
+- Implemented Phase 3 summarization with Gemini API integration
+- Added chronicle session command with auto-summarization
+
+## Key Decisions
+- Used lazy loading to avoid blocking session exit
+- Cached summaries in database for instant retrieval
+
+## Files/Components Modified
+- backend/cli/commands.py
+- backend/cli/formatters.py
+- backend/services/summarizer.py
+```
 
 ---
 
@@ -375,14 +421,15 @@ pytest --cov=backend tests/
 - [x] Configuration system
 - [x] 8 passing tests
 
-### 🔜 Phase 3: Summarization (NEXT)
-- [ ] Gemini API integration complete
-- [ ] `chronicle summarize` command
-- [ ] Daily summary generation
-- [ ] Topic extraction
-- [ ] Data retention policies
+### ✅ Phase 3: Summarization (COMPLETE)
+- [x] Gemini API integration complete
+- [x] `chronicle session` command with auto-summarization
+- [x] `chronicle summarize today/week` commands
+- [x] Lazy loading with caching
+- [x] Intelligent prompt engineering
+- [x] Markdown-formatted summaries
 
-### 📋 Phase 4: Dashboard (PLANNED)
+### 🔜 Phase 4: Dashboard (NEXT)
 - [ ] Next.js web interface
 - [ ] Timeline visualization
 - [ ] Export features (Markdown, JSON)

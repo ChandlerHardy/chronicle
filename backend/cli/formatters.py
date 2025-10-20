@@ -302,3 +302,70 @@ def format_combined_session(commits: List[Commit], interactions: List[AIInteract
             console.print(format_commit(item))
         else:
             console.print(format_ai_interaction(item, show_commit=False))
+
+
+def format_session_detail(interaction: AIInteraction) -> None:
+    """Format detailed view of a session.
+
+    Args:
+        interaction: AIInteraction object to display
+    """
+    timestamp = interaction.timestamp.strftime("%B %d, %Y at %I:%M %p")
+    tool_name = interaction.ai_tool.replace("-cli", "").replace("-session", "").title()
+
+    # Emoji for tool
+    tool_emoji = "🤖"
+    if "gemini" in interaction.ai_tool.lower():
+        tool_emoji = "✨"
+    elif "qwen" in interaction.ai_tool.lower():
+        tool_emoji = "🔮"
+    elif "claude" in interaction.ai_tool.lower():
+        tool_emoji = "🎯"
+
+    # Header
+    console.print(f"\n[bold cyan]{tool_emoji} {tool_name} Session #{interaction.id}[/bold cyan]")
+    console.print("═" * 60)
+
+    # Session metadata
+    metadata_text = f"""
+[bold]Started:[/bold] {timestamp}
+[bold]Tool:[/bold] {tool_name}
+[bold]Session Type:[/bold] {"Full Session" if interaction.is_session else "Single Interaction"}
+    """
+
+    if interaction.duration_ms:
+        duration_min = interaction.duration_ms / 1000.0 / 60.0
+        metadata_text += f"[bold]Duration:[/bold] {duration_min:.1f} minutes\n"
+
+    if interaction.commit:
+        commit = interaction.commit
+        metadata_text += f"[bold]Linked Commit:[/bold] {commit.sha[:8]} - {commit.message.split(chr(10))[0][:50]}\n"
+
+    console.print(Panel(metadata_text.strip(), border_style="cyan", title="Session Info"))
+
+    # Prompt/Description
+    if interaction.prompt:
+        console.print(f"\n[bold]Description:[/bold]")
+        console.print(f"[italic]{interaction.prompt}[/italic]")
+
+    # Summary
+    if interaction.response_summary and interaction.summary_generated:
+        console.print(f"\n[bold cyan]Summary[/bold cyan]")
+        console.print("─" * 60)
+
+        # Render as markdown for better formatting
+        md = Markdown(interaction.response_summary)
+        console.print(md)
+    elif interaction.is_session:
+        console.print(f"\n[dim]No summary generated yet. Run this command again to generate one.[/dim]")
+
+    # Files mentioned
+    files = interaction.files_list
+    if files and len(files) > 0:
+        console.print(f"\n[bold]Files Mentioned:[/bold]")
+        for f in files[:10]:
+            console.print(f"  • {f}")
+        if len(files) > 10:
+            console.print(f"  [dim]... and {len(files) - 10} more files[/dim]")
+
+    console.print()
