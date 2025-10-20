@@ -198,6 +198,182 @@ def ai_stats(days: int):
 
 @cli.command()
 @click.argument('session_id', type=int)
+@click.option('--provider', type=click.Choice(['qwen', 'gemini']), default='qwen', help='AI provider to use (default: qwen)')
+def summarize_session(session_id: int, provider: str):
+    """Summarize a session using Qwen CLI or Gemini CLI directly.
+
+    This uses Qwen CLI (default) or Gemini CLI to summarize large sessions
+    without hitting token-per-minute limits. Qwen has 2000 req/day with no TPM limit.
+
+    This command invokes the AI CLI tools directly, NOT the Gemini API or Ollama.
+
+    Examples:
+        chronicle summarize-session 10              # Use Qwen CLI (default)
+        chronicle summarize-session 10 --provider gemini  # Use Gemini CLI
+    """
+    import subprocess
+    import tempfile
+    from pathlib import Path
+
+    db_session = get_session()
+
+    # Get the session
+    interaction = db_session.query(AIInteraction).filter_by(id=session_id).first()
+
+    if not interaction:
+        console.print(f"[red]Error:[/red] Session {session_id} not found")
+        db_session.close()
+        raise click.Abort()
+
+    if not interaction.is_session:
+        console.print(f"[yellow]Warning:[/yellow] Interaction {session_id} is not a full session")
+        db_session.close()
+        raise click.Abort()
+
+    # Get transcript path
+    session_dir = Path.home() / ".ai-session" / "sessions"
+    transcript_file = session_dir / f"session_{session_id}.log"
+
+    if not transcript_file.exists():
+        console.print(f"[red]Error:[/red] Transcript file not found: {transcript_file}")
+        db_session.close()
+        raise click.Abort()
+
+    # Read and clean transcript
+    with open(transcript_file, 'r') as f:
+        raw_transcript = f.read()
+
+    console.print(f"[cyan]Summarizing session {session_id} with {provider} CLI...[/cyan]")
+    console.print(f"[dim]Original transcript: {len(raw_transcript):,} chars[/dim]")
+
+    # Clean transcript (remove ANSI codes and duplicates)
+    from backend.services.summarizer import Summarizer
+    summarizer = Summarizer()
+    cleaned_transcript = summarizer._clean_transcript(raw_transcript)
+    console.print(f"[dim]Cleaned transcript: {len(cleaned_transcript):,} chars ({((len(raw_transcript) - len(cleaned_transcript)) / len(raw_transcript) * 100):.1f}% reduction)[/dim]")
+
+    # Create prompt
+    prompt = f"""Please analyze this Chronicle session transcript and create a summary.
+
+Session Info:
+- Tool: {interaction.ai_tool}
+- Started: {interaction.timestamp}
+- Duration: {interaction.duration_ms / 60000 if interaction.duration_ms else 0:.1f}m
+
+Your summary should follow this format:
+
+## What Was Built
+- [Main accomplishment 1]
+- [Main accomplishment 2]
+
+## Key Decisions
+- [Decision and why]
+
+## Files/Components Modified
+- [Specific files or modules]
+
+## Issues/Blockers (if any)
+- [Any problems encountered]
+
+Keep the summary concise (under 2000 chars) and focus on WHAT was built, not HOW the conversation went.
+
+=== TRANSCRIPT START ===
+{cleaned_transcript}
+=== TRANSCRIPT END ===
+
+Please provide ONLY the summary in the markdown format above, without any additional commentary."""
+
+    try:
+        # Create prompt with embedded transcript (Qwen can't read external files)
+        full_prompt = f"""Please analyze this Chronicle session transcript and create a summary.
+
+Session Info:
+- Tool: {interaction.ai_tool}
+- Started: {interaction.timestamp}
+- Duration: {interaction.duration_ms / 60000 if interaction.duration_ms else 0:.1f}m
+
+Your summary should follow this format:
+
+## What Was Built
+- [Main accomplishment 1]
+- [Main accomplishment 2]
+
+## Key Decisions
+- [Decision and why]
+
+## Files/Components Modified
+- [Specific files or modules]
+
+## Issues/Blockers (if any)
+- [Any problems encountered]
+
+Keep the summary concise (under 2000 chars) and focus on WHAT was built, not HOW the conversation went.
+
+=== TRANSCRIPT START ===
+{cleaned_transcript}
+=== TRANSCRIPT END ===
+
+Please provide ONLY the summary in the markdown format above, without any additional commentary."""
+
+        # Call the appropriate CLI tool
+        if provider == 'qwen':
+            console.print(f"[yellow]Calling Qwen CLI with embedded transcript...[/yellow]")
+            result = subprocess.run(
+                ['qwen', '-p', full_prompt],
+                capture_output=True,
+                text=True,
+                timeout=120
+            )
+        else:  # gemini
+            console.print(f"[yellow]Calling Gemini CLI with embedded transcript...[/yellow]")
+            result = subprocess.run(
+                ['gemini', '-p', full_prompt],
+                capture_output=True,
+                text=True,
+                timeout=120
+            )
+
+        if result.returncode != 0:
+            console.print(f"[red]Error calling {provider} CLI:[/red]")
+            console.print(result.stderr)
+            db_session.close()
+            raise click.Abort()
+
+        summary = result.stdout.strip()
+
+        if summary:
+            # Save to database
+            interaction.response_summary = summary
+            interaction.summary_generated = True
+            db_session.commit()
+
+            console.print(f"\n[green]✓ Summary saved for session {session_id}![/green]")
+            console.print(f"[dim]Summary length: {len(summary)} chars[/dim]")
+        else:
+            console.print(f"[red]No summary generated[/red]")
+
+    except subprocess.TimeoutExpired:
+        console.print(f"[red]Error: {provider} CLI timed out after 120 seconds[/red]")
+        db_session.close()
+        raise click.Abort()
+    except FileNotFoundError:
+        console.print(f"[red]Error: {provider} CLI not found. Make sure it's installed and in your PATH.[/red]")
+        if provider == 'qwen':
+            console.print(f"[dim]Install with: npm install -g @punkpeye/qwen-cli[/dim]")
+        else:
+            console.print(f"[dim]Install with: npm install -g @google/generative-ai-cli[/dim]")
+        db_session.close()
+        raise click.Abort()
+    except Exception as e:
+        console.print(f"[red]Error:[/red] {str(e)}")
+        db_session.close()
+        raise click.Abort()
+
+    db_session.close()
+
+
+@cli.command()
+@click.argument('session_id', type=int)
 def session(session_id: int):
     """View a session with auto-generated summary.
 

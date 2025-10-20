@@ -252,6 +252,17 @@ chronicle session 5             # View session #5
 # Subsequent views: Shows cached summary (instant!)
 ```
 
+#### Summarize Large Sessions with Qwen/Gemini CLI
+
+For large sessions that exceed Gemini API rate limits, use Qwen CLI or Gemini CLI directly:
+
+```bash
+chronicle summarize-session 8              # Use Qwen CLI (default, 2000 req/day)
+chronicle summarize-session 8 --provider gemini  # Use Gemini CLI
+```
+
+This bypasses API token-per-minute limits by calling the CLI tools directly.
+
 #### Generate Daily/Weekly Summaries
 
 ```bash
