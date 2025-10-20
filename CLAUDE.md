@@ -1,8 +1,55 @@
 # Chronicle - Context for AI Assistants
 
-> **Last Updated**: October 19, 2025
-> **Project Status**: Phase 3 Complete - AI Summarization with Gemini Integration
+> **Last Updated**: October 20, 2025
+> **Project Status**: Phase 3 Complete - Multi-Provider Summarization, Repo Tracking, Transcript Cleaning
 > **Tests**: 16 passing (8 git + 8 AI tracking)
+
+## 🤖 For AI Coding Assistants: How to Use Chronicle
+
+### Quick Start
+
+**If user asks about Chronicle or session tracking:**
+
+```bash
+# Suggest this workflow to the user:
+1. Exit current session
+2. Run: chronicle start claude
+3. Continue working (session is now being tracked)
+4. When done: exit
+5. View summary: chronicle session <id>
+```
+
+### Understanding Chronicle Sessions
+
+**Key Points:**
+- Chronicle sessions are started **manually** by the user with `chronicle start claude`
+- This wraps the Claude Code session and captures the full transcript
+- Sessions are NOT automatically tracked - user must explicitly start tracking
+- **You cannot start Chronicle from within an active session** (would create nested sessions)
+
+### When Working in THIS Project
+
+1. **Current session is likely NOT being tracked** - User would need to restart with `chronicle start claude`
+2. **DO** use `chronicle session <id>` to view/summarize past sessions when debugging
+3. **DO** use `chronicle summarize-session <id>` for large sessions (> 100KB) that need Qwen/Gemini CLI
+4. **DO** query the database when debugging: `sqlite3 ~/.ai-session/sessions.db "SELECT ..."`
+5. **DO NOT** run `chronicle start` from within a session
+
+### When Working on OTHER Projects
+
+**Suggest to the user:**
+- "Would you like to track this session with Chronicle? Run `chronicle start claude` before we begin."
+- After session: "You can view the summary with `chronicle session <id>`"
+- Sessions auto-detect the git repository and tag themselves accordingly
+- All commits made during the session are automatically linked
+
+**Common Commands:**
+```bash
+chronicle sessions                    # List recent sessions
+chronicle show today                  # See today's work
+chronicle timeline today              # Combined commits + AI sessions
+chronicle sessions --repo /path/repo  # Filter by project
+```
 
 ## What Is This Project?
 
@@ -199,6 +246,78 @@ config.set("ai.default_model", "gemini-2.0-flash-exp")
 1. Environment variables (e.g., `GEMINI_API_KEY`)
 2. Config file (`~/.ai-session/config.yaml`)
 3. Defaults (in `backend/core/config.py`)
+
+### Multi-Project Repository Tracking (NEW)
+
+**Auto-Detection:**
+- Sessions automatically detect current working directory
+- Finds git repository root by walking up directory tree
+- Stores `working_directory` and `repo_path` in database
+
+**Filtering:**
+```bash
+chronicle sessions --repo /path/to/project
+chronicle summarize today --repo /path/to/project
+chronicle timeline today --repo /path/to/project
+```
+
+**Database Schema:**
+```python
+# ai_interactions table
+working_directory = Column(String(500))  # Where session started
+repo_path = Column(String(500))          # Git repo root (if any)
+```
+
+### Multi-Provider Summarization (NEW)
+
+**Providers:**
+1. **Gemini API** (default) - Cloud, 1M token context, rate limits
+2. **Ollama** - Local, unlimited, requires local installation
+
+**Provider Selection:**
+```python
+# In summarizer.py
+if self.provider == "gemini":
+    # Use Google Gemini API
+elif self.provider == "ollama":
+    # Use local Ollama
+```
+
+**For Large Sessions:**
+```bash
+chronicle summarize-session 8              # Use Qwen CLI (2000 req/day)
+chronicle summarize-session 8 --provider gemini  # Use Gemini CLI
+```
+
+This bypasses API rate limits by calling CLI tools directly with cleaned transcripts.
+
+### Transcript Cleaning (NEW)
+
+**Purpose:** Reduce transcript size by 40-90% before summarization
+
+**What It Removes:**
+- ANSI escape codes (e.g., `\x1B[0m`)
+- CSI sequences (cursor positioning)
+- Control characters (except newlines)
+- Duplicate consecutive lines (spinner redraws)
+
+**Implementation:**
+```python
+# In summarizer.py
+def _clean_transcript(self, transcript: str) -> str:
+    # Remove ANSI codes
+    ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+    cleaned = ansi_escape.sub('', transcript)
+
+    # Deduplicate lines
+    # ... (see code for full logic)
+
+    return cleaned_transcript
+```
+
+**Results:**
+- Session 8: 709KB → 336KB (52.7% reduction)
+- Session 9: 826KB → 422KB (49.0% reduction)
 
 ## Development Workflow
 
