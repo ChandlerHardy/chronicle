@@ -84,6 +84,24 @@ class AIInteraction(Base):
         self.files_mentioned = json.dumps(value)
 
 
+class SessionSummaryChunk(Base):
+    """Incremental summary chunks for large sessions."""
+
+    __tablename__ = 'session_summary_chunks'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    session_id = Column(Integer, ForeignKey('ai_interactions.id'), nullable=False, index=True)
+    chunk_number = Column(Integer, nullable=False)  # 1, 2, 3, ...
+    chunk_start_line = Column(Integer, nullable=False)
+    chunk_end_line = Column(Integer, nullable=False)
+    chunk_summary = Column(Text, nullable=False)  # Summary of just this chunk
+    cumulative_summary = Column(Text, nullable=False)  # Running summary up to this point
+    timestamp = Column(DateTime, nullable=False, default=datetime.now)
+
+    def __repr__(self):
+        return f"<SessionSummaryChunk(session_id={self.session_id}, chunk={self.chunk_number})>"
+
+
 class DailySummary(Base):
     """Daily development session summary."""
 

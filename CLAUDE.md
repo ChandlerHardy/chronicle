@@ -1,8 +1,9 @@
 # Chronicle - Context for AI Assistants
 
 > **Last Updated**: October 20, 2025
-> **Project Status**: Phase 3 Complete - Multi-Provider Summarization, Repo Tracking, Transcript Cleaning
+> **Project Status**: Phase 3 Complete + Starting Phase 4 (Obsidian Integration)
 > **Tests**: 16 passing (8 git + 8 AI tracking)
+> **Current Work**: Setting up Obsidian MCP server integration for knowledge graph
 
 ## 🤖 For AI Coding Assistants: How to Use Chronicle
 
@@ -31,9 +32,8 @@
 
 1. **Current session is likely NOT being tracked** - User would need to restart with `chronicle start claude`
 2. **DO** use `chronicle session <id>` to view/summarize past sessions when debugging
-3. **DO** use `chronicle summarize-session <id>` for large sessions (> 100KB) that need Qwen/Gemini CLI
-4. **DO** query the database when debugging: `sqlite3 ~/.ai-session/sessions.db "SELECT ..."`
-5. **DO NOT** run `chronicle start` from within a session
+3. **DO** query the database when debugging: `sqlite3 ~/.ai-session/sessions.db "SELECT ..."`
+4. **DO NOT** run `chronicle start` from within a session
 
 ### When Working on OTHER Projects
 
@@ -53,7 +53,7 @@ chronicle sessions --repo /path/repo  # Filter by project
 
 ## What Is This Project?
 
-Chronicle is a **local-first development session recorder** that tracks interactions across multiple AI coding assistants (Claude Code, Gemini CLI, Qwen Code), git commits, and file changes to create a unified, searchable development timeline with AI-powered summarization.
+Chronicle is a **local-first development session recorder** that tracks interactions across multiple AI coding assistants (Claude Code, Gemini CLI), git commits, and file changes to create a unified, searchable development timeline with AI-powered summarization.
 
 ### The Problem We're Solving
 
@@ -130,7 +130,7 @@ branch, author, repo_path
 
 **ai_interactions** - AI tool interactions
 ```sql
-id, timestamp, ai_tool (claude-code/gemini-cli/qwen-cli),
+id, timestamp, ai_tool (claude-code/gemini-cli),
 prompt, response_summary, duration_ms, files_mentioned (JSON),
 is_session (bool), session_transcript, summary_generated (bool),
 related_commit_id (foreign key to commits)
@@ -157,13 +157,11 @@ commits_count, ai_interactions_count, key_decisions (JSON)
 **Interactive Sessions** (full transcript capture using Unix `script` command)
 - `chronicle start claude` - Start Claude Code session with recording
 - `chronicle start gemini` - Start Gemini CLI session
-- `chronicle start qwen` - Start Qwen CLI session
 - `chronicle sessions` - List all recorded sessions
-- `chronicle session <id>` - View session details
+- `chronicle session <id>` - View session details with auto-summarization
 
 **One-Shot Commands** (for quick AI queries)
-- `chronicle ask "question" --tool gemini` - Ask and log
-- `chronicle ask "question" --tool qwen --log-only` - Log without calling AI
+- `chronicle ask "question" --tool gemini` - Ask Gemini and log interaction
 
 **Viewing & Statistics**
 - `chronicle ai <today|yesterday|week>` - View AI interactions
@@ -179,18 +177,28 @@ commits_count, ai_interactions_count, key_decisions (JSON)
 - API keys masked in display for security
 
 **Summarization Features**
-- `chronicle session <id>` - Auto-generates AI summary on first view
+- `chronicle session <id>` - Auto-generates AI summary on first view using **chunked summarization**
+- `chronicle summarize-chunked <id>` - Manually trigger chunked summarization with custom settings
 - `chronicle summarize today` - AI summary of today's work
 - `chronicle summarize week` - AI summary of last 7 days
 - Lazy loading: summaries generated on-demand, cached forever
 - Analyzes both git commits and AI sessions
 - Extracts key decisions, files modified, blockers
 
+**Chunked Summarization (Default)**
+- Handles sessions of **unlimited size** (tested with 83,000+ lines)
+- Breaks large sessions into chunks (default: 10,000 lines)
+- Maintains rolling summary that updates with each chunk
+- Saves intermediate chunks to `session_summary_chunks` table
+- Uses Gemini API by default (200 free requests/day)
+- No more token/rate limit issues!
+
 **Gemini Integration**
 - Uses `google-generativeai` Python SDK
-- Default model: `gemini-2.0-flash-exp` (fast, cheap)
+- Default model: `gemini-2.0-flash` (fast, cheap, 1M context window)
 - Intelligent prompting for structured summaries
 - Markdown-formatted output
+- Free tier: 200 requests/day (plenty for chunked summarization)
 
 ## Important Implementation Details
 
@@ -285,39 +293,51 @@ elif self.provider == "ollama":
 
 **For Large Sessions:**
 ```bash
-chronicle summarize-session 8              # Use Qwen CLI (2000 req/day)
-chronicle summarize-session 8 --provider gemini  # Use Gemini CLI
+chronicle summarize-chunked 8              # Uses Gemini API with chunking
+chronicle summarize-chunked 8 --chunk-size 5000  # Custom chunk size
 ```
 
-This bypasses API rate limits by calling CLI tools directly with cleaned transcripts.
+Chunked summarization handles sessions of unlimited size using incremental processing.
 
-### Transcript Cleaning (NEW)
+### Transcript Cleaning (IMPROVED - Oct 20, 2025)
 
-**Purpose:** Reduce transcript size by 40-90% before summarization
+**Purpose:** Reduce transcript size by 50-90% to minimize database bloat
+
+**When Cleaning Happens:**
+1. **Session capture** (`session_manager.py`) - Full cleaning applied immediately when session ends
+2. **Retroactive cleaning** - Use `chronicle clean-session <id>` for old sessions
 
 **What It Removes:**
 - ANSI escape codes (e.g., `\x1B[0m`)
 - CSI sequences (cursor positioning)
-- Control characters (except newlines)
-- Duplicate consecutive lines (spinner redraws)
+- Control characters (except newlines and tabs)
+- Duplicate consecutive lines (spinner redraws, loading messages)
+- Excessive blank lines (collapsed to max 2 newlines)
 
 **Implementation:**
 ```python
-# In summarizer.py
-def _clean_transcript(self, transcript: str) -> str:
-    # Remove ANSI codes
-    ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
-    cleaned = ansi_escape.sub('', transcript)
-
-    # Deduplicate lines
-    # ... (see code for full logic)
-
+# In session_manager.py - applied at session capture
+def _clean_ansi(self, transcript: str) -> str:
+    # 1. Remove ANSI codes
+    # 2. Remove CSI sequences
+    # 3. Remove control characters
+    # 4. Collapse blank lines
+    # 5. Deduplicate consecutive identical lines
     return cleaned_transcript
+```
+
+**Commands:**
+```bash
+chronicle clean-session 10         # Clean an existing session
+chronicle sessions                 # Check which sessions need cleaning
 ```
 
 **Results:**
 - Session 8: 709KB → 336KB (52.7% reduction)
 - Session 9: 826KB → 422KB (49.0% reduction)
+- Session 10: 10.2MB → ~3.8MB (63% reduction) - can be improved further with deduplication
+
+**Important:** All **new sessions** (created after Oct 20, 2025) are automatically cleaned with full deduplication. Old sessions need manual cleaning with `chronicle clean-session <id>`.
 
 ## Development Workflow
 
@@ -406,8 +426,7 @@ chronicle show today
 
 4. **Session wrapper requires AI CLIs to be installed**
    - `claude` command for Claude Code
-   - `gemini` command for Gemini CLI
-   - `qwen` command for Qwen CLI
+   - `gemini` command for Gemini CLI (optional)
 
 ## Future Enhancements (Phase 4+)
 
@@ -458,7 +477,6 @@ python -m backend.main show today
 ### Emojis in Output
 - 🎯 Claude Code
 - ✨ Gemini CLI
-- 🔮 Qwen CLI
 - 📊 Statistics
 - 🔍 Search
 - ✅ Success
@@ -528,3 +546,191 @@ pytest -v                        # Run tests
 6. This tool tracks itself - dogfooding is real!
 
 **Chronicle is meta**: We use Chronicle to track building Chronicle. Check the database for examples of real usage!
+
+---
+
+## 🔄 Current Work: Phase 4 - Obsidian Integration
+
+### Goal
+Integrate Chronicle with Obsidian via MCP (Model Context Protocol) to create a searchable knowledge graph of all development sessions, enabling AI tools to query past work across sessions.
+
+### What We've Done So Far
+
+1. **Researched MCP Servers** ✅
+   - Evaluated 3 options: bitbonsai, MarkusPfundstein, cyanheads
+   - Initially tried MarkusPfundstein (required REST API plugin, had auth issues)
+   - **Pivoted to bitbonsai/mcp-obsidian** - simpler, no plugin required, works directly with file system
+
+2. **Set Up MCP Server** ✅
+   - Configured `.mcp.json` with bitbonsai server
+   - Added `.mcp.json` to `.gitignore` (contains vault path)
+   - Created `.mcp.json.example` template for other devs
+   - Ready to test after Claude Code restart
+
+3. **Configuration Files Created** ✅
+   - `.mcp.json` - Local config with vault path (not committed)
+   - `.mcp.json.example` - Template for setup instructions
+   - User's Obsidian vault: `~/Library/Mobile Documents/com~apple~CloudDocs/Documents/Chronicle`
+
+4. **Tested MCP Integration** ✅ (October 20, 2025)
+   - Verified all MCP tools working: `list_directory`, `write_note`, `read_note`, `search_notes`
+   - Successfully created test session note with frontmatter and wikilinks
+   - Confirmed nested directory creation (`Chronicle/Sessions/`)
+   - Search functionality working across vault
+   - **Status**: MCP server fully operational, ready for production use
+
+### What's Next
+
+**Immediate Next Steps:**
+1. **Test MCP Server** - Restart Claude Code session, verify `/mcp` shows chronicle-obsidian server
+2. **Implement Export Command** - Build `chronicle export obsidian <vault-path>`
+3. **Create Markdown Templates**:
+   - Session notes (`Chronicle/Sessions/Session-{id}.md`)
+   - Daily notes (`Chronicle/Daily/YYYY-MM-DD.md`)
+   - Commit notes (`Chronicle/Commits/Commit-{sha}.md`)
+   - Repo indexes (`Chronicle/Repos/{repo-name}.md`)
+
+**Architecture:**
+```
+Chronicle (SQLite)
+    ↓ export command
+Obsidian Vault (markdown + YAML frontmatter + wikilinks)
+    ↓ MCP Server (mcp-obsidian)
+AI Tools (read/search/patch via MCP)
+```
+
+**Example Session Note Structure:**
+```markdown
+---
+session_id: 10
+date: 2025-10-20
+duration_minutes: 75
+ai_tool: Claude Code
+repo: my-app
+tags: [chronicle-session, claude-code, authentication]
+---
+
+# Session 10 - Authentication Implementation
+
+**Duration:** 1h 15m
+**Repository:** [[my-app]]
+**Tool:** Claude Code
+
+## Summary
+[AI-generated summary]
+
+## Related
+- Previous: [[Session-9]]
+- Commits: [[Commit-abc1234]], [[Commit-def5678]]
+- Repository: [[my-app]]
+```
+
+### Key Benefits
+
+1. **Cross-Session Search**: AI can search "Find where we discussed authentication"
+2. **Knowledge Graph**: Obsidian graph view shows relationships between sessions/commits/repos
+3. **Timeline Browsing**: Navigate daily notes to see development journey
+4. **Context Retrieval**: AI tools auto-read relevant past sessions via MCP
+5. **Universal Access**: Any MCP-compatible AI (Claude, ChatGPT, etc.) can query Chronicle
+6. **Local-First**: Everything stays on your machine
+
+### Testing Before Commit
+
+**Before committing the MCP setup:**
+1. Exit this session
+2. Restart with a new Claude Code session
+3. Type `/mcp` to verify chronicle-obsidian server is loaded
+4. Test basic commands: list files, search, get content
+5. If working, commit the setup files
+
+### MCP Server Tools Available
+
+Once integrated, AI tools will have access to (via bitbonsai/mcp-obsidian):
+- `read_note` - Read a note from the vault with parsed frontmatter
+- `write_note` - Create or update notes (preserves YAML frontmatter)
+- `delete_note` - Remove notes from the vault
+- `move_note` - Relocate notes within the vault
+- Plus additional tools for listing, searching, and managing vault structure
+
+**Key Features:**
+- ✅ No Obsidian plugin required (direct file system access)
+- ✅ Token-optimized responses (40-60% smaller)
+- ✅ Safe YAML frontmatter handling
+- ✅ Works with any MCP-compatible AI (Claude, ChatGPT, etc.)
+
+### Troubleshooting
+
+**Issue: MCP server not showing up in `/mcp`**
+
+Solution: After updating `.mcp.json`, you MUST restart Claude Code for changes to take effect.
+
+**Issue: "npx: command not found"**
+
+Solution: Install Node.js and npm:
+```bash
+# macOS
+brew install node
+
+# Verify installation
+npm --version
+npx --version
+```
+
+**Issue: Cannot find Obsidian vault**
+
+Solution: Verify vault path in `.mcp.json`:
+```bash
+# Check vault exists
+ls "/path/to/your/obsidian/vault"
+
+# Should show .obsidian directory and your notes
+```
+
+**Issue: Permission denied accessing vault**
+
+Solution: Ensure the vault directory has read/write permissions:
+```bash
+# Check permissions
+ls -la "/path/to/your/obsidian/vault"
+
+# Fix if needed (use your actual username)
+chmod -R u+rw "/path/to/your/obsidian/vault"
+```
+
+### Resources
+
+- **MCP Server**: https://github.com/bitbonsai/mcp-obsidian
+- **NPM Package**: `@mauricio.wolff/mcp-obsidian`
+- **Official Docs**: https://mcp-obsidian.org
+- **Vault Path**: Stored in `.mcp.json` (local only, gitignored)
+
+### Setup Instructions for Other Developers
+
+1. **Install Node.js** (if not already installed):
+   ```bash
+   brew install node  # macOS
+   ```
+
+2. **Copy the example config**:
+   ```bash
+   cp .mcp.json.example .mcp.json
+   ```
+
+3. **Edit `.mcp.json`** and replace `/path/to/your/obsidian/vault` with your actual vault path:
+   ```json
+   {
+     "mcpServers": {
+       "chronicle-obsidian": {
+         "command": "npx",
+         "args": [
+           "@mauricio.wolff/mcp-obsidian@latest",
+           "/Users/yourusername/Documents/YourVault"
+         ]
+       }
+     }
+   }
+   ```
+
+4. **Restart Claude Code** to load the MCP server
+
+5. **Test with `/mcp`** to verify the server is loaded

@@ -40,6 +40,7 @@ htmlcov/
 # Chronicle specific
 *.bak
 .ai-session/  # Don't commit user's local data/config
+.mcp.json     # Contains API keys, don't commit
 
 # OS
 .DS_Store

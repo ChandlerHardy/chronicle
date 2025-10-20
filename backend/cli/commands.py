@@ -198,182 +198,6 @@ def ai_stats(days: int):
 
 @cli.command()
 @click.argument('session_id', type=int)
-@click.option('--provider', type=click.Choice(['qwen', 'gemini']), default='qwen', help='AI provider to use (default: qwen)')
-def summarize_session(session_id: int, provider: str):
-    """Summarize a session using Qwen CLI or Gemini CLI directly.
-
-    This uses Qwen CLI (default) or Gemini CLI to summarize large sessions
-    without hitting token-per-minute limits. Qwen has 2000 req/day with no TPM limit.
-
-    This command invokes the AI CLI tools directly, NOT the Gemini API or Ollama.
-
-    Examples:
-        chronicle summarize-session 10              # Use Qwen CLI (default)
-        chronicle summarize-session 10 --provider gemini  # Use Gemini CLI
-    """
-    import subprocess
-    import tempfile
-    from pathlib import Path
-
-    db_session = get_session()
-
-    # Get the session
-    interaction = db_session.query(AIInteraction).filter_by(id=session_id).first()
-
-    if not interaction:
-        console.print(f"[red]Error:[/red] Session {session_id} not found")
-        db_session.close()
-        raise click.Abort()
-
-    if not interaction.is_session:
-        console.print(f"[yellow]Warning:[/yellow] Interaction {session_id} is not a full session")
-        db_session.close()
-        raise click.Abort()
-
-    # Get transcript path
-    session_dir = Path.home() / ".ai-session" / "sessions"
-    transcript_file = session_dir / f"session_{session_id}.log"
-
-    if not transcript_file.exists():
-        console.print(f"[red]Error:[/red] Transcript file not found: {transcript_file}")
-        db_session.close()
-        raise click.Abort()
-
-    # Read and clean transcript
-    with open(transcript_file, 'r') as f:
-        raw_transcript = f.read()
-
-    console.print(f"[cyan]Summarizing session {session_id} with {provider} CLI...[/cyan]")
-    console.print(f"[dim]Original transcript: {len(raw_transcript):,} chars[/dim]")
-
-    # Clean transcript (remove ANSI codes and duplicates)
-    from backend.services.summarizer import Summarizer
-    summarizer = Summarizer()
-    cleaned_transcript = summarizer._clean_transcript(raw_transcript)
-    console.print(f"[dim]Cleaned transcript: {len(cleaned_transcript):,} chars ({((len(raw_transcript) - len(cleaned_transcript)) / len(raw_transcript) * 100):.1f}% reduction)[/dim]")
-
-    # Create prompt
-    prompt = f"""Please analyze this Chronicle session transcript and create a summary.
-
-Session Info:
-- Tool: {interaction.ai_tool}
-- Started: {interaction.timestamp}
-- Duration: {interaction.duration_ms / 60000 if interaction.duration_ms else 0:.1f}m
-
-Your summary should follow this format:
-
-## What Was Built
-- [Main accomplishment 1]
-- [Main accomplishment 2]
-
-## Key Decisions
-- [Decision and why]
-
-## Files/Components Modified
-- [Specific files or modules]
-
-## Issues/Blockers (if any)
-- [Any problems encountered]
-
-Keep the summary concise (under 2000 chars) and focus on WHAT was built, not HOW the conversation went.
-
-=== TRANSCRIPT START ===
-{cleaned_transcript}
-=== TRANSCRIPT END ===
-
-Please provide ONLY the summary in the markdown format above, without any additional commentary."""
-
-    try:
-        # Create prompt with embedded transcript (Qwen can't read external files)
-        full_prompt = f"""Please analyze this Chronicle session transcript and create a summary.
-
-Session Info:
-- Tool: {interaction.ai_tool}
-- Started: {interaction.timestamp}
-- Duration: {interaction.duration_ms / 60000 if interaction.duration_ms else 0:.1f}m
-
-Your summary should follow this format:
-
-## What Was Built
-- [Main accomplishment 1]
-- [Main accomplishment 2]
-
-## Key Decisions
-- [Decision and why]
-
-## Files/Components Modified
-- [Specific files or modules]
-
-## Issues/Blockers (if any)
-- [Any problems encountered]
-
-Keep the summary concise (under 2000 chars) and focus on WHAT was built, not HOW the conversation went.
-
-=== TRANSCRIPT START ===
-{cleaned_transcript}
-=== TRANSCRIPT END ===
-
-Please provide ONLY the summary in the markdown format above, without any additional commentary."""
-
-        # Call the appropriate CLI tool
-        if provider == 'qwen':
-            console.print(f"[yellow]Calling Qwen CLI with embedded transcript...[/yellow]")
-            result = subprocess.run(
-                ['qwen', '-p', full_prompt],
-                capture_output=True,
-                text=True,
-                timeout=120
-            )
-        else:  # gemini
-            console.print(f"[yellow]Calling Gemini CLI with embedded transcript...[/yellow]")
-            result = subprocess.run(
-                ['gemini', '-p', full_prompt],
-                capture_output=True,
-                text=True,
-                timeout=120
-            )
-
-        if result.returncode != 0:
-            console.print(f"[red]Error calling {provider} CLI:[/red]")
-            console.print(result.stderr)
-            db_session.close()
-            raise click.Abort()
-
-        summary = result.stdout.strip()
-
-        if summary:
-            # Save to database
-            interaction.response_summary = summary
-            interaction.summary_generated = True
-            db_session.commit()
-
-            console.print(f"\n[green]✓ Summary saved for session {session_id}![/green]")
-            console.print(f"[dim]Summary length: {len(summary)} chars[/dim]")
-        else:
-            console.print(f"[red]No summary generated[/red]")
-
-    except subprocess.TimeoutExpired:
-        console.print(f"[red]Error: {provider} CLI timed out after 120 seconds[/red]")
-        db_session.close()
-        raise click.Abort()
-    except FileNotFoundError:
-        console.print(f"[red]Error: {provider} CLI not found. Make sure it's installed and in your PATH.[/red]")
-        if provider == 'qwen':
-            console.print(f"[dim]Install with: npm install -g @punkpeye/qwen-cli[/dim]")
-        else:
-            console.print(f"[dim]Install with: npm install -g @google/generative-ai-cli[/dim]")
-        db_session.close()
-        raise click.Abort()
-    except Exception as e:
-        console.print(f"[red]Error:[/red] {str(e)}")
-        db_session.close()
-        raise click.Abort()
-
-    db_session.close()
-
-
-@cli.command()
-@click.argument('session_id', type=int)
 def session(session_id: int):
     """View a session with auto-generated summary.
 
@@ -403,27 +227,22 @@ def session(session_id: int):
 
     # Check if we need to generate a summary
     if interaction.is_session and not interaction.summary_generated:
-        console.print(f"[dim]Generating summary for session {session_id}...[/dim]")
+        console.print(f"[cyan]Generating summary for session {session_id}...[/cyan]")
+        console.print(f"[dim]Using chunked summarization (handles sessions of any size)[/dim]\n")
 
         try:
             summarizer = Summarizer()
 
-            # Read transcript file
-            session_dir = Path.home() / ".ai-session" / "sessions"
-            transcript_file = session_dir / f"session_{session_id}.log"
+            # Use chunked summarization (works for all session sizes)
+            # Default chunk size: 10,000 lines
+            summary = summarizer.summarize_session_chunked(
+                session_id=session_id,
+                chunk_size_lines=10000,
+                db_session=db_session,
+                use_cli=False  # Use Gemini API (reliable, free tier)
+            )
 
-            if transcript_file.exists():
-                transcript = transcript_file.read_text()
-                summary = summarizer.summarize_session(transcript)
-
-                # Update database
-                interaction.response_summary = summary
-                interaction.summary_generated = 1
-                db_session.commit()
-
-                console.print("[green]✓[/green] Summary generated!\n")
-            else:
-                console.print(f"[yellow]Warning:[/yellow] Transcript file not found: {transcript_file}\n")
+            console.print("[green]✓[/green] Summary generated!\n")
 
         except ValueError as e:
             console.print(f"[yellow]Warning:[/yellow] {e}")
@@ -544,10 +363,13 @@ def timeline(action: str, repo: str = None):
 
 @cli.command()
 @click.argument('prompt')
-@click.option('--tool', required=True, type=click.Choice(['gemini', 'qwen']), help='AI tool to use')
+@click.option('--tool', required=True, type=click.Choice(['gemini']), help='AI tool to use')
 @click.option('--log-only', is_flag=True, help='Only log, don\'t execute (for testing)')
 def ask(prompt: str, tool: str, log_only: bool):
-    """Ask an AI tool a question (wrapper for convenience)."""
+    """Ask Gemini a question via CLI (wrapper for convenience).
+
+    Note: For summarization, use 'chronicle session <id>' instead.
+    """
     import subprocess
 
     db_session = get_session()
@@ -582,7 +404,7 @@ def ask(prompt: str, tool: str, log_only: bool):
 
 
 @cli.command()
-@click.argument('tool', type=click.Choice(['claude', 'gemini', 'qwen', 'vim', 'other']))
+@click.argument('tool', type=click.Choice(['claude', 'gemini', 'vim', 'other']))
 @click.option('--command', help='Custom command to run (overrides tool name)')
 def start(tool: str, command: str = None):
     """Start an interactive session with a tool.
@@ -593,20 +415,18 @@ def start(tool: str, command: str = None):
     Examples:
         chronicle start claude      # Claude Code
         chronicle start gemini      # Gemini CLI
-        chronicle start qwen        # Qwen Code CLI
         chronicle start vim         # Vim editor
         chronicle start other --command "python -i"
     """
     from backend.services.session_manager import SessionManager
-    
+
     db_session = get_session()
     manager = SessionManager(db_session)
-    
+
     # Map tool names to actual commands
     tool_commands = {
         'claude': 'claude',
         'gemini': 'gemini',
-        'qwen': 'qwen-code',
         'vim': 'vim',
         'other': command or 'bash'
     }
@@ -795,3 +615,191 @@ def test_gemini():
         console.print(f"{e}")
         import traceback
         traceback.print_exc()
+
+
+@cli.command()
+@click.argument('session_id', type=int)
+@click.option('--chunk-size', default=10000, help='Number of lines per chunk (default: 10000)')
+def summarize_chunked(session_id: int, chunk_size: int):
+    """Summarize a large session using incremental chunked summarization.
+
+    This is designed for very large sessions (> 50,000 lines) that are too big
+    for standard summarization. It processes the transcript in chunks, maintaining
+    a rolling summary that gets updated with each new chunk.
+
+    Benefits:
+    - No token limits - works with sessions of any size
+    - Progressive summarization - see intermediate results
+    - Resumable - chunks are saved to database
+    - Uses Gemini API (200 free requests/day)
+
+    Examples:
+        chronicle summarize-chunked 10                   # Use default 10,000 lines/chunk
+        chronicle summarize-chunked 10 --chunk-size 5000 # Smaller chunks
+    """
+    from backend.services.summarizer import Summarizer
+
+    db_session = get_session()
+
+    # Check if session exists
+    session = db_session.query(AIInteraction).filter_by(id=session_id).first()
+    if not session:
+        console.print(f"[red]✗[/red] Session {session_id} not found")
+        db_session.close()
+        return
+
+    if not session.is_session:
+        console.print(f"[red]✗[/red] ID {session_id} is not a session")
+        db_session.close()
+        return
+
+    console.print(f"\n[bold cyan]Chunked Summarization: Session {session_id}[/bold cyan]")
+    console.print("═" * 80)
+    console.print(f"[yellow]Mode:[/yellow] Gemini API")
+    console.print()
+
+    try:
+        summarizer = Summarizer()
+        summary = summarizer.summarize_session_chunked(
+            session_id=session_id,
+            chunk_size_lines=chunk_size,
+            db_session=db_session
+        )
+
+        console.print("\n[bold green]✓ Summarization Complete![/bold green]")
+        console.print(f"\nView summary with: [cyan]chronicle session {session_id}[/cyan]")
+        console.print(f"View chunks: [cyan]sqlite3 ~/.ai-session/sessions.db \"SELECT * FROM session_summary_chunks WHERE session_id={session_id}\"[/cyan]")
+
+    except ValueError as e:
+        console.print(f"[red]✗[/red] Configuration Error: {e}")
+        console.print("\n[yellow]Troubleshooting:[/yellow]")
+        console.print("1. Check your API key: chronicle config --list")
+        console.print("2. Verify provider: chronicle config summarization.provider")
+
+    except Exception as e:
+        console.print(f"[red]✗[/red] Error: {e}")
+        import traceback
+        traceback.print_exc()
+
+    finally:
+        db_session.close()
+
+
+@cli.command()
+@click.argument('session_id', type=int)
+def clean_session(session_id: int):
+    """Clean a session transcript to reduce database size.
+
+    This retroactively applies full cleaning to a session that was captured
+    before the improved cleaning was implemented. Removes ANSI codes, control
+    characters, and deduplicates spinner lines.
+
+    Typical reduction: 50-90% file size
+
+    Examples:
+        chronicle clean-session 10
+    """
+    db_session = get_session()
+
+    # Get the session
+    session = db_session.query(AIInteraction).filter_by(id=session_id).first()
+
+    if not session:
+        console.print(f"[red]✗[/red] Session {session_id} not found")
+        db_session.close()
+        return
+
+    if not session.is_session:
+        console.print(f"[red]✗[/red] ID {session_id} is not a session")
+        db_session.close()
+        return
+
+    if not session.session_transcript:
+        console.print(f"[red]✗[/red] Session {session_id} has no transcript")
+        db_session.close()
+        return
+
+    # Get current size
+    original_size = len(session.session_transcript)
+    console.print(f"\n[cyan]Cleaning session {session_id}...[/cyan]")
+    console.print(f"Original size: {original_size:,} chars ({original_size / 1024 / 1024:.2f} MB)")
+
+    # Apply full cleaning (same as session_manager._clean_ansi with deduplication)
+    from backend.services.session_manager import SessionManager
+    manager = SessionManager(db_session)
+    cleaned = manager._clean_ansi(session.session_transcript)
+
+    # Update session
+    session.session_transcript = cleaned
+    db_session.commit()
+
+    # Report results
+    new_size = len(cleaned)
+    reduction = ((original_size - new_size) / original_size * 100)
+
+    console.print(f"[green]✓[/green] Session cleaned successfully!")
+    console.print(f"New size: {new_size:,} chars ({new_size / 1024 / 1024:.2f} MB)")
+    console.print(f"[bold green]Reduction: {reduction:.1f}%[/bold green]")
+    console.print(f"\n[dim]The transcript is now much smaller and ready for summarization.[/dim]")
+
+    db_session.close()
+
+
+@cli.command()
+@click.argument('session_id', type=int)
+@click.option('--summary', help='Summary text (or use stdin if not provided)')
+def save_summary(session_id: int, summary: str = None):
+    """Save a manually generated summary to a session.
+
+    This is useful for large sessions where you manually run an AI CLI tool
+    and want to save the summary back to the database.
+
+    Examples:
+        # Option 1: Paste summary interactively
+        chronicle save-summary 10
+        # (then paste your summary and press Ctrl+D)
+
+        # Option 2: Pipe from file
+        cat summary.txt | chronicle save-summary 10
+
+        # Option 3: Provide inline
+        chronicle save-summary 10 --summary "This session covered MCP integration..."
+    """
+    db_session = get_session()
+
+    # Get the session
+    session = db_session.query(AIInteraction).filter_by(id=session_id).first()
+
+    if not session:
+        console.print(f"[red]✗[/red] Session {session_id} not found")
+        db_session.close()
+        return
+
+    if not session.is_session:
+        console.print(f"[red]✗[/red] ID {session_id} is not a session (it's a one-off AI interaction)")
+        db_session.close()
+        return
+
+    # Get summary from stdin if not provided via --summary
+    if summary is None:
+        console.print("[cyan]Paste your summary below, then press Ctrl+D (or Ctrl+Z on Windows):[/cyan]")
+        console.print("[dim](Or pipe it in: cat summary.txt | chronicle save-summary {session_id})[/dim]\n")
+
+        import sys
+        summary = sys.stdin.read().strip()
+
+        if not summary:
+            console.print("[red]✗[/red] No summary provided")
+            db_session.close()
+            return
+
+    # Save the summary
+    session.response_summary = summary
+    session.summary_generated = True
+    db_session.commit()
+
+    console.print(f"\n[green]✓[/green] Summary saved for session {session_id}")
+    console.print(f"[dim]Summary length: {len(summary)} characters[/dim]")
+    console.print(f"\nView it with: [cyan]chronicle session {session_id}[/cyan]")
+
+    db_session.close()

@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "chronicle-obsidian": {
+      "command": "npx",
+      "args": [
+        "@mauricio.wolff/mcp-obsidian@latest",
+        "/path/to/your/obsidian/vault"
+      ]
+    }
+  }
+}

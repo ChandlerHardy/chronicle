@@ -152,17 +152,46 @@ class SessionManager:
             return ""
 
     def _clean_ansi(self, text: str) -> str:
-        """Remove ANSI escape codes from text.
+        """Remove ANSI escape codes and clean up duplicate lines from text.
+
+        This performs the same cleaning as summarizer._clean_transcript() to
+        reduce database size. Removes ANSI codes, control characters, and
+        deduplicates consecutive identical lines (like spinner redraws).
 
         Args:
-            text: Text with ANSI codes
+            text: Text with ANSI codes and potential duplicates
 
         Returns:
-            Clean text
+            Clean text (typically 50-90% smaller)
         """
-        # Remove ANSI escape sequences
+        if not text:
+            return ""
+
+        # 1. Remove ANSI escape sequences
         ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
-        return ansi_escape.sub('', text)
+        cleaned = ansi_escape.sub('', text)
+
+        # 2. Remove CSI sequences (cursor positioning, etc.)
+        cleaned = re.sub(r'\x1B\[[0-9;]*[a-zA-Z]', '', cleaned)
+
+        # 3. Remove control characters (except newlines and tabs)
+        cleaned = re.sub(r'[\x00-\x08\x0B-\x1F\x7F]', '', cleaned)
+
+        # 4. Collapse multiple blank lines
+        cleaned = re.sub(r'\n\s*\n\s*\n+', '\n\n', cleaned)
+
+        # 5. Deduplicate consecutive identical lines (spinner redraws, loading messages)
+        lines = cleaned.split('\n')
+        deduped_lines = []
+        prev_line = None
+
+        for line in lines:
+            # Skip if same as previous line (handles spinner redraws)
+            if line != prev_line:
+                deduped_lines.append(line)
+                prev_line = line
+
+        return '\n'.join(deduped_lines)
 
     def _save_metadata(self, session_id: int, metadata: Dict):
         """Save session metadata to file.

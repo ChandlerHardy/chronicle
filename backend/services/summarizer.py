@@ -278,3 +278,178 @@ Summary:"""
                 return f"Unknown provider: {self.provider}"
         except Exception as e:
             return f"Error generating summary: {str(e)}"
+
+    def summarize_session_chunked(
+        self,
+        session_id: int,
+        chunk_size_lines: int = 1000,
+        db_session = None,
+        use_cli: bool = False,
+        cli_tool: str = "qwen"
+    ) -> str:
+        """Summarize a large session incrementally using rolling summaries.
+
+        This breaks a large transcript into chunks, summarizes each chunk,
+        and maintains a cumulative summary that gets updated with each new chunk.
+        This avoids token limits and works with sessions of any size.
+
+        Args:
+            session_id: ID of the session to summarize
+            chunk_size_lines: Number of lines per chunk (default: 1000)
+            db_session: SQLAlchemy database session (required)
+            use_cli: If True, use CLI tools (qwen/gemini) instead of API (bypasses rate limits)
+            cli_tool: Which CLI tool to use if use_cli=True ("qwen" or "gemini")
+
+        Returns:
+            Final cumulative summary
+
+        Raises:
+            ValueError: If session not found or db_session not provided
+        """
+        from backend.database.models import AIInteraction, SessionSummaryChunk
+        from datetime import datetime
+
+        if db_session is None:
+            raise ValueError("db_session is required for chunked summarization")
+
+        # Get the session
+        session = db_session.query(AIInteraction).filter_by(id=session_id).first()
+        if not session:
+            raise ValueError(f"Session {session_id} not found")
+
+        if not session.is_session:
+            raise ValueError(f"ID {session_id} is not a session")
+
+        if not session.session_transcript:
+            raise ValueError(f"Session {session_id} has no transcript")
+
+        # Clear any existing chunks for this session (if re-running)
+        db_session.query(SessionSummaryChunk).filter_by(session_id=session_id).delete()
+        db_session.commit()
+
+        # Split transcript into lines
+        lines = session.session_transcript.split('\n')
+        total_lines = len(lines)
+        print(f"📄 Total lines: {total_lines:,}")
+        print(f"📦 Chunk size: {chunk_size_lines:,} lines")
+
+        num_chunks = (total_lines + chunk_size_lines - 1) // chunk_size_lines  # Ceiling division
+        print(f"🔢 Total chunks: {num_chunks}")
+        print()
+
+        cumulative_summary = ""
+
+        for chunk_num in range(num_chunks):
+            start_line = chunk_num * chunk_size_lines
+            end_line = min(start_line + chunk_size_lines, total_lines)
+
+            chunk_lines = lines[start_line:end_line]
+            chunk_text = '\n'.join(chunk_lines)
+
+            print(f"Processing chunk {chunk_num + 1}/{num_chunks} (lines {start_line}-{end_line})...")
+
+            # Generate prompt based on whether this is the first chunk
+            if chunk_num == 0:
+                # First chunk - just summarize it
+                prompt = f"""Summarize this development session transcript chunk. Focus on:
+- What was accomplished
+- Technical decisions made
+- Files created or modified
+- Any issues or blockers
+- Key discussion points
+
+Keep the summary concise but informative (2-3 paragraphs).
+
+Transcript chunk:
+{chunk_text}
+
+Summary:"""
+            else:
+                # Subsequent chunks - update the cumulative summary
+                prompt = f"""You are maintaining a running summary of a development session.
+
+PREVIOUS SUMMARY (everything up to line {start_line}):
+{cumulative_summary}
+
+NEW ACTIVITY (lines {start_line}-{end_line}):
+{chunk_text}
+
+Update the summary to incorporate this new activity. Keep it cohesive and well-organized.
+Focus on the overall narrative and progress. Avoid just appending - integrate the new information.
+
+Updated Summary:"""
+
+            # Generate summary for this chunk
+            try:
+                if use_cli:
+                    # Use CLI tool to bypass API rate limits
+                    import subprocess
+
+                    # qwen uses -p/--prompt for non-interactive mode
+                    # Prompt can be passed as argument
+                    result = subprocess.run(
+                        [cli_tool, '-p', prompt],
+                        capture_output=True,
+                        text=True,
+                        timeout=120  # 2 minute timeout per chunk
+                    )
+
+                    if result.returncode != 0:
+                        raise Exception(f"{cli_tool} CLI failed: {result.stderr}")
+
+                    chunk_summary = result.stdout.strip()
+
+                elif self.provider == "gemini":
+                    response = self.model.generate_content(prompt)
+                    chunk_summary = response.text.strip()
+                elif self.provider == "ollama":
+                    response = self.ollama_client.generate(
+                        model=self.model_name,
+                        prompt=prompt
+                    )
+                    chunk_summary = response['response'].strip()
+                else:
+                    raise ValueError(f"Unknown provider: {self.provider}")
+
+            except Exception as e:
+                error_msg = f"Error summarizing chunk {chunk_num + 1}: {str(e)}"
+                print(f"❌ {error_msg}")
+                # Save what we have so far
+                if cumulative_summary:
+                    return cumulative_summary + f"\n\n[Error: Could not complete summarization at chunk {chunk_num + 1}]"
+                else:
+                    raise ValueError(error_msg)
+
+            # Update cumulative summary
+            if chunk_num == 0:
+                cumulative_summary = chunk_summary
+            else:
+                # The chunk_summary IS the updated cumulative summary
+                cumulative_summary = chunk_summary
+
+            # Save this chunk to database
+            chunk_record = SessionSummaryChunk(
+                session_id=session_id,
+                chunk_number=chunk_num + 1,
+                chunk_start_line=start_line,
+                chunk_end_line=end_line,
+                chunk_summary=chunk_summary,
+                cumulative_summary=cumulative_summary,
+                timestamp=datetime.now()
+            )
+            db_session.add(chunk_record)
+            db_session.commit()
+
+            print(f"✓ Chunk {chunk_num + 1} summarized ({len(chunk_summary)} chars)")
+            print()
+
+        # Save final summary to the session
+        session.response_summary = cumulative_summary
+        session.summary_generated = True
+        db_session.commit()
+
+        print(f"✅ Session {session_id} fully summarized!")
+        print(f"Final summary: {len(cumulative_summary)} characters")
+        print(f"Saved {num_chunks} chunks to database")
+
+        return cumulative_summary
