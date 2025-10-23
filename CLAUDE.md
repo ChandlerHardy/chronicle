@@ -254,6 +254,13 @@ commits_count, ai_interactions_count, key_decisions (JSON)
 **One-Shot Commands** (for quick AI queries)
 - `chronicle ask "question" --tool gemini` - Ask Gemini and log interaction
 
+**Retroactive Session Capture** (NEW - Oct 22, 2025)
+- `chronicle add-manual -d "description"` - Add a session entry for untracked work
+- `chronicle add-manual -d "Fixed auth bug" --duration 45` - Include duration
+- `chronicle add-manual -d "API refactor" --repo ~/my-app` - Specify repository
+- Use when you forgot to run `chronicle start` but want to document your work
+- Creates session entry that can be summarized later with AI
+
 **Viewing & Statistics**
 - `chronicle ai <today|yesterday|week>` - View AI interactions
 - `chronicle ai-stats [--days N]` - Usage statistics with charts

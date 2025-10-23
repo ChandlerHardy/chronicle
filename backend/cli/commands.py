@@ -941,3 +941,79 @@ def import_session(transcript_file, tool, timestamp, repo, summarize):
     console.print(f"\nView session: [cyan]chronicle session {session_id}[/cyan]")
 
     db_session.close()
+
+
+@cli.command()
+@click.option('--description', '-d', required=True, help='Description of what was accomplished')
+@click.option('--tool', '-t', default='claude-code', help='AI tool used (default: claude-code)')
+@click.option('--duration', type=int, help='Duration in minutes (optional)')
+@click.option('--repo', help='Repository path (default: auto-detect from current directory)')
+def add_manual(description: str, tool: str, duration: int, repo: str):
+    """Manually add a session entry for work that wasn't tracked.
+
+    Use this when you forgot to start Chronicle tracking but want to document
+    what you accomplished. The session will be added to the database and can
+    be summarized later.
+
+    Examples:
+        chronicle add-manual -d "Fixed authentication bug in user service"
+        chronicle add-manual -d "Implemented dark mode toggle" --tool claude --duration 45
+        chronicle add-manual -d "Refactored API endpoints" --repo ~/projects/my-app
+    """
+    from backend.database.models import get_session, AIInteraction
+    from backend.services.summarizer import Summarizer
+    import subprocess
+
+    console.print("[bold]📝 Adding Manual Session Entry[/bold]\n")
+
+    # Auto-detect repository if not provided
+    if not repo:
+        try:
+            result = subprocess.run(
+                ['git', 'rev-parse', '--show-toplevel'],
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            repo = result.stdout.strip()
+            console.print(f"[dim]Detected repository: {repo}[/dim]")
+        except subprocess.CalledProcessError:
+            repo = os.getcwd()
+            console.print(f"[dim]No git repo detected, using current directory: {repo}[/dim]")
+
+    # Create database session
+    db_session = get_session()
+
+    # Create manual session entry
+    session = AIInteraction(
+        timestamp=datetime.now(),
+        ai_tool=tool,
+        prompt=f"Manual entry: {description}",
+        response_summary=description,  # Use description as initial summary
+        is_session=True,
+        session_transcript=None,  # No transcript for manual entries
+        summary_generated=False,  # Mark for later AI summarization
+        duration_ms=duration * 60000 if duration else None,
+        working_directory=os.getcwd(),
+        repo_path=repo
+    )
+
+    db_session.add(session)
+    db_session.commit()
+
+    session_id = session.id
+
+    console.print(f"[green]✓[/green] Manual session entry created: ID {session_id}")
+    console.print(f"[dim]Tool: {tool}[/dim]")
+    if duration:
+        console.print(f"[dim]Duration: {duration} minutes[/dim]")
+    console.print(f"[dim]Repository: {repo}[/dim]")
+
+    # Ask if user wants to add more details
+    console.print("\n[bold]Optional:[/bold] Add more details?")
+    console.print("You can:")
+    console.print(f"  1. Let AI generate a better summary: [cyan]chronicle session {session_id}[/cyan]")
+    console.print("  2. Manually edit in database or Obsidian vault")
+    console.print("  3. Export to Obsidian: [cyan]chronicle export obsidian[/cyan] (coming soon)")
+
+    db_session.close()
