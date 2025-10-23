@@ -2,10 +2,11 @@
 
 > **Give your AI assistants a memory. Track every decision, search past conversations, and never lose context across sessions.**
 
-[![Tests](https://img.shields.io/badge/tests-16%20passing-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-25%20passing-brightgreen)]()
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue)]()
 [![License](https://img.shields.io/badge/license-MIT-blue)]()
 [![MCP](https://img.shields.io/badge/MCP-enabled-purple)]()
+[![Phase](https://img.shields.io/badge/phase-5%20complete-success)]()
 
 ---
 
@@ -746,17 +747,208 @@ pytest --cov=backend tests/
 - [x] Multi-repository session organization
 - [x] Comprehensive documentation (MCP_SERVER.md)
 
-### 🔜 Phase 5: Export & Visualization (NEXT)
-- [ ] `chronicle export obsidian` - Batch export to markdown
-- [ ] Repository-specific vault organization
-- [ ] Automatic Obsidian sync on session end
-- [ ] Wikilink generation between sessions/commits
-- [ ] Knowledge graph visualization
+### ✅ Phase 5: Project Tracking & Meta-Development (COMPLETE)
+
+**Chronicle now tracks its own development!** Database-backed milestones and next steps eliminate manual documentation updates.
+
+#### The Innovation: Database-Tracked TODOs
+
+Instead of maintaining DEVELOPMENT_HISTORY.md manually, Chronicle tracks project state in its database:
+
+```bash
+# Plan a feature
+chronicle milestone "Add authentication" \
+  --description "Implement OAuth2 with Auth0" \
+  --type feature \
+  --priority 1 \
+  --tags "backend,auth,security"
+
+# Break down into actionable tasks
+chronicle next-step "Design auth flow" --priority 1 --effort medium --milestone 1
+chronicle next-step "Implement OAuth2 client" --priority 1 --effort large --milestone 1
+chronicle next-step "Add token refresh" --priority 2 --effort medium --milestone 1
+chronicle next-step "Write integration tests" --priority 2 --effort small --milestone 1
+chronicle next-step "Update API documentation" --priority 3 --effort small --milestone 1
+
+# Mark milestone as active
+chronicle milestone-status 1 in_progress
+
+# As you work, link sessions to the milestone
+chronicle start claude
+# ... work on authentication ...
+exit
+chronicle link-session 18 --milestone 1
+
+# Complete tasks as you finish them
+chronicle next-step-complete 1
+chronicle next-step-complete 2
+
+# View project progress anytime
+chronicle roadmap
+```
+
+**Output:**
+```
+Chronicle Development Roadmap
+
+🚧 In Progress
+  • Add authentication (feature, 3 sessions)
+
+🔜 Next Steps
+  • [P2] Add token refresh [medium]
+  • [P2] Write integration tests [small]
+  • [P3] Update API documentation [small]
+
+📊 Milestones: 5/12 completed | Next Steps: 2/5 done
+```
+
+#### Why This Is Revolutionary
+
+**Before (manual documentation):**
+- ❌ Manually update DEVELOPMENT_HISTORY.md after every feature
+- ❌ Forget to document work-in-progress
+- ❌ Can't query "what's next?" programmatically
+- ❌ No link between sessions and features
+- ❌ Documentation becomes stale
+
+**After (database-tracked):**
+- ✅ **Queryable by AI** - "What should I work on next?" → Instant answer from database
+- ✅ **Auto-linked** - Sessions automatically connect to milestones
+- ✅ **Real-time roadmap** - `chronicle roadmap` shows current state
+- ✅ **Report generation** - Query completed milestones for weekly summaries
+- ✅ **Dogfooding** - Chronicle tracks building Chronicle!
+
+#### CLI Commands
+
+**Milestones:**
+```bash
+chronicle milestone <title>                    # Create milestone
+chronicle milestones                           # List all milestones
+chronicle milestones --status in_progress      # Filter by status
+chronicle milestones --type feature            # Filter by type
+chronicle milestone-show <id>                  # View details
+chronicle milestone-status <id> <status>       # Update status
+chronicle milestone-complete <id>              # Mark complete
+```
+
+**Next Steps:**
+```bash
+chronicle next-step <description>              # Add TODO
+chronicle next-steps                           # List pending
+chronicle next-steps --all                     # Include completed
+chronicle next-steps --milestone <id>          # Filter by milestone
+chronicle next-step-complete <id>              # Mark done
+```
+
+**Project Management:**
+```bash
+chronicle link-session <session_id> --milestone <id>   # Link session
+chronicle roadmap                                      # View progress
+chronicle roadmap --days 30                            # Last 30 days
+```
+
+#### MCP Tools (AI-Queryable)
+
+AI assistants can query project state via Chronicle MCP server:
+
+```python
+# Query what's in progress
+milestones = mcp__chronicle__get_milestones(status="in_progress")
+
+# Get roadmap summary
+roadmap = mcp__chronicle__get_roadmap(days=7)
+
+# Check next steps for a milestone
+steps = mcp__chronicle__get_next_steps(milestone_id=1, completed=False)
+
+# Update milestone status
+mcp__chronicle__update_milestone_status(milestone_id=1, new_status="completed")
+
+# Complete a next step
+mcp__chronicle__complete_next_step(step_id=5)
+```
+
+**AI Use Cases:**
+- "What should I work on next?" → Queries roadmap, suggests highest priority
+- "What's the status of authentication work?" → Finds milestone, shows linked sessions
+- "Generate a weekly progress report" → Queries completed milestones, summarizes
+- "Mark this session as working on feature X" → Auto-links session to milestone
+
+#### Chronicle Skills
+
+**New: chronicle-project-tracker**
+- Complete workflow for planning features
+- Querying roadmap via MCP
+- Linking sessions to milestones
+- Generating progress reports
+- Auto-documentation patterns
+
+Use: "What's in our roadmap?" or "Plan a new feature" → Skill loads automatically
+
+#### Database Schema
+
+**project_milestones:**
+- `id`, `title`, `description`
+- `status` - planned, in_progress, completed, archived
+- `milestone_type` - feature, bugfix, optimization, documentation
+- `priority` - 1 (highest) to 5 (lowest)
+- `related_sessions` - JSON array of session IDs
+- `related_commits` - JSON array of commit SHAs
+- `tags` - JSON array for filtering
+
+**next_steps:**
+- `id`, `description`, `priority`
+- `estimated_effort` - small, medium, large
+- `category` - feature, optimization, fix, docs
+- `completed` - boolean
+- `related_milestone_id` - FK to milestone
+
+#### Example: Real Meta-Development
+
+Chronicle used itself to build this feature:
+
+```bash
+# Created milestone #1
+chronicle milestone "Add project tracking to Chronicle" \
+  --type feature --priority 1 --tags "phase-5,meta,dogfooding"
+
+# Broke down work
+chronicle next-step "Design database schema" --priority 1 --effort medium --milestone 1
+chronicle next-step "Add CLI commands" --priority 1 --effort large --milestone 1
+chronicle next-step "Add MCP tools" --priority 1 --effort medium --milestone 1
+chronicle next-step "Create Chronicle Skills" --priority 2 --effort medium --milestone 1
+chronicle next-step "Write tests" --priority 2 --effort small --milestone 1
+
+# Marked in progress
+chronicle milestone-status 1 in_progress
+
+# As work completed
+chronicle next-step-complete 1  # Schema done
+chronicle next-step-complete 2  # CLI done
+chronicle next-step-complete 3  # MCP tools done
+chronicle next-step-complete 4  # Skills done
+chronicle next-step-complete 5  # Tests done (25 passing!)
+
+# Finished!
+chronicle milestone-complete 1
+
+# Result
+chronicle roadmap
+# ✅ Completed (last 7 days)
+#   • Add project tracking to Chronicle (Oct 22)
+# 📊 Milestones: 1/1 completed | Next Steps: 5/5 done
+```
+
+**Chronicle now uses Chronicle to build Chronicle!** 🎯
+
+---
 
 ### 🔮 Future Phases
-- [ ] Next.js web dashboard
-- [ ] Timeline visualization UI
+- [ ] Next.js web dashboard with roadmap visualization
+- [ ] Timeline UI showing milestones + sessions + commits
+- [ ] `chronicle export obsidian` - Batch export with milestone linking
 - [ ] Blog post generator from weekly summaries
+- [ ] Auto-generate DEVELOPMENT_HISTORY.md from milestones
 - [ ] Team features (shared Chronicle databases)
 - [ ] VS Code extension
 - [ ] GitHub Actions integration for PR descriptions
