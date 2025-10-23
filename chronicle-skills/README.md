@@ -38,6 +38,19 @@ End-to-end workflow for:
 
 **Use when:** Starting a new session or want comprehensive project tracking.
 
+### 🎯 chronicle-project-tracker
+**Purpose:** Manage project development with database-tracked milestones and roadmap
+
+Use Chronicle's built-in project tracking to:
+- Plan features with milestones
+- Break down work into next steps
+- Link sessions to milestones automatically
+- View project roadmap and progress
+- Generate development reports
+- Eliminate manual documentation updates
+
+**Use when:** Planning features, tracking progress, viewing roadmap, or managing meta-development.
+
 ## Installation
 
 ### Option 1: Local Directory (Recommended for Development)
@@ -55,6 +68,7 @@ Load specific skills as needed:
 /skill add /path/to/chronicle/chronicle-skills/chronicle-session-documenter
 /skill add /path/to/chronicle/chronicle-skills/chronicle-context-retriever
 /skill add /path/to/chronicle/chronicle-skills/chronicle-workflow
+/skill add /path/to/chronicle/chronicle-skills/chronicle-project-tracker
 ```
 
 ## Prerequisites

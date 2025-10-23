@@ -156,6 +156,90 @@ class DailySummary(Base):
         self.key_decisions = json.dumps(value)
 
 
+class ProjectMilestone(Base):
+    """Project milestone/feature tracking for meta-development."""
+
+    __tablename__ = 'project_milestones'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.now, index=True)
+    title = Column(String(255), nullable=False)
+    description = Column(Text)
+    status = Column(String(50), nullable=False, default='planned', index=True)  # planned, in_progress, completed, archived
+    milestone_type = Column(String(50), nullable=False, default='feature')  # feature, bugfix, optimization, documentation
+    priority = Column(Integer, default=3)  # 1 (highest) to 5 (lowest)
+    completed_at = Column(DateTime)
+    related_sessions = Column(Text)  # JSON array of session IDs
+    related_commits = Column(Text)  # JSON array of commit SHAs
+    tags = Column(Text)  # JSON array of tags
+
+    # Relationships
+    next_steps = relationship("NextStep", back_populates="milestone")
+
+    def __repr__(self):
+        return f"<ProjectMilestone(id={self.id}, title='{self.title}', status='{self.status}')>"
+
+    @property
+    def sessions_list(self):
+        """Get related_sessions as a Python list."""
+        if self.related_sessions:
+            return json.loads(self.related_sessions)
+        return []
+
+    @sessions_list.setter
+    def sessions_list(self, value):
+        """Set related_sessions from a Python list."""
+        self.related_sessions = json.dumps(value)
+
+    @property
+    def commits_list(self):
+        """Get related_commits as a Python list."""
+        if self.related_commits:
+            return json.loads(self.related_commits)
+        return []
+
+    @commits_list.setter
+    def commits_list(self, value):
+        """Set related_commits from a Python list."""
+        self.related_commits = json.dumps(value)
+
+    @property
+    def tags_list(self):
+        """Get tags as a Python list."""
+        if self.tags:
+            return json.loads(self.tags)
+        return []
+
+    @tags_list.setter
+    def tags_list(self, value):
+        """Set tags from a Python list."""
+        self.tags = json.dumps(value)
+
+
+class NextStep(Base):
+    """Next steps and TODO tracking."""
+
+    __tablename__ = 'next_steps'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.now, index=True)
+    description = Column(Text, nullable=False)
+    priority = Column(Integer, default=3)  # 1 (highest) to 5 (lowest)
+    estimated_effort = Column(String(50))  # small, medium, large
+    category = Column(String(50), default='feature')  # feature, optimization, fix, docs
+    created_by = Column(String(100))  # e.g., "session_16", "manual", "ai-suggestion"
+    completed = Column(Integer, default=0)  # 0 = pending, 1 = completed
+    completed_at = Column(DateTime)
+    related_milestone_id = Column(Integer, ForeignKey('project_milestones.id'))
+
+    # Relationships
+    milestone = relationship("ProjectMilestone", back_populates="next_steps")
+
+    def __repr__(self):
+        status = "completed" if self.completed else "pending"
+        return f"<NextStep(id={self.id}, description='{self.description[:50]}...', status='{status}')>"
+
+
 def init_db(db_path: str = None):
     """Initialize the database and create all tables.
 

@@ -6,17 +6,105 @@
 
 ---
 
-## 🎯 Core Directive: Use MCP Tools First
+## 🎯 Core Directive: Use Chronicle Skills First
 
-**When querying Chronicle data, ALWAYS use MCP server tools, not CLI commands.**
+**⚠️ TEMPORARY TESTING MODE: This directive prioritizes Skills to validate they work correctly.**
 
-**Why:**
-- MCP returns structured JSON (easy to parse)
-- CLI returns formatted text (designed for humans)
-- MCP is faster (no shell overhead)
-- Better filtering and query capabilities
+**When working with Chronicle, ALWAYS use Skills first, not raw MCP tools or CLI.**
 
-**Available MCP Tools:**
+**Priority Order:**
+1. ✅ **Chronicle Skills** (chronicle-workflow, chronicle-session-documenter, chronicle-context-retriever, chronicle-project-tracker)
+2. ⚠️ MCP tools (only if skill doesn't exist for the task)
+3. ❌ CLI commands (only for user-facing operations like `chronicle start`)
+
+---
+
+## 🤖 Chronicle Skills (USE THESE!)
+
+Four skills are available and should be your **first choice** for Chronicle interactions:
+
+### 1. chronicle-workflow
+**Use for:** Starting sessions, workflow guidance, best practices
+- Checks if current session is tracked
+- Guides user through Chronicle workflow
+- Explains session start/end process
+- Multi-project tracking advice
+
+**Trigger phrases:**
+- "starting a new session"
+- "how do I track this work?"
+- "chronicle workflow"
+- "set up Chronicle"
+
+### 2. chronicle-session-documenter
+**Use for:** Documenting completed sessions to Obsidian
+- Queries Chronicle database for session details
+- Retrieves AI summaries
+- Creates structured Obsidian notes
+- Adds metadata, tags, wikilinks
+
+**Trigger phrases:**
+- "document session X to Obsidian"
+- "create a note for this session"
+- "export session to vault"
+- "log this work"
+
+### 3. chronicle-context-retriever
+**Use for:** Searching past work and retrieving context
+- Searches Obsidian vault for session notes
+- Finds past approaches and decisions
+- Extracts relevant context
+- Helps avoid repeating work
+
+**Trigger phrases:**
+- "what did I do yesterday?"
+- "how did I implement X?"
+- "find sessions about Y"
+- "show me past work on Z"
+
+### 4. chronicle-project-tracker
+**Use for:** Managing project development with milestones and roadmap
+- Plan features with milestones
+- Break down work into next steps
+- Link sessions to milestones
+- View project roadmap and progress
+- Generate development reports
+- Eliminate manual documentation updates
+
+**Trigger phrases:**
+- "what should I work on next?"
+- "show me the roadmap"
+- "what's in progress?"
+- "plan a new feature"
+- "link this session to a milestone"
+- "what did we accomplish this week?"
+
+**Example:**
+```python
+# ✅ DO (Skills first!):
+User: "Document session 16 to my Obsidian vault"
+→ Load chronicle-session-documenter skill
+→ Skill handles querying DB, formatting note, writing to vault
+
+# ⚠️ ONLY IF NO SKILL EXISTS:
+mcp__chronicle__get_session_summary(session_id=16)
+
+# ❌ DON'T:
+Bash("chronicle session 16")  # Use skills or MCP, not CLI
+```
+
+---
+
+## 🔧 When to Use MCP Tools Directly
+
+**Only use raw MCP tools when:**
+- No appropriate skill exists for the task
+- Need low-level database access for debugging
+- Building new functionality that Skills don't cover
+
+**Available MCP Tools** (use sparingly during testing):
+
+**Session & Commit Tracking:**
 ```python
 mcp__chronicle__get_sessions(limit=10, tool="claude-code", repo_path="/path", days=7)
 mcp__chronicle__get_session_summary(session_id=16)
@@ -27,31 +115,19 @@ mcp__chronicle__get_timeline(days=1, repo_path="/path")
 mcp__chronicle__get_stats(days=7)
 ```
 
-**Example:**
+**Project Tracking (New!):**
 ```python
-# ❌ DON'T:
-Bash("chronicle sessions --repo chronicle")  # Returns formatted text
-
-# ✅ DO:
-mcp__chronicle__get_sessions(repo_path="/Users/.../chronicle")  # Returns JSON
+mcp__chronicle__get_milestones(status="in_progress", milestone_type="feature", limit=20)
+mcp__chronicle__get_milestone(milestone_id=1)
+mcp__chronicle__get_next_steps(completed=False, milestone_id=1, limit=20)
+mcp__chronicle__get_roadmap(days=7)
+mcp__chronicle__update_milestone_status(milestone_id=1, new_status="completed")
+mcp__chronicle__complete_next_step(step_id=1)
 ```
 
 **CLI commands are for:**
 - User-facing operations (`chronicle start`, `chronicle config`)
-- File system operations not exposed by MCP
 - When user explicitly requests CLI output
-
----
-
-## 🤖 Chronicle Skills
-
-Three skills are published to Claude marketplace:
-
-1. **chronicle-workflow** - Complete workflow guidance
-2. **chronicle-session-documenter** - Export sessions to Obsidian
-3. **chronicle-context-retriever** - Search past work
-
-**Skills use MCP tools internally** - they add workflow intelligence on top of raw MCP data.
 
 ---
 

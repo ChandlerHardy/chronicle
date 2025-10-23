@@ -6,7 +6,7 @@ from pathlib import Path
 import click
 from rich.console import Console
 
-from backend.database.models import get_session, AIInteraction
+from backend.database.models import get_session, AIInteraction, ProjectMilestone, NextStep
 from backend.services.git_monitor import GitMonitor
 from backend.services.ai_tracker import AITracker
 from backend.cli.formatters import (
@@ -1015,5 +1015,443 @@ def add_manual(description: str, tool: str, duration: int, repo: str):
     console.print(f"  1. Let AI generate a better summary: [cyan]chronicle session {session_id}[/cyan]")
     console.print("  2. Manually edit in database or Obsidian vault")
     console.print("  3. Export to Obsidian: [cyan]chronicle export obsidian[/cyan] (coming soon)")
+
+    db_session.close()
+
+
+# ============================================================================
+# PROJECT TRACKING COMMANDS (Milestones & Next Steps)
+# ============================================================================
+
+@cli.command()
+@click.argument('title')
+@click.option('--description', '-d', help='Detailed description of the milestone')
+@click.option('--type', 'milestone_type', type=click.Choice(['feature', 'bugfix', 'optimization', 'documentation']), default='feature', help='Type of milestone')
+@click.option('--priority', type=int, default=3, help='Priority (1=highest, 5=lowest)')
+@click.option('--tags', help='Comma-separated tags (e.g., "phase-4,mcp,obsidian")')
+def milestone(title: str, description: str = None, milestone_type: str = 'feature', priority: int = 3, tags: str = None):
+    """Create a new project milestone."""
+    from rich.table import Table
+
+    db_session = get_session()
+
+    milestone = ProjectMilestone(
+        title=title,
+        description=description,
+        milestone_type=milestone_type,
+        priority=priority,
+        status='planned'
+    )
+
+    if tags:
+        milestone.tags_list = [tag.strip() for tag in tags.split(',')]
+
+    db_session.add(milestone)
+    db_session.commit()
+
+    milestone_id = milestone.id
+
+    console.print(f"[green]✓[/green] Created milestone #{milestone_id}: {title}")
+    console.print(f"[dim]Type: {milestone_type} | Priority: {priority} | Status: planned[/dim]")
+    if tags:
+        console.print(f"[dim]Tags: {tags}[/dim]")
+
+    console.print(f"\n[bold]Next:[/bold]")
+    console.print(f"  - Link a session: [cyan]chronicle link-session <session_id> --milestone {milestone_id}[/cyan]")
+    console.print(f"  - Update status: [cyan]chronicle milestone-status {milestone_id} in_progress[/cyan]")
+    console.print(f"  - Mark complete: [cyan]chronicle milestone-complete {milestone_id}[/cyan]")
+
+    db_session.close()
+
+
+@cli.command()
+@click.option('--status', type=click.Choice(['all', 'planned', 'in_progress', 'completed', 'archived']), default='all', help='Filter by status')
+@click.option('--type', 'milestone_type', type=click.Choice(['feature', 'bugfix', 'optimization', 'documentation']), help='Filter by type')
+@click.option('--limit', type=int, default=20, help='Max number of milestones to show')
+def milestones(status: str, milestone_type: str = None, limit: int = 20):
+    """List project milestones."""
+    from rich.table import Table
+    from sqlalchemy import desc
+
+    db_session = get_session()
+
+    query = db_session.query(ProjectMilestone)
+
+    if status != 'all':
+        query = query.filter(ProjectMilestone.status == status)
+
+    if milestone_type:
+        query = query.filter(ProjectMilestone.milestone_type == milestone_type)
+
+    query = query.order_by(
+        ProjectMilestone.completed_at.desc().nullsfirst(),
+        desc(ProjectMilestone.priority),
+        ProjectMilestone.created_at.desc()
+    )
+
+    milestones_list = query.limit(limit).all()
+
+    if not milestones_list:
+        console.print("[yellow]No milestones found[/yellow]")
+        db_session.close()
+        return
+
+    table = Table(title=f"Project Milestones ({status})")
+    table.add_column("ID", style="cyan", width=4)
+    table.add_column("Title", style="bold")
+    table.add_column("Type", width=12)
+    table.add_column("Status", width=12)
+    table.add_column("Priority", width=8)
+    table.add_column("Sessions", width=8)
+    table.add_column("Tags", style="dim")
+
+    for m in milestones_list:
+        status_color = {
+            'planned': 'blue',
+            'in_progress': 'yellow',
+            'completed': 'green',
+            'archived': 'dim'
+        }.get(m.status, 'white')
+
+        session_count = len(m.sessions_list) if m.sessions_list else 0
+        tags_str = ', '.join(m.tags_list[:3]) if m.tags_list else ''
+
+        table.add_row(
+            str(m.id),
+            m.title[:50],
+            m.milestone_type,
+            f"[{status_color}]{m.status}[/{status_color}]",
+            f"P{m.priority}",
+            str(session_count),
+            tags_str
+        )
+
+    console.print(table)
+    console.print(f"\n[dim]Showing {len(milestones_list)} of {query.count()} milestones[/dim]")
+
+    db_session.close()
+
+
+@cli.command()
+@click.argument('milestone_id', type=int)
+@click.argument('new_status', type=click.Choice(['planned', 'in_progress', 'completed', 'archived']))
+def milestone_status(milestone_id: int, new_status: str):
+    """Update milestone status."""
+    db_session = get_session()
+
+    milestone = db_session.query(ProjectMilestone).filter_by(id=milestone_id).first()
+
+    if not milestone:
+        console.print(f"[red]Error:[/red] Milestone #{milestone_id} not found")
+        db_session.close()
+        return
+
+    old_status = milestone.status
+    milestone.status = new_status
+
+    if new_status == 'completed' and not milestone.completed_at:
+        milestone.completed_at = datetime.now()
+
+    db_session.commit()
+
+    console.print(f"[green]✓[/green] Updated milestone #{milestone_id}: {milestone.title}")
+    console.print(f"[dim]{old_status} → {new_status}[/dim]")
+
+    db_session.close()
+
+
+@cli.command()
+@click.argument('milestone_id', type=int)
+def milestone_complete(milestone_id: int):
+    """Mark a milestone as completed."""
+    db_session = get_session()
+
+    milestone = db_session.query(ProjectMilestone).filter_by(id=milestone_id).first()
+
+    if not milestone:
+        console.print(f"[red]Error:[/red] Milestone #{milestone_id} not found")
+        db_session.close()
+        return
+
+    milestone.status = 'completed'
+    milestone.completed_at = datetime.now()
+
+    db_session.commit()
+
+    # Get related sessions count
+    session_count = len(milestone.sessions_list) if milestone.sessions_list else 0
+
+    console.print(f"[green]✓[/green] Completed milestone: {milestone.title}")
+    console.print(f"[dim]Type: {milestone.milestone_type} | {session_count} sessions linked[/dim]")
+
+    db_session.close()
+
+
+@cli.command()
+@click.argument('milestone_id', type=int)
+def milestone_show(milestone_id: int):
+    """Show detailed milestone information."""
+    from rich.panel import Panel
+    from rich.markdown import Markdown
+
+    db_session = get_session()
+
+    milestone = db_session.query(ProjectMilestone).filter_by(id=milestone_id).first()
+
+    if not milestone:
+        console.print(f"[red]Error:[/red] Milestone #{milestone_id} not found")
+        db_session.close()
+        return
+
+    # Build details
+    details = f"# {milestone.title}\n\n"
+    details += f"**Type:** {milestone.milestone_type}\n"
+    details += f"**Status:** {milestone.status}\n"
+    details += f"**Priority:** {milestone.priority}\n"
+    details += f"**Created:** {milestone.created_at.strftime('%Y-%m-%d %H:%M')}\n"
+
+    if milestone.completed_at:
+        details += f"**Completed:** {milestone.completed_at.strftime('%Y-%m-%d %H:%M')}\n"
+
+    if milestone.description:
+        details += f"\n## Description\n{milestone.description}\n"
+
+    if milestone.tags_list:
+        details += f"\n**Tags:** {', '.join(milestone.tags_list)}\n"
+
+    if milestone.sessions_list:
+        details += f"\n## Linked Sessions ({len(milestone.sessions_list)})\n"
+        for session_id in milestone.sessions_list:
+            session = db_session.query(AIInteraction).filter_by(id=session_id).first()
+            if session:
+                details += f"- Session #{session_id}: {session.ai_tool} ({session.timestamp.strftime('%Y-%m-%d')})\n"
+
+    if milestone.commits_list:
+        details += f"\n## Linked Commits ({len(milestone.commits_list)})\n"
+        for sha in milestone.commits_list[:5]:  # Show first 5
+            details += f"- {sha[:8]}\n"
+
+    console.print(Panel(Markdown(details), title=f"Milestone #{milestone_id}", border_style="cyan"))
+
+    db_session.close()
+
+
+@cli.command()
+@click.argument('description')
+@click.option('--priority', type=int, default=3, help='Priority (1=highest, 5=lowest)')
+@click.option('--effort', type=click.Choice(['small', 'medium', 'large']), help='Estimated effort')
+@click.option('--category', type=click.Choice(['feature', 'optimization', 'fix', 'docs']), default='feature', help='Category')
+@click.option('--milestone', type=int, help='Link to milestone ID')
+def next_step(description: str, priority: int = 3, effort: str = None, category: str = 'feature', milestone: int = None):
+    """Add a next step / TODO item."""
+    db_session = get_session()
+
+    step = NextStep(
+        description=description,
+        priority=priority,
+        estimated_effort=effort,
+        category=category,
+        created_by='manual',
+        related_milestone_id=milestone
+    )
+
+    db_session.add(step)
+    db_session.commit()
+
+    step_id = step.id
+
+    console.print(f"[green]✓[/green] Created next step #{step_id}")
+    console.print(f"[dim]Priority: {priority} | Category: {category}[/dim]")
+    if effort:
+        console.print(f"[dim]Effort: {effort}[/dim]")
+    if milestone:
+        console.print(f"[dim]Linked to milestone #{milestone}[/dim]")
+
+    db_session.close()
+
+
+@cli.command()
+@click.option('--all', 'show_all', is_flag=True, help='Show completed items too')
+@click.option('--milestone', type=int, help='Filter by milestone ID')
+@click.option('--limit', type=int, default=20, help='Max number of items to show')
+def next_steps(show_all: bool = False, milestone: int = None, limit: int = 20):
+    """List next steps / TODOs."""
+    from rich.table import Table
+    from sqlalchemy import desc
+
+    db_session = get_session()
+
+    query = db_session.query(NextStep)
+
+    if not show_all:
+        query = query.filter(NextStep.completed == 0)
+
+    if milestone:
+        query = query.filter(NextStep.related_milestone_id == milestone)
+
+    query = query.order_by(
+        NextStep.completed,
+        desc(NextStep.priority),
+        NextStep.created_at.desc()
+    )
+
+    steps = query.limit(limit).all()
+
+    if not steps:
+        console.print("[yellow]No next steps found[/yellow]")
+        db_session.close()
+        return
+
+    table = Table(title="Next Steps")
+    table.add_column("ID", style="cyan", width=4)
+    table.add_column("Description", style="bold")
+    table.add_column("Priority", width=8)
+    table.add_column("Effort", width=8)
+    table.add_column("Category", width=12)
+    table.add_column("Status", width=10)
+
+    for step in steps:
+        status = "[green]✓ Done[/green]" if step.completed else "[yellow]Pending[/yellow]"
+        effort = step.estimated_effort or '-'
+
+        table.add_row(
+            str(step.id),
+            step.description[:60],
+            f"P{step.priority}",
+            effort,
+            step.category,
+            status
+        )
+
+    console.print(table)
+    console.print(f"\n[dim]Showing {len(steps)} items[/dim]")
+
+    db_session.close()
+
+
+@cli.command()
+@click.argument('step_id', type=int)
+def next_step_complete(step_id: int):
+    """Mark a next step as completed."""
+    db_session = get_session()
+
+    step = db_session.query(NextStep).filter_by(id=step_id).first()
+
+    if not step:
+        console.print(f"[red]Error:[/red] Next step #{step_id} not found")
+        db_session.close()
+        return
+
+    step.completed = 1
+    step.completed_at = datetime.now()
+
+    db_session.commit()
+
+    console.print(f"[green]✓[/green] Completed: {step.description}")
+
+    db_session.close()
+
+
+@cli.command()
+@click.argument('session_id', type=int)
+@click.option('--milestone', type=int, required=True, help='Milestone ID to link to')
+def link_session(session_id: int, milestone: int):
+    """Link a session to a milestone."""
+    db_session = get_session()
+
+    # Get session
+    session = db_session.query(AIInteraction).filter_by(id=session_id).first()
+    if not session:
+        console.print(f"[red]Error:[/red] Session #{session_id} not found")
+        db_session.close()
+        return
+
+    # Get milestone
+    milestone_obj = db_session.query(ProjectMilestone).filter_by(id=milestone).first()
+    if not milestone_obj:
+        console.print(f"[red]Error:[/red] Milestone #{milestone} not found")
+        db_session.close()
+        return
+
+    # Add session to milestone's sessions list
+    sessions = milestone_obj.sessions_list or []
+    if session_id not in sessions:
+        sessions.append(session_id)
+        milestone_obj.sessions_list = sessions
+        db_session.commit()
+
+        console.print(f"[green]✓[/green] Linked session #{session_id} to milestone: {milestone_obj.title}")
+    else:
+        console.print(f"[yellow]Session #{session_id} already linked to milestone #{milestone}[/yellow]")
+
+    db_session.close()
+
+
+@cli.command()
+@click.option('--days', type=int, default=7, help='Number of days to show')
+def roadmap(days: int = 7):
+    """Show project roadmap and progress."""
+    from rich.table import Table
+    from rich.panel import Panel
+
+    db_session = get_session()
+
+    # In progress milestones
+    in_progress = db_session.query(ProjectMilestone).filter_by(status='in_progress').all()
+
+    # Recent completions
+    cutoff = datetime.now() - timedelta(days=days)
+    completed = db_session.query(ProjectMilestone).filter(
+        ProjectMilestone.status == 'completed',
+        ProjectMilestone.completed_at >= cutoff
+    ).order_by(ProjectMilestone.completed_at.desc()).limit(10).all()
+
+    # Planned (high priority)
+    planned = db_session.query(ProjectMilestone).filter_by(status='planned').order_by(
+        ProjectMilestone.priority
+    ).limit(5).all()
+
+    # Pending next steps
+    pending_steps = db_session.query(NextStep).filter_by(completed=0).order_by(
+        NextStep.priority
+    ).limit(5).all()
+
+    # Show roadmap
+    console.print("\n[bold cyan]Chronicle Development Roadmap[/bold cyan]\n")
+
+    if in_progress:
+        console.print("[bold yellow]🚧 In Progress[/bold yellow]")
+        for m in in_progress:
+            sessions_count = len(m.sessions_list) if m.sessions_list else 0
+            console.print(f"  • [bold]{m.title}[/bold] ({m.milestone_type}, {sessions_count} sessions)")
+        console.print()
+
+    if completed:
+        console.print(f"[bold green]✅ Completed (last {days} days)[/bold green]")
+        for m in completed:
+            completed_date = m.completed_at.strftime('%b %d')
+            console.print(f"  • {m.title} ({completed_date})")
+        console.print()
+
+    if planned:
+        console.print("[bold blue]📋 Planned (High Priority)[/bold blue]")
+        for m in planned:
+            console.print(f"  • [P{m.priority}] {m.title} ({m.milestone_type})")
+        console.print()
+
+    if pending_steps:
+        console.print("[bold magenta]🔜 Next Steps[/bold magenta]")
+        for step in pending_steps:
+            effort = f" [{step.estimated_effort}]" if step.estimated_effort else ""
+            console.print(f"  • [P{step.priority}] {step.description[:60]}{effort}")
+        console.print()
+
+    # Stats
+    total_milestones = db_session.query(ProjectMilestone).count()
+    total_completed = db_session.query(ProjectMilestone).filter_by(status='completed').count()
+    total_steps = db_session.query(NextStep).count()
+    completed_steps = db_session.query(NextStep).filter_by(completed=1).count()
+
+    console.print(f"[dim]Milestones: {total_completed}/{total_milestones} completed | Next Steps: {completed_steps}/{total_steps} done[/dim]")
 
     db_session.close()

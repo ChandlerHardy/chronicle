@@ -20,6 +20,8 @@ from backend.database.models import (
     Commit,
     DailySummary,
     SessionSummaryChunk,
+    ProjectMilestone,
+    NextStep,
 )
 
 # Initialize FastMCP server
@@ -386,6 +388,288 @@ def search_commits(query: str, limit: int = 20) -> str:
         "query": query,
         "count": len(commits),
         "commits": [format_commit_dict(c) for c in commits]
+    }
+
+    return json.dumps(result, indent=2)
+
+
+# ============================================================================
+# PROJECT TRACKING MCP TOOLS (Milestones & Next Steps)
+# ============================================================================
+
+def format_milestone_dict(milestone: ProjectMilestone) -> Dict[str, Any]:
+    """Convert ProjectMilestone to a clean dictionary for MCP responses."""
+    return {
+        "id": milestone.id,
+        "title": milestone.title,
+        "description": milestone.description,
+        "status": milestone.status,
+        "type": milestone.milestone_type,
+        "priority": milestone.priority,
+        "created_at": milestone.created_at.isoformat(),
+        "completed_at": milestone.completed_at.isoformat() if milestone.completed_at else None,
+        "tags": milestone.tags_list,
+        "related_sessions": milestone.sessions_list,
+        "related_commits": milestone.commits_list,
+    }
+
+
+def format_next_step_dict(step: NextStep) -> Dict[str, Any]:
+    """Convert NextStep to a clean dictionary for MCP responses."""
+    return {
+        "id": step.id,
+        "description": step.description,
+        "priority": step.priority,
+        "estimated_effort": step.estimated_effort,
+        "category": step.category,
+        "created_by": step.created_by,
+        "completed": bool(step.completed),
+        "created_at": step.created_at.isoformat(),
+        "completed_at": step.completed_at.isoformat() if step.completed_at else None,
+        "related_milestone_id": step.related_milestone_id,
+    }
+
+
+@mcp.tool()
+def get_milestones(
+    status: Optional[str] = None,
+    milestone_type: Optional[str] = None,
+    limit: int = 20,
+) -> str:
+    """Get project milestones.
+
+    Args:
+        status: Filter by status (planned, in_progress, completed, archived)
+        milestone_type: Filter by type (feature, bugfix, optimization, documentation)
+        limit: Maximum number of milestones to return (default: 20, max: 100)
+
+    Returns:
+        JSON string with list of milestones
+    """
+    db = get_db()
+    query = db.query(ProjectMilestone)
+
+    if status:
+        query = query.filter(ProjectMilestone.status == status)
+
+    if milestone_type:
+        query = query.filter(ProjectMilestone.milestone_type == milestone_type)
+
+    limit = min(limit, 100)
+    milestones = query.order_by(
+        ProjectMilestone.completed_at.desc().nullsfirst(),
+        desc(ProjectMilestone.priority),
+        ProjectMilestone.created_at.desc()
+    ).limit(limit).all()
+
+    result = {
+        "count": len(milestones),
+        "milestones": [format_milestone_dict(m) for m in milestones]
+    }
+
+    return json.dumps(result, indent=2)
+
+
+@mcp.tool()
+def get_milestone(milestone_id: int) -> str:
+    """Get detailed information about a specific milestone.
+
+    Args:
+        milestone_id: The milestone ID
+
+    Returns:
+        JSON string with milestone details including linked sessions and commits
+    """
+    db = get_db()
+    milestone = db.query(ProjectMilestone).filter_by(id=milestone_id).first()
+
+    if not milestone:
+        return json.dumps({"error": f"Milestone #{milestone_id} not found"}, indent=2)
+
+    # Get linked sessions
+    linked_sessions = []
+    if milestone.sessions_list:
+        sessions = db.query(AIInteraction).filter(
+            AIInteraction.id.in_(milestone.sessions_list)
+        ).all()
+        linked_sessions = [format_session_dict(s) for s in sessions]
+
+    # Get linked commits
+    linked_commits = []
+    if milestone.commits_list:
+        commits = db.query(Commit).filter(
+            Commit.sha.in_(milestone.commits_list)
+        ).all()
+        linked_commits = [format_commit_dict(c) for c in commits]
+
+    result = format_milestone_dict(milestone)
+    result["linked_sessions"] = linked_sessions
+    result["linked_commits"] = linked_commits
+
+    return json.dumps(result, indent=2)
+
+
+@mcp.tool()
+def get_next_steps(
+    completed: Optional[bool] = None,
+    milestone_id: Optional[int] = None,
+    limit: int = 20,
+) -> str:
+    """Get next steps / TODO items.
+
+    Args:
+        completed: Filter by completion status (True = completed, False = pending, None = all)
+        milestone_id: Filter by related milestone ID
+        limit: Maximum number of items to return (default: 20, max: 100)
+
+    Returns:
+        JSON string with list of next steps
+    """
+    db = get_db()
+    query = db.query(NextStep)
+
+    if completed is not None:
+        query = query.filter(NextStep.completed == (1 if completed else 0))
+
+    if milestone_id:
+        query = query.filter(NextStep.related_milestone_id == milestone_id)
+
+    limit = min(limit, 100)
+    steps = query.order_by(
+        NextStep.completed,
+        desc(NextStep.priority),
+        NextStep.created_at.desc()
+    ).limit(limit).all()
+
+    result = {
+        "count": len(steps),
+        "next_steps": [format_next_step_dict(s) for s in steps]
+    }
+
+    return json.dumps(result, indent=2)
+
+
+@mcp.tool()
+def get_roadmap(days: int = 7) -> str:
+    """Get project roadmap showing current progress and planned work.
+
+    Args:
+        days: Number of days to look back for recent completions (default: 7)
+
+    Returns:
+        JSON string with roadmap summary
+    """
+    db = get_db()
+
+    # In progress milestones
+    in_progress = db.query(ProjectMilestone).filter_by(status='in_progress').all()
+
+    # Recent completions
+    cutoff = datetime.now() - timedelta(days=days)
+    completed = db.query(ProjectMilestone).filter(
+        ProjectMilestone.status == 'completed',
+        ProjectMilestone.completed_at >= cutoff
+    ).order_by(ProjectMilestone.completed_at.desc()).limit(10).all()
+
+    # Planned (high priority)
+    planned = db.query(ProjectMilestone).filter_by(status='planned').order_by(
+        ProjectMilestone.priority
+    ).limit(10).all()
+
+    # Pending next steps
+    pending_steps = db.query(NextStep).filter_by(completed=0).order_by(
+        NextStep.priority
+    ).limit(10).all()
+
+    # Stats
+    total_milestones = db.query(ProjectMilestone).count()
+    total_completed = db.query(ProjectMilestone).filter_by(status='completed').count()
+    total_steps = db.query(NextStep).count()
+    completed_steps = db.query(NextStep).filter_by(completed=1).count()
+
+    result = {
+        "summary": {
+            "total_milestones": total_milestones,
+            "completed_milestones": total_completed,
+            "total_next_steps": total_steps,
+            "completed_next_steps": completed_steps,
+        },
+        "in_progress": [format_milestone_dict(m) for m in in_progress],
+        "recently_completed": [format_milestone_dict(m) for m in completed],
+        "planned_high_priority": [format_milestone_dict(m) for m in planned],
+        "pending_next_steps": [format_next_step_dict(s) for s in pending_steps],
+    }
+
+    return json.dumps(result, indent=2)
+
+
+@mcp.tool()
+def update_milestone_status(milestone_id: int, new_status: str) -> str:
+    """Update the status of a milestone.
+
+    Args:
+        milestone_id: The milestone ID
+        new_status: New status (planned, in_progress, completed, archived)
+
+    Returns:
+        JSON string with update result
+    """
+    db = get_db()
+    milestone = db.query(ProjectMilestone).filter_by(id=milestone_id).first()
+
+    if not milestone:
+        return json.dumps({"error": f"Milestone #{milestone_id} not found"}, indent=2)
+
+    valid_statuses = ['planned', 'in_progress', 'completed', 'archived']
+    if new_status not in valid_statuses:
+        return json.dumps({
+            "error": f"Invalid status '{new_status}'. Must be one of: {', '.join(valid_statuses)}"
+        }, indent=2)
+
+    old_status = milestone.status
+    milestone.status = new_status
+
+    if new_status == 'completed' and not milestone.completed_at:
+        milestone.completed_at = datetime.now()
+
+    db.commit()
+
+    result = {
+        "success": True,
+        "milestone_id": milestone_id,
+        "title": milestone.title,
+        "old_status": old_status,
+        "new_status": new_status,
+    }
+
+    return json.dumps(result, indent=2)
+
+
+@mcp.tool()
+def complete_next_step(step_id: int) -> str:
+    """Mark a next step as completed.
+
+    Args:
+        step_id: The next step ID
+
+    Returns:
+        JSON string with update result
+    """
+    db = get_db()
+    step = db.query(NextStep).filter_by(id=step_id).first()
+
+    if not step:
+        return json.dumps({"error": f"Next step #{step_id} not found"}, indent=2)
+
+    step.completed = 1
+    step.completed_at = datetime.now()
+    db.commit()
+
+    result = {
+        "success": True,
+        "step_id": step_id,
+        "description": step.description,
+        "completed_at": step.completed_at.isoformat(),
     }
 
     return json.dumps(result, indent=2)
