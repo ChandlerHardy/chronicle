@@ -3,6 +3,7 @@
 import time
 from typing import Optional
 from backend.core.config import get_config
+from backend.utils.transcript_cleaner import clean_transcript
 
 
 class Summarizer:
@@ -12,6 +13,8 @@ class Summarizer:
         """Initialize summarizer based on configured provider."""
         self.config = get_config()
         self.provider = self.config.summarization_provider
+        # Track recent API requests for adaptive rate limiting
+        self.recent_requests = []  # List of (timestamp, estimated_tokens)
 
         if self.provider == "gemini":
             import google.generativeai as genai
@@ -77,49 +80,6 @@ class Summarizer:
                 "message": f"{self.provider.title()} connection failed"
             }
 
-    def _clean_transcript(self, transcript: str) -> str:
-        """Clean transcript by removing ANSI codes and deduplicating lines.
-
-        Args:
-            transcript: Raw transcript
-
-        Returns:
-            Cleaned transcript
-        """
-        import re
-
-        # Remove ANSI escape codes
-        ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
-        cleaned = ansi_escape.sub('', transcript)
-
-        # Remove CSI sequences and other control characters
-        cleaned = re.sub(r'\x1B\[[0-9;]*[a-zA-Z]', '', cleaned)
-        cleaned = re.sub(r'[\x00-\x1F\x7F]', '', cleaned)  # Remove control chars except newlines
-        cleaned = re.sub(r'\n+', '\n', cleaned)  # Collapse multiple newlines
-
-        # Deduplicate consecutive identical lines (like spinner redraws)
-        lines = cleaned.split('\n')
-        deduplicated = []
-        prev_line = None
-        consecutive_count = 0
-
-        for line in lines:
-            stripped = line.strip()
-            if stripped == prev_line:
-                consecutive_count += 1
-                if consecutive_count == 1:
-                    # Keep first duplicate
-                    deduplicated.append(line)
-                elif consecutive_count == 5:
-                    # After 5 duplicates, add a marker
-                    deduplicated.append(f"[... repeated {consecutive_count} times ...]")
-                # Skip other duplicates
-            else:
-                consecutive_count = 0
-                deduplicated.append(line)
-                prev_line = stripped
-
-        return '\n'.join(deduplicated)
 
     def summarize_session(self, transcript: str, max_length: int = 2000) -> Optional[str]:
         """Summarize a session transcript.
@@ -136,7 +96,7 @@ class Summarizer:
 
         # Clean transcript first - removes ANSI codes and deduplicates
         original_size = len(transcript)
-        transcript = self._clean_transcript(transcript)
+        transcript = clean_transcript(transcript)
         cleaned_size = len(transcript)
         reduction = ((original_size - cleaned_size) / original_size * 100)
         print(f"  Cleaned transcript: {original_size:,} → {cleaned_size:,} chars ({reduction:.1f}% reduction)")
@@ -280,6 +240,45 @@ Summary:"""
         except Exception as e:
             return f"Error generating summary: {str(e)}"
 
+    def calculate_adaptive_delay(self, chunk_text: str, cumulative_summary: str) -> float:
+        """Calculate delay needed to stay under Gemini rate limits (1M tokens/min).
+
+        Args:
+            chunk_text: Text of the current chunk
+            cumulative_summary: Current cumulative summary
+
+        Returns:
+            Delay in seconds needed before making the next request
+        """
+        if self.provider != "gemini":
+            return 0  # No rate limiting for other providers
+
+        # Estimate tokens for this chunk (rough estimate: 4 chars per token)
+        estimated_tokens = (len(chunk_text) + len(cumulative_summary)) / 4
+
+        # Calculate tokens used in last 60 seconds (rolling window)
+        now = time.time()
+        cutoff = now - 60
+
+        # Remove old requests from tracking
+        self.recent_requests = [(ts, tokens) for ts, tokens in self.recent_requests if ts > cutoff]
+
+        # Sum recent usage
+        recent_usage = sum(tokens for _, tokens in self.recent_requests)
+
+        # If adding this chunk would exceed 90% of limit, calculate wait time
+        # Using 900K instead of 1M for safety buffer
+        rate_limit = 900000
+        if recent_usage + estimated_tokens > rate_limit:
+            # Wait until oldest request expires from the window
+            if self.recent_requests:
+                oldest_timestamp = self.recent_requests[0][0]
+                delay = (oldest_timestamp + 60) - now + 2  # +2s buffer
+                return max(delay, 0)
+
+        # Default minimum delay between chunks
+        return 8
+
     def summarize_session_chunked(
         self,
         session_id: int,
@@ -324,6 +323,13 @@ Summary:"""
         if not session.session_transcript:
             raise ValueError(f"Session {session_id} has no transcript")
 
+        # Clean transcript first - removes ANSI codes and deduplicates
+        original_size = len(session.session_transcript)
+        cleaned_transcript = clean_transcript(session.session_transcript)
+        cleaned_size = len(cleaned_transcript)
+        reduction = ((original_size - cleaned_size) / original_size * 100)
+        print(f"🧹 Cleaned transcript: {original_size:,} → {cleaned_size:,} chars ({reduction:.1f}% reduction)")
+
         # Check for existing chunks (resume capability)
         existing_chunks = (
             db_session.query(SessionSummaryChunk)
@@ -332,8 +338,8 @@ Summary:"""
             .all()
         )
 
-        # Split transcript into lines
-        lines = session.session_transcript.split('\n')
+        # Split cleaned transcript into lines
+        lines = cleaned_transcript.split('\n')
         total_lines = len(lines)
         print(f"📄 Total lines: {total_lines:,}")
         print(f"📦 Chunk size: {chunk_size_lines:,} lines")
@@ -341,14 +347,28 @@ Summary:"""
         num_chunks = (total_lines + chunk_size_lines - 1) // chunk_size_lines  # Ceiling division
         print(f"🔢 Total chunks: {num_chunks}")
 
-        # Resume from last chunk if available
+        # Resume from first missing chunk (detects gaps)
         start_chunk = 0
         cumulative_summary = ""
         if existing_chunks:
-            last_chunk = existing_chunks[-1]
-            start_chunk = last_chunk.chunk_number
-            cumulative_summary = last_chunk.cumulative_summary
-            print(f"🔄 Resuming from chunk {start_chunk} (found {len(existing_chunks)} existing chunks)")
+            # Find first gap in chunk sequence
+            existing_chunk_numbers = {chunk.chunk_number for chunk in existing_chunks}
+            expected_chunks = set(range(1, num_chunks + 1))
+            missing_chunks = sorted(expected_chunks - existing_chunk_numbers)
+
+            if missing_chunks:
+                # Start from first missing chunk
+                first_missing = missing_chunks[0]
+                start_chunk = first_missing - 1  # Convert to 0-indexed
+                # Use cumulative summary from chunk before the gap
+                chunk_before_gap = [c for c in existing_chunks if c.chunk_number == first_missing - 1]
+                if chunk_before_gap:
+                    cumulative_summary = chunk_before_gap[0].cumulative_summary
+                print(f"🔄 Resuming from chunk {first_missing} (found gap in chunks, {len(missing_chunks)} chunks missing)")
+            else:
+                # All chunks complete
+                print(f"✅ All {len(existing_chunks)} chunks already completed!")
+                return existing_chunks[-1].cumulative_summary
 
         print()
 
@@ -393,7 +413,7 @@ Focus on the overall narrative and progress. Avoid just appending - integrate th
 Updated Summary:"""
 
             # Generate summary for this chunk with automatic retry
-            max_retries = 3
+            max_retries = 5  # Increased from 3 to handle rate limits better
             chunk_summary = None
 
             for attempt in range(max_retries):
@@ -417,6 +437,10 @@ Updated Summary:"""
                         chunk_summary = result.stdout.strip()
 
                     elif self.provider == "gemini":
+                        # Track this request for adaptive rate limiting
+                        estimated_tokens = (len(chunk_text) + len(cumulative_summary)) / 4
+                        self.recent_requests.append((time.time(), estimated_tokens))
+
                         response = self.model.generate_content(prompt)
                         chunk_summary = response.text.strip()
                     elif self.provider == "ollama":
@@ -474,7 +498,12 @@ Updated Summary:"""
                 # The chunk_summary IS the updated cumulative summary
                 cumulative_summary = chunk_summary
 
-            # Save this chunk to database
+            # Save this chunk to database (delete existing if present to avoid duplicates)
+            db_session.query(SessionSummaryChunk).filter_by(
+                session_id=session_id,
+                chunk_number=chunk_num + 1
+            ).delete()
+
             chunk_record = SessionSummaryChunk(
                 session_id=session_id,
                 chunk_number=chunk_num + 1,
@@ -490,15 +519,18 @@ Updated Summary:"""
             print(f"✓ Chunk {chunk_num + 1} summarized ({len(chunk_summary)} chars)")
             print()
 
-            # Add delay between chunks to avoid rate limits (Gemini free tier: 1M tokens/min)
-            # Conservative estimate: ~1000 tokens per chunk (10K lines * ~100 chars/line / 1000)
-            # With 10K line chunks, we're safe processing ~5-10 per minute
-            # Add 8 second delay = max 7.5 chunks/min = well under 1M tokens/min
-            if self.provider == "gemini" and chunk_num < num_chunks - 1:
-                delay = 8  # 8 seconds between chunks
-                print(f"⏱️  Waiting {delay}s before next chunk (rate limit protection)...")
-                time.sleep(delay)
-                print()
+            # Adaptive delay between chunks to avoid rate limits
+            if chunk_num < num_chunks - 1:
+                # Calculate next chunk's text to estimate delay
+                next_start = (chunk_num + 1) * chunk_size_lines
+                next_end = min(next_start + chunk_size_lines, total_lines)
+                next_chunk_text = '\n'.join(lines[next_start:next_end])
+
+                delay = self.calculate_adaptive_delay(next_chunk_text, cumulative_summary)
+                if delay > 0:
+                    print(f"⏱️  Waiting {delay:.1f}s before next chunk (adaptive rate limit)...")
+                    time.sleep(delay)
+                    print()
 
         # Save final summary to the session
         session.response_summary = cumulative_summary

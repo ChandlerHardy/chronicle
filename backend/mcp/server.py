@@ -12,7 +12,7 @@ from pathlib import Path
 
 from fastmcp import FastMCP
 from sqlalchemy import desc, or_, and_
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, defer
 
 from backend.database.models import (
     init_db,
@@ -91,7 +91,9 @@ def get_sessions(
         JSON string with list of sessions
     """
     db = get_db()
-    query = db.query(AIInteraction).filter(AIInteraction.is_session == 1)
+    query = db.query(AIInteraction).options(
+        defer(AIInteraction.session_transcript)  # Don't load transcript (can be huge)
+    ).filter(AIInteraction.is_session == 1)
 
     if tool:
         query = query.filter(AIInteraction.ai_tool == tool)
@@ -125,7 +127,9 @@ def get_session_summary(session_id: int) -> str:
         JSON string with session details and full summary
     """
     db = get_db()
-    session = db.query(AIInteraction).filter(AIInteraction.id == session_id).first()
+    session = db.query(AIInteraction).options(
+        defer(AIInteraction.session_transcript)  # Don't load transcript (can be huge)
+    ).filter(AIInteraction.id == session_id).first()
 
     if not session:
         return json.dumps({"error": f"Session {session_id} not found"})
@@ -187,7 +191,9 @@ def search_sessions(
         return json.dumps({"error": "Must search summaries or prompts"})
 
     limit = min(limit, 50)
-    sessions = db.query(AIInteraction).filter(
+    sessions = db.query(AIInteraction).options(
+        defer(AIInteraction.session_transcript)  # Don't load transcript
+    ).filter(
         and_(
             AIInteraction.is_session == 1,
             or_(*filters)
@@ -269,7 +275,9 @@ def get_timeline(
     commits = commit_query.order_by(desc(Commit.timestamp)).all()
 
     # Get sessions
-    session_query = db.query(AIInteraction).filter(
+    session_query = db.query(AIInteraction).options(
+        defer(AIInteraction.session_transcript)  # Don't load transcript
+    ).filter(
         and_(
             AIInteraction.is_session == 1,
             AIInteraction.timestamp >= cutoff
@@ -324,7 +332,9 @@ def get_stats(days: int = 7) -> str:
     cutoff = datetime.now() - timedelta(days=days)
 
     # Session stats
-    sessions = db.query(AIInteraction).filter(
+    sessions = db.query(AIInteraction).options(
+        defer(AIInteraction.session_transcript)  # Don't load transcript
+    ).filter(
         and_(
             AIInteraction.is_session == 1,
             AIInteraction.timestamp >= cutoff
@@ -489,7 +499,9 @@ def get_milestone(milestone_id: int) -> str:
     # Get linked sessions
     linked_sessions = []
     if milestone.sessions_list:
-        sessions = db.query(AIInteraction).filter(
+        sessions = db.query(AIInteraction).options(
+            defer(AIInteraction.session_transcript)  # Don't load transcript
+        ).filter(
             AIInteraction.id.in_(milestone.sessions_list)
         ).all()
         linked_sessions = [format_session_dict(s) for s in sessions]

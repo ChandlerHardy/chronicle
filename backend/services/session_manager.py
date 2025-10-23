@@ -4,13 +4,13 @@ import os
 import sys
 import subprocess
 import tempfile
-import re
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict
 from sqlalchemy.orm import Session
 
 from backend.database.models import AIInteraction
+from backend.utils.transcript_cleaner import clean_transcript
 
 
 class SessionManager:
@@ -115,21 +115,25 @@ class SessionManager:
         # Read transcript
         transcript = self._read_transcript(transcript_file)
 
-        # Clean up ANSI codes for storage
-        clean_transcript = self._clean_ansi(transcript)
+        # Clean up ANSI codes and deduplicate for storage
+        original_size = len(transcript)
+        cleaned = clean_transcript(transcript)
+        cleaned_size = len(cleaned)
+        reduction = ((original_size - cleaned_size) / original_size * 100) if original_size > 0 else 0
 
         # Update session record
         session = self.db.query(AIInteraction).filter_by(id=session_id).first()
         if session:
             session.duration_ms = duration_ms
-            session.session_transcript = clean_transcript
+            session.session_transcript = cleaned
             # Prompt is the first line or "Session"
             session.prompt = f"Interactive session ({duration_ms / 1000 / 60:.1f}m)"
             self.db.commit()
 
         print()
         print(f"📊 Session #{session_id} complete! Duration: {duration_ms / 1000 / 60:.1f} minutes")
-        print(f"💾 Full transcript saved ({len(clean_transcript)} chars)")
+        print(f"🧹 Cleaned transcript: {original_size:,} → {cleaned_size:,} chars ({reduction:.1f}% reduction)")
+        print(f"💾 Transcript saved to database")
 
         # Trigger automatic summarization
         print()
@@ -169,47 +173,6 @@ class SessionManager:
             print(f"Warning: Could not read transcript: {e}")
             return ""
 
-    def _clean_ansi(self, text: str) -> str:
-        """Remove ANSI escape codes and clean up duplicate lines from text.
-
-        This performs the same cleaning as summarizer._clean_transcript() to
-        reduce database size. Removes ANSI codes, control characters, and
-        deduplicates consecutive identical lines (like spinner redraws).
-
-        Args:
-            text: Text with ANSI codes and potential duplicates
-
-        Returns:
-            Clean text (typically 50-90% smaller)
-        """
-        if not text:
-            return ""
-
-        # 1. Remove ANSI escape sequences
-        ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
-        cleaned = ansi_escape.sub('', text)
-
-        # 2. Remove CSI sequences (cursor positioning, etc.)
-        cleaned = re.sub(r'\x1B\[[0-9;]*[a-zA-Z]', '', cleaned)
-
-        # 3. Remove control characters (except newlines and tabs)
-        cleaned = re.sub(r'[\x00-\x08\x0B-\x1F\x7F]', '', cleaned)
-
-        # 4. Collapse multiple blank lines
-        cleaned = re.sub(r'\n\s*\n\s*\n+', '\n\n', cleaned)
-
-        # 5. Deduplicate consecutive identical lines (spinner redraws, loading messages)
-        lines = cleaned.split('\n')
-        deduped_lines = []
-        prev_line = None
-
-        for line in lines:
-            # Skip if same as previous line (handles spinner redraws)
-            if line != prev_line:
-                deduped_lines.append(line)
-                prev_line = line
-
-        return '\n'.join(deduped_lines)
 
     def _save_metadata(self, session_id: int, metadata: Dict):
         """Save session metadata to file.

@@ -234,10 +234,10 @@ def session(session_id: int):
             summarizer = Summarizer()
 
             # Use chunked summarization (works for all session sizes)
-            # Default chunk size: 10,000 lines
+            # Default chunk size: 8,000 lines (safer for rate limits)
             summary = summarizer.summarize_session_chunked(
                 session_id=session_id,
-                chunk_size_lines=10000,
+                chunk_size_lines=8000,
                 db_session=db_session,
                 use_cli=False  # Use Gemini API (reliable, free tier)
             )
@@ -619,7 +619,7 @@ def test_gemini():
 
 @cli.command()
 @click.argument('session_id', type=int)
-@click.option('--chunk-size', default=10000, help='Number of lines per chunk (default: 10000)')
+@click.option('--chunk-size', default=8000, help='Number of lines per chunk (default: 8000)')
 def summarize_chunked(session_id: int, chunk_size: int):
     """Summarize a large session using incremental chunked summarization.
 
@@ -928,7 +928,7 @@ def import_session(transcript_file, tool, timestamp, repo, summarize):
             # Use chunked summarization for reliability
             summary = summarizer.summarize_session_chunked(
                 session_id=session_id,
-                chunk_size_lines=10000,
+                chunk_size_lines=8000,
                 db_session=db_session
             )
 
