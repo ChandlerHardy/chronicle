@@ -93,9 +93,9 @@ When retrieving context, structure the response like:
 
 ## MCP Tools to Use
 
-- `mcp__chronicle-obsidian__search_notes` - Find relevant sessions
-- `mcp__chronicle-obsidian__read_note` - Read full session content
-- `mcp__chronicle-obsidian__list_directory` - Browse session notes by date
+- `mcp__obsidian__search_notes` - Find relevant sessions
+- `mcp__obsidian__read_note` - Read full session content
+- `mcp__obsidian__list_directory` - Browse session notes by date
 
 ## Tips
 

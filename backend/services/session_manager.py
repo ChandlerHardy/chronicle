@@ -130,7 +130,25 @@ class SessionManager:
         print()
         print(f"📊 Session #{session_id} complete! Duration: {duration_ms / 1000 / 60:.1f} minutes")
         print(f"💾 Full transcript saved ({len(clean_transcript)} chars)")
-        print(f"✨ Use 'chronicle ai today' to view (summary generated on first view)")
+
+        # Trigger automatic summarization
+        print()
+        print(f"🤖 Starting automatic summarization in background...")
+        print(f"   (You can continue working, summary will be ready soon)")
+
+        # Fork a background process to summarize
+        import subprocess
+        import sys
+
+        # Run summarization in background (detached from this process)
+        subprocess.Popen(
+            [sys.executable, "-m", "backend.main", "summarize-chunked", str(session_id)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True  # Detach from parent process
+        )
+
+        print(f"   View status: chronicle session {session_id}")
 
     def _read_transcript(self, transcript_file: Path) -> str:
         """Read transcript file.

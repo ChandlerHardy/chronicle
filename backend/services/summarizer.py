@@ -1,5 +1,6 @@
 """AI summarization service using Gemini or Ollama."""
 
+import time
 from typing import Optional
 from backend.core.config import get_config
 
@@ -323,9 +324,13 @@ Summary:"""
         if not session.session_transcript:
             raise ValueError(f"Session {session_id} has no transcript")
 
-        # Clear any existing chunks for this session (if re-running)
-        db_session.query(SessionSummaryChunk).filter_by(session_id=session_id).delete()
-        db_session.commit()
+        # Check for existing chunks (resume capability)
+        existing_chunks = (
+            db_session.query(SessionSummaryChunk)
+            .filter_by(session_id=session_id)
+            .order_by(SessionSummaryChunk.chunk_number)
+            .all()
+        )
 
         # Split transcript into lines
         lines = session.session_transcript.split('\n')
@@ -335,11 +340,19 @@ Summary:"""
 
         num_chunks = (total_lines + chunk_size_lines - 1) // chunk_size_lines  # Ceiling division
         print(f"🔢 Total chunks: {num_chunks}")
+
+        # Resume from last chunk if available
+        start_chunk = 0
+        cumulative_summary = ""
+        if existing_chunks:
+            last_chunk = existing_chunks[-1]
+            start_chunk = last_chunk.chunk_number
+            cumulative_summary = last_chunk.cumulative_summary
+            print(f"🔄 Resuming from chunk {start_chunk} (found {len(existing_chunks)} existing chunks)")
+
         print()
 
-        cumulative_summary = ""
-
-        for chunk_num in range(num_chunks):
+        for chunk_num in range(start_chunk, num_chunks):
             start_line = chunk_num * chunk_size_lines
             end_line = min(start_line + chunk_size_lines, total_lines)
 
@@ -379,46 +392,80 @@ Focus on the overall narrative and progress. Avoid just appending - integrate th
 
 Updated Summary:"""
 
-            # Generate summary for this chunk
-            try:
-                if use_cli:
-                    # Use CLI tool to bypass API rate limits
-                    import subprocess
+            # Generate summary for this chunk with automatic retry
+            max_retries = 3
+            chunk_summary = None
 
-                    # qwen uses -p/--prompt for non-interactive mode
-                    # Prompt can be passed as argument
-                    result = subprocess.run(
-                        [cli_tool, '-p', prompt],
-                        capture_output=True,
-                        text=True,
-                        timeout=120  # 2 minute timeout per chunk
-                    )
+            for attempt in range(max_retries):
+                try:
+                    if use_cli:
+                        # Use CLI tool to bypass API rate limits
+                        import subprocess
 
-                    if result.returncode != 0:
-                        raise Exception(f"{cli_tool} CLI failed: {result.stderr}")
+                        # qwen uses -p/--prompt for non-interactive mode
+                        # Prompt can be passed as argument
+                        result = subprocess.run(
+                            [cli_tool, '-p', prompt],
+                            capture_output=True,
+                            text=True,
+                            timeout=120  # 2 minute timeout per chunk
+                        )
 
-                    chunk_summary = result.stdout.strip()
+                        if result.returncode != 0:
+                            raise Exception(f"{cli_tool} CLI failed: {result.stderr}")
 
-                elif self.provider == "gemini":
-                    response = self.model.generate_content(prompt)
-                    chunk_summary = response.text.strip()
-                elif self.provider == "ollama":
-                    response = self.ollama_client.generate(
-                        model=self.model_name,
-                        prompt=prompt
-                    )
-                    chunk_summary = response['response'].strip()
-                else:
-                    raise ValueError(f"Unknown provider: {self.provider}")
+                        chunk_summary = result.stdout.strip()
 
-            except Exception as e:
-                error_msg = f"Error summarizing chunk {chunk_num + 1}: {str(e)}"
-                print(f"❌ {error_msg}")
-                # Save what we have so far
-                if cumulative_summary:
-                    return cumulative_summary + f"\n\n[Error: Could not complete summarization at chunk {chunk_num + 1}]"
-                else:
-                    raise ValueError(error_msg)
+                    elif self.provider == "gemini":
+                        response = self.model.generate_content(prompt)
+                        chunk_summary = response.text.strip()
+                    elif self.provider == "ollama":
+                        response = self.ollama_client.generate(
+                            model=self.model_name,
+                            prompt=prompt
+                        )
+                        chunk_summary = response['response'].strip()
+                    else:
+                        raise ValueError(f"Unknown provider: {self.provider}")
+
+                    # Success - break out of retry loop
+                    break
+
+                except Exception as e:
+                    error_str = str(e)
+                    is_rate_limit = self.provider == "gemini" and ("429" in error_str or "quota" in error_str.lower() or "Resource has been exhausted" in error_str)
+
+                    if attempt < max_retries - 1:  # Still have retries left
+                        if is_rate_limit:
+                            # Extract retry delay if available
+                            import re
+                            match = re.search(r'retry in (\d+\.?\d*)s', error_str)
+                            if match:
+                                delay = float(match.group(1)) + 2  # Add 2 second buffer
+                            else:
+                                delay = 15 * (attempt + 1)  # 15s, 30s, 45s
+
+                            print(f"  ⚠️  Rate limit hit on chunk {chunk_num + 1}, retrying in {delay:.1f}s (attempt {attempt + 1}/{max_retries})...")
+                        else:
+                            # Other error - use exponential backoff
+                            delay = 5 * (2 ** attempt)  # 5s, 10s, 20s
+                            print(f"  ⚠️  Error on chunk {chunk_num + 1}: {error_str[:100]}")
+                            print(f"  Retrying in {delay}s (attempt {attempt + 1}/{max_retries})...")
+
+                        time.sleep(delay)
+                    else:
+                        # Final retry failed
+                        error_msg = f"Error summarizing chunk {chunk_num + 1} after {max_retries} attempts: {error_str}"
+                        print(f"❌ {error_msg}")
+                        # Save what we have so far
+                        if cumulative_summary:
+                            return cumulative_summary + f"\n\n[Error: Could not complete summarization at chunk {chunk_num + 1} after {max_retries} retries]"
+                        else:
+                            raise ValueError(error_msg)
+
+            # Check if we got a summary (should always be true if we didn't raise/return)
+            if chunk_summary is None:
+                raise ValueError(f"Failed to generate summary for chunk {chunk_num + 1}")
 
             # Update cumulative summary
             if chunk_num == 0:
@@ -442,6 +489,16 @@ Updated Summary:"""
 
             print(f"✓ Chunk {chunk_num + 1} summarized ({len(chunk_summary)} chars)")
             print()
+
+            # Add delay between chunks to avoid rate limits (Gemini free tier: 1M tokens/min)
+            # Conservative estimate: ~1000 tokens per chunk (10K lines * ~100 chars/line / 1000)
+            # With 10K line chunks, we're safe processing ~5-10 per minute
+            # Add 8 second delay = max 7.5 chunks/min = well under 1M tokens/min
+            if self.provider == "gemini" and chunk_num < num_chunks - 1:
+                delay = 8  # 8 seconds between chunks
+                print(f"⏱️  Waiting {delay}s before next chunk (rate limit protection)...")
+                time.sleep(delay)
+                print()
 
         # Save final summary to the session
         session.response_summary = cumulative_summary

@@ -1,33 +1,100 @@
 # Chronicle - AI Session Recorder
 
-> **Track your AI-assisted development sessions across multiple tools, capture decisions, and never lose context.**
-
-A local-first development session recorder that tracks interactions across multiple AI coding assistants (Claude Code, Gemini CLI, Qwen Code), git commits, and file changes to create a unified, searchable development timeline.
+> **Give your AI assistants a memory. Track every decision, search past conversations, and never lose context across sessions.**
 
 [![Tests](https://img.shields.io/badge/tests-16%20passing-brightgreen)]()
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue)]()
 [![License](https://img.shields.io/badge/license-MIT-blue)]()
+[![MCP](https://img.shields.io/badge/MCP-enabled-purple)]()
 
 ---
 
-## 🎯 The Problem
+## 💡 Value Proposition
 
-Modern developers use multiple AI coding assistants, but:
-- ❌ Each AI has no memory of what other AIs did
-- ❌ No persistent record between sessions
-- ❌ Hard to track decisions made across different tools
-- ❌ Context is lost when switching between Claude Code, Gemini CLI, Qwen Code
+**The Problem:** You spend hours discussing architecture decisions with Claude Code on Monday. On Friday, you switch to a new project and Claude has zero memory of what you decided. You waste time re-explaining context, rediscovering solutions, and repeating conversations across different AI tools.
+
+**Chronicle solves this** by creating a searchable, AI-powered memory system for all your development work:
+
+- 🧠 **Persistent AI Memory** - Your AI assistants can query Chronicle to remember what you discussed last week, last month, or last year
+- 🔍 **Cross-Session Intelligence** - "How did I implement authentication in that other project?" → Instant answer from past sessions
+- 📊 **Development Insights** - See patterns in your workflow, track time across projects, generate weekly summaries
+- 🤝 **Multi-AI Coordination** - Claude, Gemini, and Qwen can all access the same knowledge base
+- 🔒 **100% Local** - Everything stays on your machine. No cloud sync, no data sharing, full privacy.
+
+**Perfect for:**
+- **Solo Developers** - Never forget why you made that architectural decision 3 months ago
+- **Consultants & Contractors** - Track billable hours, generate client reports, document decisions
+- **Multi-Project Engineers** - "What did I do on ProjectX last week?" → Instant answer
+- **AI Power Users** - Get the most out of Claude, Gemini, Cursor, etc. with persistent context
+- **Teams** - Build institutional knowledge from AI-assisted development
+- **Open Source Maintainers** - Document discussions and decisions for contributors
+
+---
+
+## 🎬 Quick Demo
+
+```bash
+# Day 1: Work on authentication
+$ chronicle start claude
+> You discuss OAuth2 implementation with Claude for 2 hours
+> Make several commits
+$ exit
+
+# Day 30: Different project, need to remember
+$ chronicle start claude
+You: "How did I implement OAuth2 in that other project?"
+
+Claude: [Uses Chronicle MCP server]
+        → search_sessions("OAuth2")
+        → get_session_summary(session_id=5)
+
+Claude: "In session 5 from last month, you implemented OAuth2 with
+         the 'authorization_code' flow. Key decisions:
+         - Used Auth0 for identity provider
+         - Stored tokens in httpOnly cookies
+         - Implemented refresh token rotation
+         Files: src/auth/oauth.ts, src/middleware/auth.ts"
+
+You: "Perfect! Do the same thing for this project"
+# No time wasted re-explaining context! 🎯
+```
+
+---
+
+## 🎯 The Problem (Detailed)
+
+Modern developers use multiple AI coding assistants, but face critical challenges:
+
+**Memory Loss**
+- ❌ Each AI session starts from scratch with zero context
 - ❌ "What did we decide about authentication 2 weeks ago?" 🤷
+- ❌ Repeat the same explanations across different AI tools
+- ❌ Lost context when switching between Claude Code, Gemini CLI, Cursor
+
+**Tracking Difficulty**
+- ❌ No record of decisions made during AI-assisted development
+- ❌ Hard to remember which AI tool helped with which feature
+- ❌ Can't search through past AI conversations
+- ❌ Lost connection between commits and the AI sessions that created them
+
+**Multi-Project Chaos**
+- ❌ Work on 5 different projects? Good luck remembering what you did where
+- ❌ Client asks "what did we build last sprint?" → scramble through git logs
+- ❌ No easy way to generate weekly summaries or progress reports
 
 ## ✨ The Solution
 
-Chronicle is a **local-first session recorder** that:
-- ✅ **Records full AI sessions** - Capture complete conversations with Claude Code, Gemini CLI, Qwen Code
-- ✅ **Tracks git commits** - Link commits to the AI sessions that created them
-- ✅ **AI-powered summaries** - Gemini generates intelligent summaries of your sessions and daily work
-- ✅ **Unified timeline** - See what ALL your AI tools did, in one place
-- ✅ **Searchable history** - Query past decisions, conversations, and changes
-- ✅ **Privacy-first** - Everything stored locally in SQLite
+Chronicle is a **local-first development memory system** that gives AI assistants persistent context:
+
+**Core Features:**
+- 🎯 **Full Session Recording** - Complete transcripts of Claude Code, Gemini CLI, Qwen Code sessions
+- 🔗 **Commit Linking** - Automatically connects git commits to the AI sessions that created them
+- 🤖 **AI-Powered Summaries** - Intelligent summaries with key decisions, blockers, and file changes
+- 🔍 **Instant Search** - Find past conversations, decisions, and implementations in seconds
+- 📊 **Multi-Project Tracking** - Automatically organizes work by repository
+- 🔌 **MCP Server** - AI assistants can query Chronicle database directly via Model Context Protocol
+- 📝 **Obsidian Integration** - Optional export to markdown vault for knowledge graph visualization
+- 🔒 **100% Local** - Everything stored in SQLite on your machine (no cloud required)
 
 ---
 
@@ -338,6 +405,169 @@ chronicle timeline today --repo /Users/you/repos/my-app
 
 ---
 
+### ✅ Phase 4: MCP Server + AI Integration (COMPLETE)
+
+Give your AI assistants the ability to query Chronicle's database directly!
+
+#### Chronicle MCP Server
+
+The Chronicle MCP (Model Context Protocol) server allows **any MCP-compatible AI** (Claude Code, ChatGPT, etc.) to query your Chronicle database and retrieve past sessions, commits, and decisions.
+
+**Setup:**
+
+1. **Install Chronicle with MCP support:**
+   ```bash
+   pip install -e .
+   ```
+
+2. **Configure MCP client** (e.g., `~/.mcp.json`):
+   ```json
+   {
+     "mcpServers": {
+       "chronicle": {
+         "command": "python3",
+         "args": ["/path/to/chronicle/scripts/chronicle-mcp"]
+       }
+     }
+   }
+   ```
+
+3. **Restart your AI tool** (Claude Code, etc.)
+
+4. **Verify:** Type `/mcp` to see available servers
+
+**Available MCP Tools:**
+
+The Chronicle MCP server provides 7 tools that AI assistants can use:
+
+| Tool | Purpose | Example |
+|------|---------|---------|
+| `get_sessions` | List recent sessions | "Show me sessions from this week" |
+| `get_session_summary` | Get session details | "What happened in session 15?" |
+| `search_sessions` | Search session content | "Find where we discussed authentication" |
+| `get_commits` | List git commits | "Show commits from the my-app repo" |
+| `search_commits` | Search commit messages | "Find bug fix commits" |
+| `get_timeline` | Combined view | "Show me today's work" |
+| `get_stats` | Usage statistics | "How much did I use AI tools this month?" |
+
+**Real-World Example:**
+
+```
+You: "How did I implement caching in that other project last month?"
+
+Claude: [Uses Chronicle MCP]
+         → search_sessions("caching")
+         → get_session_summary(session_id=42)
+
+Claude: "In session 42 from September 15th, you implemented Redis
+         caching for the API endpoints. Here's what you decided..."
+```
+
+**Benefits:**
+- 🧠 AI assistants have persistent memory across sessions
+- 🔍 Instant context retrieval from past work
+- 📊 AI can analyze patterns in your workflow
+- 🤝 Works with any MCP-compatible AI tool
+- 🔒 100% local (no data leaves your machine)
+
+**Documentation:** See [MCP_SERVER.md](MCP_SERVER.md) for full details.
+
+---
+
+### 🎯 Claude Skills Integration
+
+For Claude Code users, Chronicle provides pre-built **Claude Skills** that automate common workflows:
+
+**Available Skills:**
+
+1. **chronicle-session-documenter**
+   - Automatically documents sessions to Obsidian vault
+   - Creates structured markdown notes with metadata
+   - Links related sessions, commits, and repos
+
+2. **chronicle-context-retriever**
+   - Searches past sessions for relevant context
+   - Triggered by questions like "how did I..." or "what did we..."
+   - Provides summaries of past decisions
+
+3. **chronicle-workflow**
+   - Complete Chronicle workflow guidance
+   - Best practices for multi-project tracking
+   - Helps set up and optimize Chronicle usage
+
+**Installation:**
+```bash
+# One-time setup in Claude Code
+/plugin marketplace add ChandlerHardy/chronicle
+/plugin install chronicle-workflow-skills@chronicle-skills
+```
+
+**How It Works:**
+
+Skills are "smart prompt templates" that automatically trigger when relevant:
+
+```
+You: "Document session 15 to my Obsidian vault"
+
+Claude: [Automatically uses chronicle-session-documenter skill]
+        → Retrieves session summary
+        → Creates markdown note with frontmatter
+        → Adds wikilinks to related sessions
+        → Saves to vault at Chronicle/Sessions/Session-15.md
+```
+
+**Documentation:** See `chronicle-skills/README.md` for details.
+
+---
+
+### 📝 Obsidian Integration (Optional)
+
+Export Chronicle sessions to Obsidian for visual knowledge graphs and bidirectional linking.
+
+**Setup:**
+
+Configure the Obsidian MCP server in `~/.mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "obsidian": {
+      "command": "npx",
+      "args": [
+        "@mauricio.wolff/mcp-obsidian@latest",
+        "/path/to/your/obsidian/vault"
+      ]
+    }
+  }
+}
+```
+
+**Features:**
+- Export sessions as markdown notes with YAML frontmatter
+- Wikilinks between related sessions and commits
+- Tag-based organization for Obsidian graph view
+- Repository-based folder structure
+- Search entire vault from Claude Code
+
+**Example Vault Structure:**
+```
+Chronicle/
+├── Repos/
+│   ├── my-app/
+│   │   ├── Sessions/
+│   │   │   ├── Session-15.md
+│   │   │   └── Session-16.md
+│   │   └── Commits/
+│   └── other-project/
+│       └── Sessions/
+└── Daily/
+    └── 2025-10-20.md
+```
+
+**Coming Soon:** `chronicle export obsidian` command for batch export.
+
+---
+
 ## 📊 Example Outputs
 
 ### Daily Summary
@@ -495,18 +725,41 @@ pytest --cov=backend tests/
 - [x] 8 passing tests
 
 ### ✅ Phase 3: Summarization (COMPLETE)
-- [x] Gemini API integration complete
+- [x] Gemini API integration
+- [x] Ollama local LLM support
 - [x] `chronicle session` command with auto-summarization
 - [x] `chronicle summarize today/week` commands
+- [x] Chunked summarization for unlimited session sizes
 - [x] Lazy loading with caching
 - [x] Intelligent prompt engineering
 - [x] Markdown-formatted summaries
+- [x] Multi-project tracking and filtering
 
-### 🔜 Phase 4: Dashboard (NEXT)
-- [ ] Next.js web interface
-- [ ] Timeline visualization
-- [ ] Export features (Markdown, JSON)
-- [ ] Blog post generator
+### ✅ Phase 4: MCP Server + AI Integration (COMPLETE)
+- [x] Chronicle MCP server with 7 query tools
+- [x] FastMCP framework integration
+- [x] Read-only database access for AI tools
+- [x] Support for any MCP-compatible AI (Claude, ChatGPT, etc.)
+- [x] Obsidian MCP server integration
+- [x] Claude Skills marketplace integration
+- [x] 3 pre-built skills (documenter, retriever, workflow)
+- [x] Multi-repository session organization
+- [x] Comprehensive documentation (MCP_SERVER.md)
+
+### 🔜 Phase 5: Export & Visualization (NEXT)
+- [ ] `chronicle export obsidian` - Batch export to markdown
+- [ ] Repository-specific vault organization
+- [ ] Automatic Obsidian sync on session end
+- [ ] Wikilink generation between sessions/commits
+- [ ] Knowledge graph visualization
+
+### 🔮 Future Phases
+- [ ] Next.js web dashboard
+- [ ] Timeline visualization UI
+- [ ] Blog post generator from weekly summaries
+- [ ] Team features (shared Chronicle databases)
+- [ ] VS Code extension
+- [ ] GitHub Actions integration for PR descriptions
 
 ---
 
@@ -546,11 +799,12 @@ Cache summary for future views
 Chronicle is open source! Contributions welcome.
 
 **Ideas for contributions:**
-- Add support for more AI CLIs (Cursor, Copilot, etc.)
-- Build the Phase 3 summarization features
-- Create the Next.js dashboard
-- Improve test coverage
-- Add export formats (Markdown, JSON, PDF)
+- Add support for more AI CLIs (Cursor, GitHub Copilot, Windsurf, etc.)
+- Build the `chronicle export obsidian` command
+- Create the Next.js dashboard (Phase 5)
+- Improve test coverage (especially MCP server tests)
+- Add MCP resources (expose session transcripts as MCP resources)
+- Build prompt templates for common Chronicle queries
 
 ---
 
@@ -565,18 +819,24 @@ MIT License - see [LICENSE](LICENSE)
 **Built with:**
 - [Claude Code](https://claude.com/claude-code) - AI coding assistant (and tracked by Chronicle itself! 🎯)
 - [Google Gemini](https://ai.google.dev/) - AI summarization
+- [FastMCP](https://gofastmcp.com/) - MCP server framework
+- [Model Context Protocol](https://modelcontextprotocol.io/) - AI tool integration standard
 - Python 3.11+ - Core logic
 - SQLite - Local storage
 - Click - CLI framework
 - Rich - Terminal formatting
 - GitPython - Git integration
+- SQLAlchemy - ORM
 
 ---
 
 ## 📚 Documentation
 
+- **[MCP_SERVER.md](MCP_SERVER.md)** - Chronicle MCP server guide (setup, tools, examples)
+- **[CLAUDE.md](CLAUDE.md)** - Development context for AI assistants
 - [Project Specification](AI_SESSION_RECORDER_SPEC.md) - Full specification and roadmap
 - [Changelog](CHANGELOG.md) - Version history
+- [Chronicle Skills](chronicle-skills/README.md) - Claude Skills documentation
 - [Example Context](example/CLAUDE.md) - Example from Crooked Finger project
 
 ---

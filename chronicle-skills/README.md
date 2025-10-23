@@ -71,7 +71,7 @@ Load specific skills as needed:
    ```json
    {
      "mcpServers": {
-       "chronicle-obsidian": {
+       "obsidian": {
          "command": "npx",
          "args": [
            "@mauricio.wolff/mcp-obsidian@latest",

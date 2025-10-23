@@ -1,8 +1,9 @@
 # Chronicle - Context for AI Assistants
 
 > **Last Updated**: October 20, 2025
-> **Project Status**: Phase 3 Complete + Phase 4 (Obsidian Integration + Claude Skills)
+> **Project Status**: Phase 4 Complete - MCP Server + Obsidian Integration + Claude Skills
 > **Tests**: 16 passing (8 git + 8 AI tracking)
+> **MCP Server**: Available for AI tool integration
 > **Claude Skills**: 3 skills available for workflow automation
 
 ## 🤖 For AI Coding Assistants: How to Use Chronicle
@@ -19,6 +20,45 @@
 4. When done: exit
 5. View summary: chronicle session <id>
 ```
+
+### ⚡ Important: Prefer MCP Tools Over CLI Commands
+
+**When querying Chronicle data, ALWAYS use the MCP server tools instead of `chronicle` CLI commands.**
+
+**Why?**
+- MCP tools return **structured JSON** (easy to parse and process)
+- CLI commands return **formatted text** (designed for humans, hard to parse)
+- MCP is faster and more efficient (no shell overhead)
+- MCP provides better filtering and query capabilities
+
+**Available MCP Tools:**
+```python
+# Use these Chronicle MCP tools:
+mcp__chronicle__get_sessions()           # List sessions with filters
+mcp__chronicle__get_session_summary(id)  # Get detailed session info
+mcp__chronicle__search_sessions(query)   # Search sessions by content
+mcp__chronicle__get_commits()            # List git commits
+mcp__chronicle__search_commits(query)    # Search commits
+mcp__chronicle__get_timeline()           # Combined view
+mcp__chronicle__get_stats()              # Usage statistics
+```
+
+**Examples:**
+
+❌ **Don't do this:**
+```python
+Bash("chronicle sessions --repo chronicle")  # Returns formatted text
+```
+
+✅ **Do this instead:**
+```python
+mcp__chronicle__get_sessions(repo_path="/Users/.../chronicle")  # Returns JSON
+```
+
+**CLI commands are still useful for:**
+- User-facing operations (`chronicle start`, `chronicle config`)
+- File system operations the MCP doesn't expose
+- When the user explicitly requests CLI output
 
 ### 🎯 Chronicle Skills Available
 
@@ -49,6 +89,27 @@ Chronicle provides Claude Skills that teach Claude how to work with Chronicle au
 ```
 
 See `chronicle-skills/README.md` for detailed skill documentation.
+
+### 🔧 Chronicle MCP Server Available
+
+Chronicle provides an MCP (Model Context Protocol) server that allows AI tools to directly query the Chronicle database. This enables:
+
+**Available MCP Tools:**
+- `get_sessions` - List recent sessions with filtering
+- `get_session_summary` - Get detailed session summary
+- `search_sessions` - Search through session content
+- `get_commits` - List git commits
+- `search_commits` - Search commit messages
+- `get_timeline` - Combined commits + sessions timeline
+- `get_stats` - Usage statistics
+
+**When to Use MCP vs Skills:**
+- **MCP Tools**: Direct database queries (structured data, filtering, statistics)
+- **Claude Skills**: Workflow automation (documenting to Obsidian, context retrieval with natural language)
+- **Use Both**: Skills can call MCP tools internally for richer functionality
+
+**Setup:**
+The MCP server is configured in `.mcp.json` and runs automatically when Claude Code starts. See `MCP_SERVER.md` for full documentation.
 
 ### Understanding Chronicle Sessions
 
@@ -216,11 +277,15 @@ commits_count, ai_interactions_count, key_decisions (JSON)
 - Extracts key decisions, files modified, blockers
 
 **Chunked Summarization (Default)**
-- Handles sessions of **unlimited size** (tested with 83,000+ lines)
+- Handles sessions of **unlimited size** (tested with 88,000+ lines)
 - Breaks large sessions into chunks (default: 10,000 lines)
 - Maintains rolling summary that updates with each chunk
 - Saves intermediate chunks to `session_summary_chunks` table
 - Uses Gemini API by default (200 free requests/day)
+- **Automatic retry logic**: Recovers from transient failures automatically
+  - 3 retry attempts per chunk with exponential backoff
+  - Smart rate limit detection (waits 15-45s for rate limits)
+  - Resumes from last successful chunk if interrupted
 - No more token/rate limit issues!
 
 **Gemini Integration**
@@ -368,6 +433,54 @@ chronicle sessions                 # Check which sessions need cleaning
 - Session 10: 10.2MB → ~3.8MB (63% reduction) - can be improved further with deduplication
 
 **Important:** All **new sessions** (created after Oct 20, 2025) are automatically cleaned with full deduplication. Old sessions need manual cleaning with `chronicle clean-session <id>`.
+
+### Automatic Retry Logic for Chunked Summarization (NEW - Oct 22, 2025)
+
+**Problem Solved:** Large session summarizations can fail mid-process due to:
+- Transient network errors
+- API rate limits (Gemini free tier: 15 RPM)
+- Temporary service outages
+
+**Solution:** Automatic retry with intelligent backoff
+
+**How It Works:**
+```python
+# Per-chunk retry logic (in summarizer.py)
+max_retries = 3  # Attempts per chunk
+
+for attempt in range(max_retries):
+    try:
+        # Summarize chunk...
+        break  # Success!
+    except Exception as e:
+        if is_rate_limit_error(e):
+            # Wait 15s, 30s, or 45s (extracted from API response)
+            delay = parse_retry_delay(e) or 15 * (attempt + 1)
+        else:
+            # Exponential backoff for other errors: 5s, 10s, 20s
+            delay = 5 * (2 ** attempt)
+
+        sleep(delay)  # Automatic retry
+```
+
+**Benefits:**
+- **No manual intervention needed** - automatically recovers from transient failures
+- **Preserves progress** - chunks are saved to database after each success
+- **Resume capability** - can restart from last successful chunk if process dies
+- **Smart backoff** - respects API rate limits, exponential backoff for other errors
+
+**Example Output:**
+```
+Processing chunk 4/9 (lines 30000-40000)...
+  ⚠️  Rate limit hit on chunk 4, retrying in 15.0s (attempt 1/3)...
+✓ Chunk 4 summarized (2095 chars)
+```
+
+**Testing:** Verified with simulated failures:
+- ✅ Recovers from transient rate limits (429 errors)
+- ✅ Exponential backoff for network errors
+- ✅ Fails gracefully after 3 retries with clear error message
+- ✅ Saves partial progress (can view summary of completed chunks)
 
 ## Development Workflow
 
@@ -531,14 +644,23 @@ python -m backend.main show today
 - `backend/services/summarizer.py` - Gemini integration, prompt engineering
 - `backend/cli/formatters.py` - All Rich terminal formatting logic
 - `backend/core/config.py` - Configuration management
+- `backend/mcp/server.py` - MCP server implementation (FastMCP)
+- `scripts/chronicle-mcp` - MCP server executable
 
 **Configuration:**
 - `~/.ai-session/config.yaml` - User configuration
+- `~/.mcp.json` - MCP server configuration (global or local)
+- `.mcp.json.example` - Example MCP configuration template
 - `pyproject.toml` - Project metadata, dependencies, scripts
 
 **Data:**
 - `~/.ai-session/sessions.db` - Main SQLite database
 - `~/.ai-session/sessions/` - Session transcript files
+
+**Documentation:**
+- `MCP_SERVER.md` - Chronicle MCP server documentation
+- `CLAUDE.md` - This file, development context for AI assistants
+- `README.md` - User-facing documentation
 
 ## Success Criteria
 
@@ -579,83 +701,97 @@ pytest -v                        # Run tests
 
 ---
 
-## 🔄 Current Work: Phase 4 - Obsidian Integration
+## ✅ Phase 4 Complete - MCP Server + Obsidian Integration
 
-### Goal
-Integrate Chronicle with Obsidian via MCP (Model Context Protocol) to create a searchable knowledge graph of all development sessions, enabling AI tools to query past work across sessions.
+### What We Built
 
-### What We've Done So Far
+**1. Chronicle MCP Server** ✅ (October 20, 2025)
+   - Built custom MCP server using FastMCP framework
+   - Provides 7 tools for querying Chronicle database:
+     - `get_sessions` - List and filter sessions
+     - `get_session_summary` - Get detailed session info
+     - `search_sessions` - Search session content
+     - `get_commits` - List git commits
+     - `search_commits` - Search commit messages
+     - `get_timeline` - Combined commits + sessions view
+     - `get_stats` - Usage statistics
+   - Deployed as `scripts/chronicle-mcp` executable
+   - Integrated into `.mcp.json` configuration
+   - **Status**: Fully operational, available to all MCP-compatible AI tools
 
-1. **Researched MCP Servers** ✅
-   - Evaluated 3 options: bitbonsai, MarkusPfundstein, cyanheads
-   - Initially tried MarkusPfundstein (required REST API plugin, had auth issues)
-   - **Pivoted to bitbonsai/mcp-obsidian** - simpler, no plugin required, works directly with file system
+**2. Obsidian MCP Integration** ✅
+   - Researched and evaluated 3 MCP server options
+   - Integrated bitbonsai/mcp-obsidian for vault access
+   - Configured global `~/.mcp.json` for universal access
+   - Created `.mcp.json.example` template for other developers
+   - Successfully tested vault operations (read, write, search, list)
+   - Created test session documentation with frontmatter and wikilinks
+   - **Status**: Production-ready
 
-2. **Set Up MCP Server** ✅
-   - Configured global `~/.mcp.json` for access from any directory
-   - Configured local `.mcp.json` with bitbonsai server (project-specific override)
-   - Added `.mcp.json` to `.gitignore` (contains vault path)
-   - Created `.mcp.json.example` template for other devs
+**3. Multi-Repository Support** ✅
+   - Sessions automatically detect git repository
+   - Filter sessions by repository: `chronicle sessions --repo my-app`
+   - Repository information stored in database (`repo_path`, `working_directory`)
+   - Enables per-project session tracking and summaries
 
-3. **Configuration Files Created** ✅
-   - `~/.mcp.json` - **Global config** (recommended) - available in all Claude Code sessions
-   - `.mcp.json` - Local config with vault path (not committed, project-specific)
-   - `.mcp.json.example` - Template for setup instructions
-   - User's Obsidian vault: `~/Library/Mobile Documents/com~apple~CloudDocs/Documents/Chronicle`
+### Architecture Overview
 
-4. **Tested MCP Integration** ✅ (October 20, 2025)
-   - Verified all MCP tools working: `list_directory`, `write_note`, `read_note`, `search_notes`
-   - Successfully created test session note with frontmatter and wikilinks
-   - Confirmed nested directory creation (`Chronicle/Sessions/`)
-   - Search functionality working across vault
-   - Created Session-10.md with full summary (83,420 lines → chunked summary)
-   - **Status**: MCP server fully operational, ready for production use
-
-### What's Next
-
-**Immediate Next Steps:**
-1. **Test MCP Server** - Restart Claude Code session, verify `/mcp` shows chronicle-obsidian server
-2. **Implement Export Command** - Build `chronicle export obsidian <vault-path>`
-3. **Create Markdown Templates**:
-   - Session notes (`Chronicle/Sessions/Session-{id}.md`)
-   - Daily notes (`Chronicle/Daily/YYYY-MM-DD.md`)
-   - Commit notes (`Chronicle/Commits/Commit-{sha}.md`)
-   - Repo indexes (`Chronicle/Repos/{repo-name}.md`)
-
-**Architecture:**
+**Current System:**
 ```
-Chronicle (SQLite)
-    ↓ export command
-Obsidian Vault (markdown + YAML frontmatter + wikilinks)
-    ↓ MCP Server (mcp-obsidian)
-AI Tools (read/search/patch via MCP)
+Chronicle Database (SQLite)
+    ~/.ai-session/sessions.db
+           ↓
+    ┌──────┴──────┐
+    ↓             ↓
+Chronicle MCP    Chronicle CLI
+  Server          (chronicle command)
+    ↓
+MCP Protocol
+    ↓
+AI Tools (Claude Code, etc.)
 ```
 
-**Example Session Note Structure:**
-```markdown
----
-session_id: 10
-date: 2025-10-20
-duration_minutes: 75
-ai_tool: Claude Code
-repo: my-app
-tags: [chronicle-session, claude-code, authentication]
----
-
-# Session 10 - Authentication Implementation
-
-**Duration:** 1h 15m
-**Repository:** [[my-app]]
-**Tool:** Claude Code
-
-## Summary
-[AI-generated summary]
-
-## Related
-- Previous: [[Session-9]]
-- Commits: [[Commit-abc1234]], [[Commit-def5678]]
-- Repository: [[my-app]]
+**With Obsidian (Optional):**
 ```
+Chronicle Database
+    ↓
+Chronicle CLI export → Obsidian Vault (markdown)
+                           ↓
+                    MCP Obsidian Server
+                           ↓
+                    AI Tools (read/search vault)
+```
+
+### Future Enhancements (Phase 5+)
+
+**Planned Features:**
+1. **Export Command** - `chronicle export obsidian <vault-path>`
+   - Generates markdown notes for sessions, commits, and daily summaries
+   - Organized by repository: `Chronicle/Repos/{repo-name}/Sessions/`
+   - Creates wikilinks between related sessions and commits
+   - Frontmatter with tags for Obsidian graph view
+
+2. **Repository-Specific Vault Organization**:
+   ```
+   Chronicle/
+   ├── Repos/
+   │   ├── chronicle/
+   │   │   ├── Sessions/
+   │   │   │   ├── Session-15.md
+   │   │   │   └── Session-16.md
+   │   │   └── Commits/
+   │   │       └── Commit-abc1234.md
+   │   └── my-app/
+   │       ├── Sessions/
+   │       └── Commits/
+   └── Daily/
+       └── 2025-10-20.md
+   ```
+
+3. **Automatic Obsidian Sync** - Sessions auto-export to vault on completion
+4. **Web Dashboard** - Next.js app for visualizing Chronicle data
+5. **Blog Post Generator** - Auto-generate dev blog posts from weekly summaries
+6. **Team Features** - Share Chronicle databases across teams
 
 ### Key Benefits
 
@@ -671,7 +807,7 @@ tags: [chronicle-session, claude-code, authentication]
 **Before committing the MCP setup:**
 1. Exit this session
 2. Restart with a new Claude Code session
-3. Type `/mcp` to verify chronicle-obsidian server is loaded
+3. Type `/mcp` to verify obsidian server is loaded
 4. Test basic commands: list files, search, get content
 5. If working, commit the setup files
 
@@ -750,7 +886,7 @@ chmod -R u+rw "/path/to/your/obsidian/vault"
    cat > ~/.mcp.json << 'EOF'
    {
      "mcpServers": {
-       "chronicle-obsidian": {
+       "obsidian": {
          "command": "npx",
          "args": [
            "@mauricio.wolff/mcp-obsidian@latest",

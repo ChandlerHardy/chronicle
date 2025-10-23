@@ -803,3 +803,141 @@ def save_summary(session_id: int, summary: str = None):
     console.print(f"\nView it with: [cyan]chronicle session {session_id}[/cyan]")
 
     db_session.close()
+
+
+@cli.command()
+@click.argument('transcript_file', type=click.Path(exists=True))
+@click.option('--tool', type=click.Choice(['claude', 'gemini']), default='claude',
+              help='Which AI tool generated this session')
+@click.option('--timestamp', help='Session start time (YYYY-MM-DD HH:MM), defaults to file mtime')
+@click.option('--repo', type=click.Path(), help='Repository path (auto-detected if not provided)')
+@click.option('--summarize/--no-summarize', default=True,
+              help='Automatically summarize after import (default: yes)')
+def import_session(transcript_file, tool, timestamp, repo, summarize):
+    """Import a session from a text file retroactively.
+
+    This is useful when you forgot to run 'chronicle start' but still want to
+    capture the session. You can export the conversation from Claude Code or
+    copy/paste it to a text file and import it.
+
+    Examples:
+        # Import with auto-detection
+        chronicle import-session transcript.txt
+
+        # Specify tool and timestamp
+        chronicle import-session session.txt --tool claude --timestamp "2025-10-20 14:30"
+
+        # Import without summarizing (do it later)
+        chronicle import-session large-session.txt --no-summarize
+    """
+    import sys
+    import os
+    import git
+    from backend.services.session_manager import SessionManager
+
+    db_session = get_session()
+    transcript_path = Path(transcript_file)
+
+    # Read transcript
+    try:
+        with open(transcript_path, 'r', encoding='utf-8', errors='ignore') as f:
+            transcript = f.read()
+    except Exception as e:
+        console.print(f"[red]✗[/red] Could not read file: {e}")
+        db_session.close()
+        return
+
+    if not transcript.strip():
+        console.print(f"[red]✗[/red] Transcript file is empty")
+        db_session.close()
+        return
+
+    # Parse timestamp
+    if timestamp:
+        try:
+            start_time = datetime.strptime(timestamp, "%Y-%m-%d %H:%M")
+        except ValueError:
+            console.print(f"[red]✗[/red] Invalid timestamp format. Use: YYYY-MM-DD HH:MM")
+            db_session.close()
+            return
+    else:
+        # Use file modification time
+        import os
+        file_mtime = os.path.getmtime(transcript_path)
+        start_time = datetime.fromtimestamp(file_mtime)
+        console.print(f"[dim]Using file modification time: {start_time.strftime('%Y-%m-%d %H:%M')}[/dim]")
+
+    # Detect repository
+    if not repo:
+        # Try to detect from current directory
+        import git
+        try:
+            git_repo = git.Repo(os.getcwd(), search_parent_directories=True)
+            repo = git_repo.working_dir
+            console.print(f"[dim]Detected repository: {repo}[/dim]")
+        except:
+            repo = os.getcwd()
+            console.print(f"[dim]Not a git repo, using current directory: {repo}[/dim]")
+
+    repo = os.path.abspath(repo)
+
+    # Clean the transcript
+    session_manager = SessionManager(db_session)
+    clean_transcript = session_manager._clean_ansi(transcript)
+
+    # Calculate duration (estimate based on transcript size - ~1 min per 1000 lines)
+    lines = clean_transcript.count('\n')
+    estimated_duration_ms = (lines // 10) * 60 * 1000  # ~1 min per 100 lines
+
+    console.print(f"\n[cyan]Importing session...[/cyan]")
+    console.print(f"  Tool: {tool}")
+    console.print(f"  Lines: {lines:,}")
+    console.print(f"  Size: {len(clean_transcript):,} chars ({len(clean_transcript) / 1024 / 1024:.1f} MB)")
+    console.print(f"  Start time: {start_time}")
+    console.print(f"  Repository: {repo}")
+
+    # Create session record
+    tool_name = f"{tool}-session"
+    interaction = AIInteraction(
+        timestamp=start_time,
+        ai_tool=tool_name,
+        prompt=f"Imported session ({estimated_duration_ms / 1000 / 60:.0f}m)",
+        duration_ms=estimated_duration_ms,
+        is_session=True,
+        session_transcript=clean_transcript,
+        working_directory=repo,
+        repo_path=repo if os.path.isdir(os.path.join(repo, '.git')) else None,
+        summary_generated=False
+    )
+
+    db_session.add(interaction)
+    db_session.commit()
+    session_id = interaction.id
+
+    console.print(f"\n[green]✓[/green] Session imported as ID {session_id}")
+
+    # Trigger summarization if requested
+    if summarize:
+        console.print(f"\n[cyan]Starting automatic summarization...[/cyan]")
+        console.print(f"[dim](This may take a while for large sessions)[/dim]\n")
+
+        try:
+            from backend.services.summarizer import Summarizer
+            summarizer = Summarizer()
+
+            # Use chunked summarization for reliability
+            summary = summarizer.summarize_session_chunked(
+                session_id=session_id,
+                chunk_size_lines=10000,
+                db_session=db_session
+            )
+
+            console.print(f"\n[green]✓[/green] Session summarized!")
+            console.print(f"[dim]Summary length: {len(summary)} characters[/dim]")
+        except Exception as e:
+            console.print(f"\n[yellow]⚠[/yellow] Summarization failed: {e}")
+            console.print(f"[dim]You can summarize later with: chronicle session {session_id}[/dim]")
+
+    console.print(f"\nView session: [cyan]chronicle session {session_id}[/cyan]")
+
+    db_session.close()

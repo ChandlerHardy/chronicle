@@ -1,11 +1,19 @@
 {
   "mcpServers": {
-    "chronicle-obsidian": {
+    "chronicle": {
+      "command": "python3",
+      "args": [
+        "/absolute/path/to/chronicle/scripts/chronicle-mcp"
+      ],
+      "description": "Chronicle session recorder - query sessions, commits, and AI summaries"
+    },
+    "obsidian": {
       "command": "npx",
       "args": [
         "@mauricio.wolff/mcp-obsidian@latest",
         "/path/to/your/obsidian/vault"
-      ]
+      ],
+      "description": "Obsidian vault access for reading and writing notes"
     }
   }
 }

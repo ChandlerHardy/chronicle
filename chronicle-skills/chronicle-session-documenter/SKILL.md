@@ -5,7 +5,7 @@ description: Document AI-assisted development sessions to Obsidian vault using C
 
 # Chronicle Session Documenter
 
-This skill helps you document development sessions to your Obsidian vault using Chronicle's database and the chronicle-obsidian MCP server.
+This skill helps you document development sessions to your Obsidian vault using Chronicle's database and the Obsidian MCP server.
 
 ## When to Use This Skill
 
