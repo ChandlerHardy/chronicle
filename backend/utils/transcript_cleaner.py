@@ -127,7 +127,21 @@ def clean_transcript(transcript: str) -> str:
 
     cleaned = '\n'.join(deduplicated_prompts)
 
-    # 4. Collapse multiple blank lines (3+ newlines -> 2 newlines)
+    # 4. Remove decorator borders (long lines of repeated chars like ─────)
+    # These are purely visual and waste massive space (can be 50% of transcript!)
+    lines = cleaned.split('\n')
+    cleaned_lines = []
+    for line in lines:
+        stripped = line.strip()
+        # Skip lines that are just repeated decorator chars
+        # Common patterns: ─────, ═════, ━━━━━, ▬▬▬▬▬
+        if len(stripped) > 20 and len(set(stripped)) <= 2:
+            # Line is >20 chars and uses only 1-2 unique characters = decorator
+            continue
+        cleaned_lines.append(line)
+    cleaned = '\n'.join(cleaned_lines)
+
+    # 5. Collapse multiple blank lines (3+ newlines -> 2 newlines)
     cleaned = re.sub(r'\n\s*\n\s*\n+', '\n\n', cleaned)
 
     # 5. Deduplicate consecutive identical lines (handles spinner redraws)
