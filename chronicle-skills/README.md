@@ -18,13 +18,15 @@ Automatically creates structured Obsidian notes from Chronicle sessions, includi
 ### 🔍 chronicle-context-retriever
 **Purpose:** Search and retrieve context from past work
 
-Searches your Obsidian vault to find:
+Searches Chronicle's database (fast!) to find:
 - Past approaches to similar problems
 - Previous decisions and rationale
 - Blockers encountered and solutions
 - Related sessions by topic, time, or repository
 
 **Use when:** Need context before starting work or want to recall past decisions.
+
+**Note:** Uses Chronicle MCP server for fast database queries, not Obsidian search.
 
 ### 🔄 chronicle-workflow
 **Purpose:** Complete Chronicle workflow guidance
@@ -80,7 +82,29 @@ Load specific skills as needed:
    pip install -e .  # From chronicle repo root
    ```
 
-2. **Obsidian MCP Server configured** (for session documenter & context retriever):
+2. **Chronicle MCP Server configured** (for context retrieval & project tracking):
+   - Project-local config at `.mcp.json` in your repo:
+   ```json
+   {
+     "mcpServers": {
+       "chronicle": {
+         "command": "python3",
+         "args": ["-m", "backend.mcp.server"]
+       }
+     }
+   }
+   ```
+   - Or global config at `~/.mcp.json` for all projects
+   - Restart Claude Code after adding MCP config
+
+3. **Gemini API Key** (for AI summarization):
+   ```bash
+   chronicle config ai.gemini_api_key YOUR_KEY
+   ```
+
+### Optional
+
+4. **Obsidian MCP Server** (for session documenter only):
    - Global config at `~/.mcp.json`:
    ```json
    {
@@ -95,17 +119,10 @@ Load specific skills as needed:
      }
    }
    ```
-   - Restart Claude Code after adding MCP config
+   - Only needed if you want to document sessions to Obsidian vault
 
-3. **Gemini API Key** (for AI summarization):
-   ```bash
-   chronicle config ai.gemini_api_key YOUR_KEY
-   ```
-
-### Optional
-
-- Git repository (for commit tracking)
-- Obsidian vault (for knowledge base features)
+5. **Git repository** (for commit tracking)
+6. **Obsidian vault** (for knowledge base features with session documenter)
 
 ## Usage Examples
 
@@ -127,10 +144,10 @@ Claude: [Loads chronicle-session-documenter skill]
 User: "How did I implement authentication last time?"
 
 Claude: [Loads chronicle-context-retriever skill]
-- Searches Obsidian vault for "authentication" sessions
-- Reads relevant session notes
+- Searches Chronicle database for "authentication" sessions (fast!)
+- Gets full summaries for relevant sessions
 - Extracts implementation approach and decisions
-- Presents summary with links to full notes
+- Presents summary with session IDs for reference
 ```
 
 ### Example 3: Start a New Tracked Session
