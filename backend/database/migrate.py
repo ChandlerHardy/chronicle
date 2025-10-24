@@ -284,14 +284,19 @@ def migrate_v5_to_v6(db_path: str = None):
 
     # NULL out all session transcripts
     cursor.execute("UPDATE ai_interactions SET session_transcript = NULL WHERE is_session = 1")
-
-    # VACUUM to reclaim space
-    print(f"   Vacuuming database to reclaim space...")
-    cursor.execute("VACUUM")
-
     conn.commit()
+    conn.close()
+
+    # VACUUM to reclaim space (must be outside transaction)
+    print(f"   Vacuuming database to reclaim space...")
+    conn = sqlite3.connect(db_path, isolation_level=None)  # autocommit mode
+    cursor = conn.cursor()
+    cursor.execute("VACUUM")
+    conn.close()
 
     # Check new size
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
     cursor.execute("SELECT page_count * page_size as size FROM pragma_page_count(), pragma_page_size()")
     size_after = cursor.fetchone()[0]
     size_after_mb = size_after / 1024 / 1024
