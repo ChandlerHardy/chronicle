@@ -273,6 +273,71 @@ def format_ai_stats(stats: dict, days: int = 30) -> None:
     console.print(f"\n[dim]Total interactions: {total_interactions}[/dim]")
 
 
+def format_gemini_usage_stats(stats: dict) -> None:
+    """Format Gemini model usage statistics with quota tracking.
+
+    Args:
+        stats: Dictionary with Gemini model usage stats
+    """
+    if not stats:
+        console.print("[yellow]No Gemini model usage data available.[/yellow]")
+        return
+
+    console.print("\n[bold cyan]Gemini Model Usage (Today)[/bold cyan]")
+    console.print("═" * 80)
+
+    # Create table
+    table = Table(show_header=True, header_style="bold cyan", box=None)
+    table.add_column("Model", style="cyan", width=30)
+    table.add_column("Requests", justify="right", width=12)
+    table.add_column("Daily Limit", justify="right", width=12)
+    table.add_column("Remaining", justify="right", width=12)
+    table.add_column("Usage", justify="left", width=20)
+
+    # Sort by priority
+    sorted_models = sorted(stats.items(), key=lambda x: x[1]["priority"])
+
+    total_requests = sum(s["current_usage"] for _, s in sorted_models)
+    total_limit = sum(s["daily_limit"] for _, s in sorted_models)
+
+    for model_name, data in sorted_models:
+        current = data["current_usage"]
+        limit = data["daily_limit"]
+        remaining = data["remaining"]
+        percentage = data["percentage_used"]
+
+        # Visual bar (max 15 chars)
+        bar_length = int(percentage / 100 * 15)
+        if percentage >= 90:
+            bar_color = "red"
+        elif percentage >= 70:
+            bar_color = "yellow"
+        else:
+            bar_color = "green"
+
+        bar = f"[{bar_color}]" + "█" * bar_length + "░" * (15 - bar_length) + "[/]"
+
+        # Model name with emoji indicator
+        if percentage >= 90:
+            model_display = f"⚠️  {model_name}"
+        elif remaining > 0:
+            model_display = f"✓ {model_name}"
+        else:
+            model_display = f"✗ {model_name}"
+
+        table.add_row(
+            model_display,
+            str(current),
+            str(limit),
+            str(remaining),
+            f"{bar} {percentage:.1f}%"
+        )
+
+    console.print(table)
+    console.print(f"\n[bold]Total:[/bold] {total_requests}/{total_limit} requests used today ({(total_requests/total_limit*100):.1f}%)")
+    console.print(f"[dim]Remaining: {total_limit - total_requests} requests across all models[/dim]\n")
+
+
 def format_combined_session(commits: List[Commit], interactions: List[AIInteraction]) -> None:
     """Format a combined view of commits and AI interactions.
 

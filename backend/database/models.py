@@ -156,6 +156,25 @@ class DailySummary(Base):
         self.key_decisions = json.dumps(value)
 
 
+class GeminiModelUsage(Base):
+    """Track daily usage of Gemini models to manage rate limits."""
+
+    __tablename__ = 'gemini_model_usage'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    model_name = Column(String(100), nullable=False, index=True)
+    date = Column(DateTime, nullable=False, index=True)
+    request_count = Column(Integer, default=0)
+    total_input_tokens = Column(Integer, default=0)
+    total_output_tokens = Column(Integer, default=0)
+    total_input_characters = Column(Integer, default=0)
+    total_output_characters = Column(Integer, default=0)
+    updated_at = Column(DateTime, default=datetime.now)
+
+    def __repr__(self):
+        return f"<GeminiModelUsage(model='{self.model_name}', date='{self.date.date()}', requests={self.request_count})>"
+
+
 class ProjectMilestone(Base):
     """Project milestone/feature tracking for meta-development."""
 

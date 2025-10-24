@@ -197,6 +197,22 @@ def ai_stats(days: int):
 
 
 @cli.command()
+def gemini_stats():
+    """Show Gemini model usage statistics (today's quota)."""
+    from backend.services.summarizer import Summarizer
+    from backend.cli.formatters import format_gemini_usage_stats
+
+    try:
+        summarizer = Summarizer()
+        stats = summarizer.get_usage_stats()
+        format_gemini_usage_stats(stats)
+    except Exception as e:
+        console.print(f"[red]✗[/red] Error fetching Gemini stats: {e}")
+        import traceback
+        traceback.print_exc()
+
+
+@cli.command()
 @click.argument('session_id', type=int)
 def session(session_id: int):
     """View a session with auto-generated summary.
@@ -724,10 +740,9 @@ def clean_session(session_id: int):
     console.print(f"\n[cyan]Cleaning session {session_id}...[/cyan]")
     console.print(f"Original size: {original_size:,} chars ({original_size / 1024 / 1024:.2f} MB)")
 
-    # Apply full cleaning (same as session_manager._clean_ansi with deduplication)
-    from backend.services.session_manager import SessionManager
-    manager = SessionManager(db_session)
-    cleaned = manager._clean_ansi(session.session_transcript)
+    # Apply full cleaning using the centralized transcript cleaner
+    from backend.utils.transcript_cleaner import clean_transcript
+    cleaned = clean_transcript(session.session_transcript)
 
     # Update session
     session.session_transcript = cleaned

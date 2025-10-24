@@ -48,10 +48,10 @@ class Config:
             "repositories": [],
             "ai": {
                 "gemini_api_key": None,
-                "default_model": "gemini-2.0-flash-exp",
+                "default_model": "gemini-2.5-flash-preview-09-2025",  # Latest model with separate 250/day quota
                 "auto_summarize_sessions": False,
-                "summarization_provider": "gemini",  # "gemini" or "ollama"
-                "ollama_model": "qwen2.5:32b",
+                "summarization_provider": "gemini",  # Default: Gemini with automatic model fallback
+                "ollama_model": "qwen2.5:7b",  # Fallback for local processing
                 "ollama_host": "http://localhost:11434",
             },
             "retention": {

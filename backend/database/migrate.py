@@ -183,8 +183,74 @@ def migrate_v3_to_v4(db_path: str = None):
     print("   New tables: project_milestones, next_steps")
 
 
+def migrate_v4_to_v5(db_path: str = None):
+    """Migrate database from v4 to v5 (add Gemini model usage tracking).
+
+    Adds gemini_model_usage table for tracking daily API usage across models.
+    """
+    if db_path is None:
+        home = Path.home()
+        db_path = home / ".ai-session" / "sessions.db"
+
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+
+    # Check if table already exists
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+    existing_tables = [row[0] for row in cursor.fetchall()]
+
+    migrations_needed = []
+
+    if 'gemini_model_usage' not in existing_tables:
+        migrations_needed.append("""
+            CREATE TABLE gemini_model_usage (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                model_name VARCHAR(100) NOT NULL,
+                date DATETIME NOT NULL,
+                request_count INTEGER DEFAULT 0,
+                total_input_tokens INTEGER DEFAULT 0,
+                total_output_tokens INTEGER DEFAULT 0,
+                total_input_characters INTEGER DEFAULT 0,
+                total_output_characters INTEGER DEFAULT 0,
+                updated_at DATETIME
+            )
+        """)
+        migrations_needed.append(
+            "CREATE INDEX ix_gemini_model_usage_model_name ON gemini_model_usage (model_name)"
+        )
+        migrations_needed.append(
+            "CREATE INDEX ix_gemini_model_usage_date ON gemini_model_usage (date)"
+        )
+        migrations_needed.append(
+            "CREATE UNIQUE INDEX ix_gemini_model_usage_model_date ON gemini_model_usage (model_name, date)"
+        )
+
+    if not migrations_needed:
+        print("✅ Database is already at v5")
+        conn.close()
+        return
+
+    print(f"📝 Running {len(migrations_needed)} migrations to v5 (Gemini usage tracking)...")
+
+    for migration in migrations_needed:
+        if 'CREATE TABLE' in migration:
+            table_name = migration.split('CREATE TABLE')[1].split()[0].strip()
+            print(f"  - Creating table: {table_name}")
+        elif 'CREATE INDEX' in migration or 'CREATE UNIQUE INDEX' in migration:
+            index_name = migration.split('INDEX')[1].split()[0].strip()
+            print(f"  - Creating index: {index_name}")
+        cursor.execute(migration)
+
+    conn.commit()
+    conn.close()
+
+    print("✅ Migration to v5 complete!")
+    print("   New table: gemini_model_usage (tracks API usage by model and date)")
+
+
 if __name__ == "__main__":
     print("Running all migrations...")
     migrate_v1_to_v2()
     migrate_v2_to_v3()
     migrate_v3_to_v4()
+    migrate_v4_to_v5()

@@ -2,8 +2,38 @@
 
 import time
 from typing import Optional
+from enum import Enum
+from datetime import date, datetime
 from backend.core.config import get_config
 from backend.utils.transcript_cleaner import clean_transcript
+
+
+class GeminiModel(Enum):
+    """Available Gemini models with their daily limits and characteristics."""
+    PRO = {
+        "name": "gemini-2.5-pro",
+        "daily_limit": 100,
+        "priority": 1,
+        "use_case": "large_sessions"  # Sessions >50K lines
+    }
+    FLASH_PREVIEW = {
+        "name": "gemini-2.5-flash-preview-09-2025",
+        "daily_limit": 250,
+        "priority": 2,
+        "use_case": "default"  # Preferred for small/medium (latest features)
+    }
+    FLASH = {
+        "name": "gemini-2.5-flash",
+        "daily_limit": 250,
+        "priority": 3,
+        "use_case": "fallback"  # Stable fallback for Flash-Preview
+    }
+    FLASH_LITE = {
+        "name": "gemini-2.5-flash-lite",
+        "daily_limit": 1000,
+        "priority": 4,
+        "use_case": "high_volume"  # Large quota for fallback
+    }
 
 
 class Summarizer:
@@ -15,6 +45,10 @@ class Summarizer:
         self.provider = self.config.summarization_provider
         # Track recent API requests for adaptive rate limiting
         self.recent_requests = []  # List of (timestamp, estimated_tokens)
+
+        # Import here to avoid circular imports
+        from backend.database.models import get_session
+        self._get_db_session = get_session
 
         if self.provider == "gemini":
             import google.generativeai as genai
@@ -80,6 +114,159 @@ class Summarizer:
                 "message": f"{self.provider.title()} connection failed"
             }
 
+    def _get_usage_for_date(self, model_name: str, target_date: date) -> int:
+        """Get current usage count for a model on a specific date.
+
+        Args:
+            model_name: Name of the Gemini model
+            target_date: Date to check usage for
+
+        Returns:
+            Number of requests made to this model on this date
+        """
+        from backend.database.models import GeminiModelUsage
+        from sqlalchemy import func
+
+        db = self._get_db_session()
+        try:
+            # Query using DATE() function to compare only the date part
+            usage = db.query(GeminiModelUsage).filter(
+                GeminiModelUsage.model_name == model_name,
+                func.date(GeminiModelUsage.date) == target_date
+            ).first()
+            return usage.request_count if usage else 0
+        finally:
+            db.close()
+
+    def _increment_usage(self, model_name: str, input_chars: int = 0, output_chars: int = 0) -> None:
+        """Increment usage count for a model today with character/token tracking.
+
+        Args:
+            model_name: Name of the Gemini model
+            input_chars: Number of input characters
+            output_chars: Number of output characters
+        """
+        from backend.database.models import GeminiModelUsage
+        from sqlalchemy import func
+
+        today = date.today()
+
+        # Estimate tokens (rough approximation: 1 token ≈ 4 characters)
+        input_tokens = input_chars // 4
+        output_tokens = output_chars // 4
+
+        db = self._get_db_session()
+        try:
+            usage = db.query(GeminiModelUsage).filter(
+                GeminiModelUsage.model_name == model_name,
+                func.date(GeminiModelUsage.date) == today
+            ).first()
+
+            if usage:
+                usage.request_count += 1
+                usage.total_input_characters += input_chars
+                usage.total_output_characters += output_chars
+                usage.total_input_tokens += input_tokens
+                usage.total_output_tokens += output_tokens
+                usage.updated_at = datetime.now()
+            else:
+                usage = GeminiModelUsage(
+                    model_name=model_name,
+                    request_count=1,
+                    total_input_characters=input_chars,
+                    total_output_characters=output_chars,
+                    total_input_tokens=input_tokens,
+                    total_output_tokens=output_tokens,
+                    date=today,
+                    updated_at=datetime.now()
+                )
+                db.add(usage)
+            db.commit()
+        finally:
+            db.close()
+
+    def _select_best_available_model(self, complexity: str = "general") -> Optional[GeminiModel]:
+        """Select the best available Gemini model based on complexity and current usage.
+
+        Args:
+            complexity: Task complexity - "large", "medium", or "small"
+
+        Returns:
+            Best available GeminiModel or None if all models at limit
+        """
+        today = date.today()
+
+        # Determine preferred models based on complexity
+        if complexity == "large":
+            # For large sessions (>50K lines), prefer Pro > Flash-Preview > Flash > Flash-Lite
+            preferred_order = [
+                GeminiModel.PRO,
+                GeminiModel.FLASH_PREVIEW,
+                GeminiModel.FLASH,
+                GeminiModel.FLASH_LITE
+            ]
+        else:
+            # For small/medium sessions, prefer Flash-Preview > Flash > Flash-Lite > Pro
+            # Flash-Preview has latest features + separate 250/day quota
+            preferred_order = [
+                GeminiModel.FLASH_PREVIEW,
+                GeminiModel.FLASH,
+                GeminiModel.FLASH_LITE,
+                GeminiModel.PRO
+            ]
+
+        # Find first available model with quota remaining
+        for model in preferred_order:
+            current_usage = self._get_usage_for_date(model.value["name"], today)
+            remaining = model.value["daily_limit"] - current_usage
+            if remaining > 0:
+                print(f"  Selected {model.value['name']} ({current_usage}/{model.value['daily_limit']} used, {remaining} remaining)")
+                return model
+
+        # If all models are at limit, return None
+        print("  ⚠️  All Gemini models have reached their daily limits!")
+        return None
+
+    def get_usage_stats(self) -> dict:
+        """Get current usage statistics for all Gemini models.
+
+        Returns:
+            Dictionary with usage stats per model
+        """
+        from backend.database.models import GeminiModelUsage
+        from sqlalchemy import func
+
+        today = date.today()
+        stats = {}
+
+        db = self._get_db_session()
+        try:
+            for model in GeminiModel:
+                model_name = model.value["name"]
+                usage_record = db.query(GeminiModelUsage).filter(
+                    GeminiModelUsage.model_name == model_name,
+                    func.date(GeminiModelUsage.date) == today
+                ).first()
+
+                current_usage = usage_record.request_count if usage_record else 0
+                daily_limit = model.value["daily_limit"]
+
+                stats[model_name] = {
+                    "current_usage": current_usage,
+                    "daily_limit": daily_limit,
+                    "remaining": daily_limit - current_usage,
+                    "percentage_used": round((current_usage / daily_limit) * 100, 1),
+                    "priority": model.value["priority"],
+                    "use_case": model.value["use_case"],
+                    "total_input_characters": usage_record.total_input_characters if usage_record else 0,
+                    "total_output_characters": usage_record.total_output_characters if usage_record else 0,
+                    "total_input_tokens": usage_record.total_input_tokens if usage_record else 0,
+                    "total_output_tokens": usage_record.total_output_tokens if usage_record else 0,
+                }
+
+            return stats
+        finally:
+            db.close()
 
     def summarize_session(self, transcript: str, max_length: int = 2000) -> Optional[str]:
         """Summarize a session transcript.
@@ -323,14 +510,13 @@ Summary:"""
         if not session.session_transcript:
             raise ValueError(f"Session {session_id} has no transcript")
 
-        # Clean transcript first - removes ANSI codes and deduplicates
-        original_size = len(session.session_transcript)
-        cleaned_transcript = clean_transcript(session.session_transcript)
-        cleaned_size = len(cleaned_transcript)
-        reduction = ((original_size - cleaned_size) / original_size * 100)
-        print(f"🧹 Cleaned transcript: {original_size:,} → {cleaned_size:,} chars ({reduction:.1f}% reduction)")
+        # Use transcript as-is (already cleaned at storage time or via clean-session command)
+        print("  Retrieving transcript...")
+        transcript = session.session_transcript
+        print(f"  📄 Transcript size: {len(transcript):,} chars ({len(transcript) / 1024 / 1024:.2f} MB)")
 
         # Check for existing chunks (resume capability)
+        print("  Checking for existing chunks...")
         existing_chunks = (
             db_session.query(SessionSummaryChunk)
             .filter_by(session_id=session_id)
@@ -338,8 +524,8 @@ Summary:"""
             .all()
         )
 
-        # Split cleaned transcript into lines
-        lines = cleaned_transcript.split('\n')
+        # Split transcript into lines
+        lines = transcript.split('\n')
         total_lines = len(lines)
         print(f"📄 Total lines: {total_lines:,}")
         print(f"📦 Chunk size: {chunk_size_lines:,} lines")
@@ -377,6 +563,14 @@ Summary:"""
                 return existing_chunks[-1].cumulative_summary
 
         print()
+
+        # Determine complexity based on session size for model selection
+        if total_lines > 50000:
+            complexity = "large"
+        elif total_lines > 10000:
+            complexity = "medium"
+        else:
+            complexity = "small"
 
         for chunk_num in range(start_chunk, num_chunks):
             start_line = chunk_num * chunk_size_lines
@@ -443,12 +637,41 @@ Updated Summary:"""
                         chunk_summary = result.stdout.strip()
 
                     elif self.provider == "gemini":
+                        # Select best available model based on quota
+                        selected_model = self._select_best_available_model(complexity)
+                        if not selected_model:
+                            # All models at daily limit - try CLI fallback if available
+                            if use_cli:
+                                import subprocess
+                                result = subprocess.run(
+                                    [cli_tool, '-p', prompt],
+                                    capture_output=True,
+                                    text=True,
+                                    timeout=120
+                                )
+                                if result.returncode != 0:
+                                    raise Exception(f"All Gemini models at limit, {cli_tool} CLI also failed")
+                                chunk_summary = result.stdout.strip()
+                                break  # Skip retry loop if CLI works
+                            else:
+                                raise ValueError("All Gemini models have reached their daily limits. Try again tomorrow or use --use-cli option.")
+
+                        model_name = selected_model.value["name"]
+
                         # Track this request for adaptive rate limiting
                         estimated_tokens = (len(chunk_text) + len(cumulative_summary)) / 4
                         self.recent_requests.append((time.time(), estimated_tokens))
 
-                        response = self.model.generate_content(prompt)
+                        # Create a temporary client for this specific model
+                        import google.generativeai as genai
+                        temp_model = genai.GenerativeModel(model_name)
+                        response = temp_model.generate_content(prompt)
                         chunk_summary = response.text.strip()
+
+                        # Track usage for this model
+                        input_chars = len(prompt)
+                        output_chars = len(chunk_summary)
+                        self._increment_usage(model_name, input_chars, output_chars)
                     elif self.provider == "ollama":
                         response = self.ollama_client.generate(
                             model=self.model_name,
