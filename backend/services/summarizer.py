@@ -30,10 +30,10 @@ class GeminiModel(Enum):
         "use_case": "fallback_2_5"  # Stable 2.5 fallback (250K TPM)
     }
     FLASH_2_0 = {
-        "name": "gemini-2.0-flash-exp",
-        "daily_limit": 200,
+        "name": "gemini-2.0-flash",
+        "daily_limit": 200,  # Free tier: 200 RPD
         "priority": 3,
-        "use_case": "high_tpm"  # Lower RPD but 1M TPM for large chunks
+        "use_case": "high_tpm"  # 1M TPM - perfect for large chunks (10K lines)
     }
     FLASH_LITE = {
         "name": "gemini-2.5-flash-lite",
