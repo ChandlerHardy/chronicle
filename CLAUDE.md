@@ -43,16 +43,31 @@ User: "I can't believe there's no cleaning to be done on session 21"
 → Result: Immediately understood cleaning happens at storage time
 ```
 
-### 2. Use Chronicle Skills First
+### 2. ALWAYS Use MCP Tools (Never CLI)
 
-**⚠️ TEMPORARY TESTING MODE: This directive prioritizes Skills to validate they work correctly.**
-
-**When working with Chronicle, ALWAYS use Skills first, not raw MCP tools or CLI.**
+**When working with Chronicle data, ALWAYS use MCP tools or Skills, NEVER use CLI commands.**
 
 **Priority Order:**
 1. ✅ **Chronicle Skills** (chronicle-workflow, chronicle-session-documenter, chronicle-context-retriever, chronicle-project-tracker)
-2. ⚠️ MCP tools (only if skill doesn't exist for the task)
-3. ❌ CLI commands (only for user-facing operations like `chronicle start`)
+2. ✅ **MCP tools** (mcp__chronicle__* functions - fast, programmatic access)
+3. ❌ **CLI commands** (ONLY for user-facing operations like `chronicle start` - slow, not programmatic)
+
+**Why MCP over CLI:**
+- **Speed**: MCP queries database directly (<10ms), CLI spawns subprocess (>100ms)
+- **Programmatic**: Returns structured JSON, not formatted text
+- **Reliable**: No parsing of human-readable output
+- **Efficient**: No terminal formatting overhead
+
+**Examples:**
+```python
+# ✅ CORRECT (MCP):
+roadmap = mcp__chronicle__get_roadmap(days=7)
+sessions = mcp__chronicle__search_sessions(query="storage", limit=5)
+
+# ❌ WRONG (CLI - slow, hard to parse):
+Bash("chronicle roadmap")
+Bash("chronicle search 'storage'")
+```
 
 ---
 

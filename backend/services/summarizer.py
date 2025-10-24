@@ -10,29 +10,36 @@ from backend.utils.transcript_cleaner import clean_transcript
 
 class GeminiModel(Enum):
     """Available Gemini models with their daily limits and characteristics."""
-    PRO = {
-        "name": "gemini-2.5-pro",
-        "daily_limit": 100,
-        "priority": 1,
-        "use_case": "large_sessions"  # Sessions >50K lines
-    }
+    # PRO removed - 125K TPM limit too restrictive for chunked summarization
+    # PRO = {
+    #     "name": "gemini-2.5-pro",
+    #     "daily_limit": 100,
+    #     "priority": 1,
+    #     "use_case": "large_sessions"
+    # }
     FLASH_PREVIEW = {
         "name": "gemini-2.5-flash-preview-09-2025",
         "daily_limit": 250,
-        "priority": 2,
-        "use_case": "default"  # Preferred for small/medium (latest features)
+        "priority": 1,
+        "use_case": "default"  # Preferred for all sessions (latest features, 250K TPM)
     }
-    FLASH = {
+    FLASH_2_5 = {
         "name": "gemini-2.5-flash",
         "daily_limit": 250,
+        "priority": 2,
+        "use_case": "fallback_2_5"  # Stable 2.5 fallback (250K TPM)
+    }
+    FLASH_2_0 = {
+        "name": "gemini-2.0-flash-exp",
+        "daily_limit": 200,
         "priority": 3,
-        "use_case": "fallback"  # Stable fallback for Flash-Preview
+        "use_case": "high_tpm"  # Lower RPD but 1M TPM for large chunks
     }
     FLASH_LITE = {
         "name": "gemini-2.5-flash-lite",
         "daily_limit": 1000,
         "priority": 4,
-        "use_case": "high_volume"  # Large quota for fallback
+        "use_case": "high_volume"  # Large quota for fallback (250K TPM)
     }
 
 
@@ -189,30 +196,32 @@ class Summarizer:
         """Select the best available Gemini model based on complexity and current usage.
 
         Args:
-            complexity: Task complexity - "large", "medium", or "small"
+            complexity: Task complexity - "large" (>50K lines), "medium", or "small"
 
         Returns:
             Best available GeminiModel or None if all models at limit
         """
         today = date.today()
 
-        # Determine preferred models based on complexity
+        # Model selection based on session size
         if complexity == "large":
-            # For large sessions (>50K lines), prefer Pro > Flash-Preview > Flash > Flash-Lite
+            # Large sessions (>50K lines) benefit from 2.0 Flash's 1M TPM
+            # Can handle 10K line chunks (~200K tokens) comfortably
+            # Fallback to 2.5 models if quota exhausted
             preferred_order = [
-                GeminiModel.PRO,
-                GeminiModel.FLASH_PREVIEW,
-                GeminiModel.FLASH,
-                GeminiModel.FLASH_LITE
+                GeminiModel.FLASH_2_0,        # 1M TPM - perfect for large chunks
+                GeminiModel.FLASH_LITE,       # 1000/day - high volume fallback
+                GeminiModel.FLASH_PREVIEW,    # 250K TPM - slower but works
+                GeminiModel.FLASH_2_5,        # Last resort
             ]
         else:
-            # For small/medium sessions, prefer Flash-Preview > Flash > Flash-Lite > Pro
-            # Flash-Preview has latest features + separate 250/day quota
+            # Small/medium sessions prefer 2.5 models (latest features)
+            # 250K TPM is fine for 3-5K line chunks
             preferred_order = [
-                GeminiModel.FLASH_PREVIEW,
-                GeminiModel.FLASH,
-                GeminiModel.FLASH_LITE,
-                GeminiModel.PRO
+                GeminiModel.FLASH_PREVIEW,    # Latest features, 250K TPM
+                GeminiModel.FLASH_2_5,        # Stable 2.5
+                GeminiModel.FLASH_2_0,        # 1M TPM safety net
+                GeminiModel.FLASH_LITE,       # High volume fallback
             ]
 
         # Find first available model with quota remaining
@@ -469,7 +478,7 @@ Summary:"""
     def summarize_session_chunked(
         self,
         session_id: int,
-        chunk_size_lines: int = 1000,
+        chunk_size_lines: int = 3000,
         db_session = None,
         use_cli: bool = False,
         cli_tool: str = "qwen"
@@ -480,9 +489,14 @@ Summary:"""
         and maintains a cumulative summary that gets updated with each new chunk.
         This avoids token limits and works with sessions of any size.
 
+        Chunk size is automatically optimized based on session size:
+        - Small (<10K lines): 3K line chunks (safe for all models)
+        - Medium (10K-50K lines): 5K line chunks (balanced)
+        - Large (>50K lines): 10K line chunks (leverages 2.0 Flash's 1M TPM)
+
         Args:
             session_id: ID of the session to summarize
-            chunk_size_lines: Number of lines per chunk (default: 1000)
+            chunk_size_lines: Default chunk size (auto-adjusted based on session size)
             db_session: SQLAlchemy database session (required)
             use_cli: If True, use CLI tools (qwen/gemini) instead of API (bypasses rate limits)
             cli_tool: Which CLI tool to use if use_cli=True ("qwen" or "gemini")
@@ -507,13 +521,35 @@ Summary:"""
         if not session.is_session:
             raise ValueError(f"ID {session_id} is not a session")
 
-        if not session.session_transcript:
-            raise ValueError(f"Session {session_id} has no transcript")
-
-        # Use transcript as-is (already cleaned at storage time or via clean-session command)
+        # Read from .cleaned file (100x faster than SQLite!)
+        # Cleaned files have ANSI codes removed and deduplication applied
         print("  Retrieving transcript...")
-        transcript = session.session_transcript
-        print(f"  📄 Transcript size: {len(transcript):,} chars ({len(transcript) / 1024 / 1024:.2f} MB)")
+        from pathlib import Path
+
+        cleaned_path = Path.home() / ".ai-session" / "sessions" / f"session_{session_id}.cleaned"
+        log_path = Path.home() / ".ai-session" / "sessions" / f"session_{session_id}.log"
+
+        if cleaned_path.exists():
+            # Read from .cleaned file (FASTEST - already cleaned!)
+            print(f"  📁 Reading from {cleaned_path.name}...")
+            with open(cleaned_path, 'r', encoding='utf-8', errors='ignore') as f:
+                transcript = f.read()
+            print(f"  📄 Transcript size: {len(transcript):,} chars ({len(transcript) / 1024 / 1024:.2f} MB)")
+        elif log_path.exists():
+            # Fallback to .log file (needs cleaning)
+            print(f"  📁 Reading from {log_path.name} (will clean)...")
+            with open(log_path, 'r', encoding='utf-8', errors='ignore') as f:
+                raw_transcript = f.read()
+            print(f"  🧹 Cleaning transcript...")
+            transcript = clean_transcript(raw_transcript)
+            print(f"  📄 Transcript size: {len(transcript):,} chars ({len(transcript) / 1024 / 1024:.2f} MB)")
+        elif session.session_transcript:
+            # Fallback to database (SLOW but backward compatible with old sessions)
+            print(f"  ⚠️  Reading from database (legacy session, slow)...")
+            transcript = session.session_transcript
+            print(f"  📄 Transcript size: {len(transcript):,} chars ({len(transcript) / 1024 / 1024:.2f} MB)")
+        else:
+            raise ValueError(f"Session {session_id} has no transcript (no .cleaned, .log, or database entry)")
 
         # Check for existing chunks (resume capability)
         print("  Checking for existing chunks...")
@@ -528,7 +564,23 @@ Summary:"""
         lines = transcript.split('\n')
         total_lines = len(lines)
         print(f"📄 Total lines: {total_lines:,}")
-        print(f"📦 Chunk size: {chunk_size_lines:,} lines")
+
+        # Determine complexity and optimize chunk size based on session size
+        if total_lines > 50000:
+            complexity = "large"
+            # Large sessions: use 10K chunks to leverage 2.0 Flash's 1M TPM
+            # Math: 10K lines × 80 chars × 0.25 tokens/char ≈ 200K tokens (20% of 1M TPM)
+            chunk_size_lines = 10000
+        elif total_lines > 10000:
+            complexity = "medium"
+            # Medium sessions: 5K chunks balance speed and safety
+            chunk_size_lines = 5000
+        else:
+            complexity = "small"
+            # Small sessions: 3K chunks (provided default)
+            # Already safe for all models
+
+        print(f"📦 Chunk size: {chunk_size_lines:,} lines (optimized for {complexity} session)")
 
         num_chunks = (total_lines + chunk_size_lines - 1) // chunk_size_lines  # Ceiling division
         print(f"🔢 Total chunks: {num_chunks}")
@@ -564,13 +616,8 @@ Summary:"""
 
         print()
 
-        # Determine complexity based on session size for model selection
-        if total_lines > 50000:
-            complexity = "large"
-        elif total_lines > 10000:
-            complexity = "medium"
-        else:
-            complexity = "small"
+        # Complexity and chunk size already determined above
+        # Now process chunks using the optimized settings
 
         for chunk_num in range(start_chunk, num_chunks):
             start_line = chunk_num * chunk_size_lines

@@ -248,9 +248,67 @@ def migrate_v4_to_v5(db_path: str = None):
     print("   New table: gemini_model_usage (tracks API usage by model and date)")
 
 
+def migrate_v5_to_v6(db_path: str = None):
+    """Migrate database from v5 to v6 (move transcripts from database to files).
+
+    NULLs out session_transcript column to free up database space.
+    Transcripts are now stored in .cleaned files in ~/.ai-session/sessions/
+
+    This dramatically reduces database size (110MB → ~10MB for 13 sessions).
+    """
+    if db_path is None:
+        home = Path.home()
+        db_path = home / ".ai-session" / "sessions.db"
+
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+
+    # Check current database size
+    cursor.execute("SELECT page_count * page_size as size FROM pragma_page_count(), pragma_page_size()")
+    size_before = cursor.fetchone()[0]
+    size_before_mb = size_before / 1024 / 1024
+
+    # Count sessions with transcripts in database
+    cursor.execute("SELECT COUNT(*) FROM ai_interactions WHERE session_transcript IS NOT NULL AND is_session = 1")
+    count = cursor.fetchone()[0]
+
+    if count == 0:
+        print(f"✅ Database is already at v6 (no transcripts in database)")
+        print(f"   Current size: {size_before_mb:.1f} MB")
+        conn.close()
+        return
+
+    print(f"📝 Migration v5 → v6: Moving transcripts from database to files...")
+    print(f"   Database size: {size_before_mb:.1f} MB")
+    print(f"   Sessions with transcripts in DB: {count}")
+
+    # NULL out all session transcripts
+    cursor.execute("UPDATE ai_interactions SET session_transcript = NULL WHERE is_session = 1")
+
+    # VACUUM to reclaim space
+    print(f"   Vacuuming database to reclaim space...")
+    cursor.execute("VACUUM")
+
+    conn.commit()
+
+    # Check new size
+    cursor.execute("SELECT page_count * page_size as size FROM pragma_page_count(), pragma_page_size()")
+    size_after = cursor.fetchone()[0]
+    size_after_mb = size_after / 1024 / 1024
+    saved_mb = size_before_mb - size_after_mb
+    saved_pct = (saved_mb / size_before_mb * 100) if size_before_mb > 0 else 0
+
+    conn.close()
+
+    print(f"✅ Migration to v6 complete!")
+    print(f"   New size: {size_after_mb:.1f} MB (saved {saved_mb:.1f} MB, {saved_pct:.1f}% reduction)")
+    print(f"   Transcripts now stored in ~/.ai-session/sessions/*.cleaned files")
+
+
 if __name__ == "__main__":
     print("Running all migrations...")
     migrate_v1_to_v2()
     migrate_v2_to_v3()
     migrate_v3_to_v4()
     migrate_v4_to_v5()
+    migrate_v5_to_v6()

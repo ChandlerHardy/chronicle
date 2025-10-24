@@ -121,11 +121,19 @@ class SessionManager:
         cleaned_size = len(cleaned)
         reduction = ((original_size - cleaned_size) / original_size * 100) if original_size > 0 else 0
 
-        # Update session record
+        # Save cleaned transcript to file (not database!)
+        cleaned_file = transcript_file.with_suffix('.cleaned')
+        try:
+            with open(cleaned_file, 'w', encoding='utf-8') as f:
+                f.write(cleaned)
+        except Exception as e:
+            print(f"⚠️  Warning: Could not save cleaned transcript: {e}")
+
+        # Update session record (NO transcript in database)
         session = self.db.query(AIInteraction).filter_by(id=session_id).first()
         if session:
             session.duration_ms = duration_ms
-            session.session_transcript = cleaned
+            session.session_transcript = None  # Don't store in database!
             # Prompt is the first line or "Session"
             session.prompt = f"Interactive session ({duration_ms / 1000 / 60:.1f}m)"
             self.db.commit()
@@ -133,7 +141,7 @@ class SessionManager:
         print()
         print(f"📊 Session #{session_id} complete! Duration: {duration_ms / 1000 / 60:.1f} minutes")
         print(f"🧹 Cleaned transcript: {original_size:,} → {cleaned_size:,} chars ({reduction:.1f}% reduction)")
-        print(f"💾 Transcript saved to database")
+        print(f"💾 Transcript saved to {cleaned_file.name}")
 
         # Trigger automatic summarization
         print()

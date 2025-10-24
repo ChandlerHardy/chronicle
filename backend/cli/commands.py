@@ -250,10 +250,12 @@ def session(session_id: int):
             summarizer = Summarizer()
 
             # Use chunked summarization (works for all session sizes)
-            # Default chunk size: 8,000 lines (safer for rate limits)
+            # Chunk size is automatically optimized based on session size:
+            # - Small (<10K lines): 3K chunks → uses Flash-Preview 2.5
+            # - Medium (10-50K lines): 5K chunks → uses Flash-Preview 2.5
+            # - Large (>50K lines): 10K chunks → uses Flash 2.0 (1M TPM)
             summary = summarizer.summarize_session_chunked(
                 session_id=session_id,
-                chunk_size_lines=8000,
                 db_session=db_session,
                 use_cli=False  # Use Gemini API (reliable, free tier)
             )
@@ -636,7 +638,9 @@ def test_gemini():
 @cli.command()
 @click.argument('session_id', type=int)
 @click.option('--chunk-size', default=8000, help='Number of lines per chunk (default: 8000)')
-def summarize_chunked(session_id: int, chunk_size: int):
+@click.option('--use-cli', is_flag=True, help='Use CLI tool (qwen/gemini) instead of API (bypasses rate limits)')
+@click.option('--cli-tool', type=click.Choice(['qwen', 'gemini']), default='qwen', help='Which CLI tool to use with --use-cli')
+def summarize_chunked(session_id: int, chunk_size: int, use_cli: bool, cli_tool: str):
     """Summarize a large session using incremental chunked summarization.
 
     This is designed for very large sessions (> 50,000 lines) that are too big
@@ -647,11 +651,12 @@ def summarize_chunked(session_id: int, chunk_size: int):
     - No token limits - works with sessions of any size
     - Progressive summarization - see intermediate results
     - Resumable - chunks are saved to database
-    - Uses Gemini API (200 free requests/day)
+    - Uses Gemini API (200 free requests/day) or local CLI tools
 
     Examples:
-        chronicle summarize-chunked 10                   # Use default 10,000 lines/chunk
-        chronicle summarize-chunked 10 --chunk-size 5000 # Smaller chunks
+        chronicle summarize-chunked 10                          # Use default 8,000 lines/chunk
+        chronicle summarize-chunked 10 --chunk-size 5000        # Smaller chunks
+        chronicle summarize-chunked 10 --use-cli --cli-tool qwen # Use Qwen CLI (bypasses rate limits)
     """
     from backend.services.summarizer import Summarizer
 
@@ -671,7 +676,8 @@ def summarize_chunked(session_id: int, chunk_size: int):
 
     console.print(f"\n[bold cyan]Chunked Summarization: Session {session_id}[/bold cyan]")
     console.print("═" * 80)
-    console.print(f"[yellow]Mode:[/yellow] Gemini API")
+    mode_str = f"{cli_tool.upper()} CLI (bypasses rate limits)" if use_cli else "Gemini API"
+    console.print(f"[yellow]Mode:[/yellow] {mode_str}")
     console.print()
 
     try:
@@ -679,7 +685,9 @@ def summarize_chunked(session_id: int, chunk_size: int):
         summary = summarizer.summarize_session_chunked(
             session_id=session_id,
             chunk_size_lines=chunk_size,
-            db_session=db_session
+            db_session=db_session,
+            use_cli=use_cli,
+            cli_tool=cli_tool
         )
 
         console.print("\n[bold green]✓ Summarization Complete![/bold green]")
@@ -704,18 +712,19 @@ def summarize_chunked(session_id: int, chunk_size: int):
 @cli.command()
 @click.argument('session_id', type=int)
 def clean_session(session_id: int):
-    """Clean a session transcript to reduce database size.
+    """Migrate a session to file-based storage (create .cleaned file).
 
-    This retroactively applies full cleaning to a session that was captured
-    before the improved cleaning was implemented. Removes ANSI codes, control
-    characters, and deduplicates spinner lines.
+    This extracts the transcript from the database, cleans it, saves it to a
+    .cleaned file, and NULLs out the database entry to save space.
 
-    Typical reduction: 50-90% file size
+    Use this to prepare old sessions for the v6 migration.
 
     Examples:
         chronicle clean-session 10
+        chronicle clean-session --all    # Clean all sessions
     """
     db_session = get_session()
+    from pathlib import Path
 
     # Get the session
     session = db_session.query(AIInteraction).filter_by(id=session_id).first()
@@ -731,31 +740,51 @@ def clean_session(session_id: int):
         return
 
     if not session.session_transcript:
-        console.print(f"[red]✗[/red] Session {session_id} has no transcript")
-        db_session.close()
-        return
+        console.print(f"[yellow]⚠[/yellow] Session {session_id} has no transcript in database")
+        console.print(f"[dim]Checking for .log file...[/dim]")
+
+        # Try reading from .log file instead
+        log_path = Path.home() / ".ai-session" / "sessions" / f"session_{session_id}.log"
+        if not log_path.exists():
+            console.print(f"[red]✗[/red] No .log file found either")
+            db_session.close()
+            return
+
+        console.print(f"[green]✓[/green] Found .log file, reading...")
+        with open(log_path, 'r', encoding='utf-8', errors='ignore') as f:
+            transcript = f.read()
+    else:
+        transcript = session.session_transcript
 
     # Get current size
-    original_size = len(session.session_transcript)
-    console.print(f"\n[cyan]Cleaning session {session_id}...[/cyan]")
-    console.print(f"Original size: {original_size:,} chars ({original_size / 1024 / 1024:.2f} MB)")
+    original_size = len(transcript)
+    console.print(f"\n[cyan]Migrating session {session_id} to file storage...[/cyan]")
+    console.print(f"Source size: {original_size:,} chars ({original_size / 1024 / 1024:.2f} MB)")
 
-    # Apply full cleaning using the centralized transcript cleaner
+    # Apply full cleaning
     from backend.utils.transcript_cleaner import clean_transcript
-    cleaned = clean_transcript(session.session_transcript)
+    cleaned = clean_transcript(transcript)
 
-    # Update session
-    session.session_transcript = cleaned
+    # Save to .cleaned file
+    sessions_dir = Path.home() / ".ai-session" / "sessions"
+    cleaned_path = sessions_dir / f"session_{session_id}.cleaned"
+
+    with open(cleaned_path, 'w', encoding='utf-8') as f:
+        f.write(cleaned)
+
+    # NULL out database transcript
+    session.session_transcript = None
     db_session.commit()
 
     # Report results
     new_size = len(cleaned)
     reduction = ((original_size - new_size) / original_size * 100)
 
-    console.print(f"[green]✓[/green] Session cleaned successfully!")
-    console.print(f"New size: {new_size:,} chars ({new_size / 1024 / 1024:.2f} MB)")
+    console.print(f"[green]✓[/green] Session migrated successfully!")
+    console.print(f"File: {cleaned_path.name}")
+    console.print(f"Size: {new_size:,} chars ({new_size / 1024 / 1024:.2f} MB)")
     console.print(f"[bold green]Reduction: {reduction:.1f}%[/bold green]")
-    console.print(f"\n[dim]The transcript is now much smaller and ready for summarization.[/dim]")
+    console.print(f"[dim]Database transcript cleared (saves space)[/dim]")
 
     db_session.close()
 
@@ -941,9 +970,9 @@ def import_session(transcript_file, tool, timestamp, repo, summarize):
             summarizer = Summarizer()
 
             # Use chunked summarization for reliability
+            # Chunk size auto-optimized: 3K/5K/10K based on session size
             summary = summarizer.summarize_session_chunked(
                 session_id=session_id,
-                chunk_size_lines=8000,
                 db_session=db_session
             )
 
