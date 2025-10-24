@@ -357,14 +357,20 @@ Summary:"""
             missing_chunks = sorted(expected_chunks - existing_chunk_numbers)
 
             if missing_chunks:
-                # Start from first missing chunk
+                # Start from first missing chunk (1-indexed display)
                 first_missing = missing_chunks[0]
-                start_chunk = first_missing - 1  # Convert to 0-indexed
-                # Use cumulative summary from chunk before the gap
-                chunk_before_gap = [c for c in existing_chunks if c.chunk_number == first_missing - 1]
-                if chunk_before_gap:
-                    cumulative_summary = chunk_before_gap[0].cumulative_summary
-                print(f"🔄 Resuming from chunk {first_missing} (found gap in chunks, {len(missing_chunks)} chunks missing)")
+                start_chunk = first_missing - 1  # Convert to 0-indexed for loop
+
+                # Use cumulative summary from chunk before the gap (if exists)
+                if first_missing > 1:
+                    chunk_before_gap = [c for c in existing_chunks if c.chunk_number == first_missing - 1]
+                    if chunk_before_gap:
+                        cumulative_summary = chunk_before_gap[0].cumulative_summary
+                        print(f"🔄 Resuming from chunk {first_missing}/{num_chunks} ({len(missing_chunks)} chunks remaining)")
+                    else:
+                        print(f"⚠️  Gap detected: chunk {first_missing - 1} missing, starting from chunk {first_missing} without prior context")
+                else:
+                    print(f"🔄 Starting from chunk 1/{num_chunks} (no previous chunks found)")
             else:
                 # All chunks complete
                 print(f"✅ All {len(existing_chunks)} chunks already completed!")

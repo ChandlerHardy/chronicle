@@ -6,7 +6,44 @@
 
 ---
 
-## 🎯 Core Directive: Use Chronicle Skills First
+## 🎯 Core Directives
+
+### 1. Check Chronicle History Before Implementing
+
+**ALWAYS search Chronicle before implementing or modifying features:**
+
+```python
+# Before implementing transcript cleaning:
+mcp__chronicle__search_sessions(query="transcript clean", limit=5)
+
+# Before adding new summarization logic:
+mcp__chronicle__search_sessions(query="summarization", limit=5)
+
+# When user questions something ("why isn't X working?"):
+mcp__chronicle__search_sessions(query="X feature", limit=5)
+```
+
+**Why:** Chronicle tracks ALL past work. Searching takes <1s and prevents:
+- ❌ Reimplementing existing features
+- ❌ Breaking working code unknowingly
+- ❌ Missing context about WHY decisions were made
+- ❌ Wasting time on already-solved problems
+
+**When to search:**
+- User says "I can't believe..." or "why isn't..." → Search first!
+- Before adding any new feature → Check if it exists
+- When debugging → Check past sessions for similar issues
+- When confused about architecture → Search for design decisions
+
+**Real example from Session 21:**
+```
+User: "I can't believe there's no cleaning to be done on session 21"
+❌ Without search: Spent time debugging, confused why 0% reduction
+✅ With search: Would have found Session 13 implemented transcript cleaning
+→ Result: Immediately understood cleaning happens at storage time
+```
+
+### 2. Use Chronicle Skills First
 
 **⚠️ TEMPORARY TESTING MODE: This directive prioritizes Skills to validate they work correctly.**
 
