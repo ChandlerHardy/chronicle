@@ -37,22 +37,31 @@ def get_db() -> Session:
     return _db_session
 
 
-def format_session_dict(session: AIInteraction) -> Dict[str, Any]:
-    """Convert AIInteraction to a clean dictionary for MCP responses."""
-    return {
+def format_session_dict(session: AIInteraction, include_summary: bool = True) -> Dict[str, Any]:
+    """Convert AIInteraction to a clean dictionary for MCP responses.
+
+    Args:
+        session: The AIInteraction to format
+        include_summary: Whether to include the full summary (can be large)
+    """
+    result = {
         "id": session.id,
         "tool": session.ai_tool,
         "timestamp": session.timestamp.isoformat(),
         "is_session": bool(session.is_session),
         "duration_minutes": round(session.duration_ms / 60000, 1) if session.duration_ms else None,
         "prompt": session.prompt,
-        "summary": session.response_summary,
         "summary_generated": bool(session.summary_generated),
         "repo_path": session.repo_path,
         "working_directory": session.working_directory,
         "files_mentioned": session.files_list,
         "related_commit_id": session.related_commit_id,
     }
+
+    if include_summary:
+        result["summary"] = session.response_summary
+
+    return result
 
 
 def format_commit_dict(commit: Commit) -> Dict[str, Any]:
@@ -75,6 +84,7 @@ def get_sessions(
     tool: Optional[str] = None,
     repo_path: Optional[str] = None,
     days: Optional[int] = None,
+    include_summaries: bool = False,
 ) -> str:
     """Get recent Chronicle sessions.
 
@@ -83,6 +93,7 @@ def get_sessions(
         tool: Filter by AI tool (claude-code, gemini-cli, qwen-cli)
         repo_path: Filter by repository path
         days: Only show sessions from last N days
+        include_summaries: Include full AI summaries (default: False, reduces response size)
 
     Returns:
         JSON string with list of sessions
@@ -107,7 +118,7 @@ def get_sessions(
 
     result = {
         "count": len(sessions),
-        "sessions": [format_session_dict(s) for s in sessions]
+        "sessions": [format_session_dict(s, include_summary=include_summaries) for s in sessions]
     }
 
     return json.dumps(result, indent=2)
@@ -190,6 +201,45 @@ def search_sessions(
         "query": query,
         "count": len(sessions),
         "sessions": [format_session_dict(s) for s in sessions]
+    }
+
+    return json.dumps(result, indent=2)
+
+
+@mcp.tool()
+def get_sessions_summaries(session_ids: list[int]) -> str:
+    """Get summaries for multiple sessions efficiently.
+
+    Args:
+        session_ids: List of session IDs to retrieve summaries for (max: 20)
+
+    Returns:
+        JSON string with id and summary for each session
+    """
+    db = get_db()
+
+    # Limit to 20 sessions to avoid huge responses
+    session_ids = session_ids[:20]
+
+    sessions = db.query(AIInteraction).options(
+        defer(AIInteraction.session_transcript)  # Don't load transcript
+    ).filter(
+        AIInteraction.id.in_(session_ids)
+    ).all()
+
+    # Return minimal dict with just id, prompt, and summary
+    summaries = []
+    for session in sessions:
+        summaries.append({
+            "id": session.id,
+            "prompt": session.prompt,
+            "summary": session.response_summary,
+            "summary_generated": bool(session.summary_generated),
+        })
+
+    result = {
+        "count": len(summaries),
+        "summaries": summaries
     }
 
     return json.dumps(result, indent=2)
@@ -287,7 +337,7 @@ def get_timeline(
         timeline.append({
             "type": "session",
             "timestamp": session.timestamp.isoformat(),
-            "data": format_session_dict(session)
+            "data": format_session_dict(session, include_summary=False)  # Exclude summaries for timeline view
         })
 
     timeline.sort(key=lambda x: x["timestamp"], reverse=True)
@@ -490,7 +540,7 @@ def get_milestone(milestone_id: int) -> str:
         ).filter(
             AIInteraction.id.in_(milestone.sessions_list)
         ).all()
-        linked_sessions = [format_session_dict(s) for s in sessions]
+        linked_sessions = [format_session_dict(s, include_summary=False) for s in sessions]
 
     # Get linked commits
     linked_commits = []

@@ -158,8 +158,17 @@ Bash("chronicle session 16")  # Use skills or MCP, not CLI
 
 **Session & Commit Tracking:**
 ```python
+# List sessions (summaries excluded by default for performance)
 mcp__chronicle__get_sessions(limit=10, tool="claude-code", repo_path="/path", days=7)
+mcp__chronicle__get_sessions(limit=10, include_summaries=True)  # Optional: include summaries
+
+# Get single session details with full summary
 mcp__chronicle__get_session_summary(session_id=16)
+
+# Batch retrieve summaries for multiple sessions (NEW!)
+mcp__chronicle__get_sessions_summaries(session_ids=[15, 16, 17])
+
+# Search and other queries
 mcp__chronicle__search_sessions(query="MCP server", limit=10)
 mcp__chronicle__get_commits(limit=20, repo_path="/path", days=7)
 mcp__chronicle__search_commits(query="retry logic", limit=20)

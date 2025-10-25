@@ -80,17 +80,19 @@ Get recent Chronicle sessions with filtering options.
 - `tool` (str, optional): Filter by AI tool (claude-code, gemini-cli, qwen-cli)
 - `repo_path` (str, optional): Filter by repository path
 - `days` (int, optional): Only show sessions from last N days
+- `include_summaries` (bool, optional): Include full AI summaries (default: false)
 
 **Example:**
 ```json
 {
   "limit": 5,
   "tool": "claude-code",
-  "days": 7
+  "days": 7,
+  "include_summaries": false
 }
 ```
 
-**Returns:** JSON array of sessions with metadata, summaries, and timestamps.
+**Returns:** JSON array of sessions with metadata and timestamps. Summaries are excluded by default to reduce response size (use `get_session_summary` or `get_sessions_summaries` for summaries).
 
 ---
 
@@ -111,9 +113,8 @@ Get detailed summary of a specific Chronicle session.
 **Returns:** Full session details including:
 - Session metadata (tool, timestamp, duration)
 - AI-generated summary
-- Transcript path
-- Related commits
-- Chunked summaries (for large sessions)
+- Transcript path (if available)
+- Related commit IDs
 
 ---
 
@@ -136,6 +137,29 @@ Search Chronicle sessions by keywords.
 ```
 
 **Returns:** Matching sessions with highlighted search context.
+
+---
+
+### `get_sessions_summaries`
+
+Get summaries for multiple sessions efficiently (batch retrieval).
+
+**Parameters:**
+- `session_ids` (list[int], required): List of session IDs to retrieve (max: 20)
+
+**Example:**
+```json
+{
+  "session_ids": [15, 16, 17]
+}
+```
+
+**Returns:** Minimal JSON with just id, prompt, and summary for each session. Useful when you need summaries for multiple sessions without full metadata.
+
+**Use cases:**
+- Fetching summaries after a list query
+- Building custom reports from multiple sessions
+- Comparing work across several sessions
 
 ---
 
