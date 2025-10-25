@@ -310,6 +310,65 @@ def migrate_v5_to_v6(db_path: str = None):
     print(f"   Transcripts now stored in ~/.ai-session/sessions/*.cleaned files")
 
 
+def migrate_v6_to_v7(db_path: str = None):
+    """Migrate database from v6 to v7 (add session organization).
+
+    Adds title, parent_session_id, related_session_ids, and tags columns
+    to ai_interactions table for better session organization and linking.
+    """
+    if db_path is None:
+        home = Path.home()
+        db_path = home / ".ai-session" / "sessions.db"
+
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+
+    # Check if columns already exist
+    cursor.execute("PRAGMA table_info(ai_interactions)")
+    columns = [row[1] for row in cursor.fetchall()]
+
+    migrations_needed = []
+
+    if 'title' not in columns:
+        migrations_needed.append(
+            "ALTER TABLE ai_interactions ADD COLUMN title TEXT"
+        )
+
+    if 'parent_session_id' not in columns:
+        migrations_needed.append(
+            "ALTER TABLE ai_interactions ADD COLUMN parent_session_id INTEGER REFERENCES ai_interactions(id)"
+        )
+
+    if 'related_session_ids' not in columns:
+        migrations_needed.append(
+            "ALTER TABLE ai_interactions ADD COLUMN related_session_ids TEXT"
+        )
+
+    if 'tags' not in columns:
+        migrations_needed.append(
+            "ALTER TABLE ai_interactions ADD COLUMN tags TEXT"
+        )
+
+    if not migrations_needed:
+        print("✅ Database is already at v7")
+        conn.close()
+        return
+
+    print(f"📝 Running {len(migrations_needed)} migrations to v7 (session organization)...")
+
+    for migration in migrations_needed:
+        column_name = migration.split('ADD COLUMN')[1].split()[0] if 'ADD COLUMN' in migration else 'unknown'
+        print(f"  - Adding column: {column_name}")
+        cursor.execute(migration)
+
+    conn.commit()
+    conn.close()
+
+    print("✅ Migration to v7 complete!")
+    print("   New columns: title, parent_session_id, related_session_ids, tags")
+    print("   Use 'chronicle rename-session' and 'chronicle tag-session' to organize sessions")
+
+
 if __name__ == "__main__":
     print("Running all migrations...")
     migrate_v1_to_v2()
@@ -317,3 +376,4 @@ if __name__ == "__main__":
     migrate_v3_to_v4()
     migrate_v4_to_v5()
     migrate_v5_to_v6()
+    migrate_v6_to_v7()

@@ -65,6 +65,12 @@ class AIInteraction(Base):
     working_directory = Column(String(500))  # Directory where session was started
     repo_path = Column(String(500))  # Git repository root (if in a git repo)
 
+    # Session organization (added in v7)
+    title = Column(String(500))  # Descriptive title: "MCP Response Optimization"
+    parent_session_id = Column(Integer, ForeignKey('ai_interactions.id'))  # Continues from this session
+    related_session_ids = Column(Text)  # JSON array of related session IDs
+    tags = Column(Text)  # JSON array of tags: ["optimization", "mcp", "performance"]
+
     # Relationship
     commit = relationship("Commit", back_populates="ai_interactions")
 
@@ -82,6 +88,30 @@ class AIInteraction(Base):
     def files_list(self, value):
         """Set files_mentioned from a Python list."""
         self.files_mentioned = json.dumps(value)
+
+    @property
+    def tags_list(self):
+        """Get tags as a Python list."""
+        if self.tags:
+            return json.loads(self.tags)
+        return []
+
+    @tags_list.setter
+    def tags_list(self, value):
+        """Set tags from a Python list."""
+        self.tags = json.dumps(value) if value else None
+
+    @property
+    def related_sessions_list(self):
+        """Get related_session_ids as a Python list."""
+        if self.related_session_ids:
+            return json.loads(self.related_session_ids)
+        return []
+
+    @related_sessions_list.setter
+    def related_sessions_list(self, value):
+        """Set related_session_ids from a Python list."""
+        self.related_session_ids = json.dumps(value) if value else None
 
 
 class SessionSummaryChunk(Base):

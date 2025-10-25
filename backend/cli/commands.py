@@ -510,45 +510,134 @@ def sessions(repo: str = None, limit: int = 10):
     console.print("═" * 80)
     
     from rich.table import Table
-    table = Table(show_header=True, header_style="bold cyan")
+    table = Table(show_header=True, header_style="bold cyan", show_lines=False)
     table.add_column("ID", width=6)
-    table.add_column("Tool", width=15)
-    table.add_column("Started", width=18)
-    table.add_column("Duration", width=12)
-    table.add_column("Status", width=15)
-    table.add_column("Summary", width=20)
-    
+    table.add_column("Title / Tool", width=35)
+    table.add_column("Started", width=16)
+    table.add_column("Duration", width=10)
+    table.add_column("Tags", width=20)
+
     for session in interactions:
         session_id = str(session.id)
         tool = session.ai_tool.replace("-session", "").title()
         timestamp = session.timestamp.strftime("%b %d, %I:%M %p")
-        
+
+        # Title (or fallback to tool)
+        if session.title:
+            title_display = f"[bold]{session.title}[/bold]\n[dim]{tool}[/dim]"
+        else:
+            title_display = f"[dim]Session {session.id}[/dim]\n{tool}"
+
         # Duration
         if session.duration_ms:
             duration_min = session.duration_ms / 1000 / 60
             duration = f"{duration_min:.1f}m"
         else:
             duration = "Active"
-        
-        # Status
-        if session.session_transcript is None:
-            status = "🟡 Active"
-        elif session.summary_generated:
-            status = "✅ Summarized"
+
+        # Tags
+        tags_list = session.tags_list if session.tags else []
+        if tags_list:
+            # Show first 3 tags
+            tags_display = ", ".join(tags_list[:3])
+            if len(tags_list) > 3:
+                tags_display += f" +{len(tags_list)-3}"
         else:
-            status = "⏳ Needs summary"
-        
-        # Summary preview
-        if session.response_summary:
-            summary = session.response_summary[:30] + "..."
-        else:
-            summary = "-"
-        
-        table.add_row(session_id, tool, timestamp, duration, status, summary)
+            tags_display = "[dim]-[/dim]"
+
+        table.add_row(session_id, title_display, timestamp, duration, tags_display)
     
     console.print(table)
     console.print(f"\n[dim]Use 'chronicle session <id>' to view full details[/dim]")
-    
+
+    db_session.close()
+
+
+@cli.command("rename-session")
+@click.argument('session_id', type=int)
+@click.argument('title', type=str)
+def rename_session(session_id: int, title: str):
+    """Set a descriptive title for a session.
+
+    Examples:
+        chronicle rename-session 32 "MCP Response Optimization"
+        chronicle rename-session 30 "Fix Chronicle skill documentation"
+    """
+    db_session = get_session()
+
+    # Find session
+    session = db_session.query(AIInteraction).filter_by(id=session_id).first()
+
+    if not session:
+        console.print(f"[red]✗[/red] Session {session_id} not found")
+        db_session.close()
+        return
+
+    # Update title
+    old_title = session.title or "(no title)"
+    session.title = title
+    db_session.commit()
+
+    console.print(f"[green]✓[/green] Updated session {session_id}")
+    console.print(f"  [dim]Old:[/dim] {old_title}")
+    console.print(f"  [dim]New:[/dim] {title}")
+
+    db_session.close()
+
+
+@cli.command("tag-session")
+@click.argument('session_id', type=int)
+@click.argument('tags', type=str)
+@click.option('--add', is_flag=True, help='Add tags (instead of replacing)')
+@click.option('--remove', is_flag=True, help='Remove tags')
+def tag_session(session_id: int, tags: str, add: bool = False, remove: bool = False):
+    """Add, remove, or set tags for a session.
+
+    Examples:
+        chronicle tag-session 32 documentation,skills           # Set tags (replaces existing)
+        chronicle tag-session 32 optimization --add             # Add tag to existing
+        chronicle tag-session 32 wip --remove                   # Remove tag
+    """
+    import json
+
+    db_session = get_session()
+
+    # Find session
+    session = db_session.query(AIInteraction).filter_by(id=session_id).first()
+
+    if not session:
+        console.print(f"[red]✗[/red] Session {session_id} not found")
+        db_session.close()
+        return
+
+    # Parse input tags
+    new_tags = [t.strip() for t in tags.split(',') if t.strip()]
+
+    # Get current tags
+    current_tags = session.tags_list if session.tags else []
+
+    if remove:
+        # Remove tags
+        updated_tags = [t for t in current_tags if t not in new_tags]
+        action = "Removed"
+    elif add:
+        # Add tags (avoid duplicates)
+        updated_tags = current_tags + [t for t in new_tags if t not in current_tags]
+        action = "Added"
+    else:
+        # Replace all tags
+        updated_tags = new_tags
+        action = "Set"
+
+    # Update session
+    session.tags_list = updated_tags
+    db_session.commit()
+
+    console.print(f"[green]✓[/green] {action} tags for session {session_id}")
+    if session.title:
+        console.print(f"  [dim]Title:[/dim] {session.title}")
+    console.print(f"  [dim]Tags:[/dim] {', '.join(updated_tags) if updated_tags else '(none)'}")
+
     db_session.close()
 
 

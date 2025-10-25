@@ -56,6 +56,11 @@ def format_session_dict(session: AIInteraction, include_summary: bool = True) ->
         "working_directory": session.working_directory,
         "files_mentioned": session.files_list,
         "related_commit_id": session.related_commit_id,
+        # Session organization (v7)
+        "title": session.title,
+        "tags": session.tags_list if session.tags else [],
+        "parent_session_id": session.parent_session_id,
+        "related_session_ids": session.related_sessions_list if session.related_session_ids else [],
     }
 
     if include_summary:
