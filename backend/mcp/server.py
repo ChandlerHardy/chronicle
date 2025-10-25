@@ -7,8 +7,7 @@ to query Chronicle's database of development sessions, commits, and summaries.
 import os
 import json
 from datetime import datetime, timedelta
-from typing import Optional, List, Dict, Any
-from pathlib import Path
+from typing import Optional, Dict, Any
 
 from fastmcp import FastMCP
 from sqlalchemy import desc, or_, and_
@@ -18,8 +17,6 @@ from backend.database.models import (
     init_db,
     AIInteraction,
     Commit,
-    DailySummary,
-    SessionSummaryChunk,
     ProjectMilestone,
     NextStep,
 )
@@ -143,20 +140,9 @@ def get_session_summary(session_id: int) -> str:
         result["transcript_path"] = transcript_path
         result["transcript_exists"] = os.path.exists(transcript_path)
 
-    # Add chunked summaries if available
-    chunks = db.query(SessionSummaryChunk).filter(
-        SessionSummaryChunk.session_id == session_id
-    ).order_by(SessionSummaryChunk.chunk_number).all()
-
-    if chunks:
-        result["chunked_summaries"] = [
-            {
-                "chunk_number": c.chunk_number,
-                "lines": f"{c.chunk_start_line}-{c.chunk_end_line}",
-                "summary": c.chunk_summary,
-            }
-            for c in chunks
-        ]
+    # Note: Chunked summaries are implementation details for resume capability.
+    # The final summary is already included in result["summary"].
+    # To view chunks for debugging: SELECT * FROM session_summary_chunks WHERE session_id=X
 
     return json.dumps(result, indent=2)
 
