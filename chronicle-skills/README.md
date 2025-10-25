@@ -4,6 +4,19 @@ This directory contains [Claude Skills](https://support.claude.com/en/articles/1
 
 ## Available Skills
 
+### ⚡ chronicle-assistant-guide
+**Purpose:** Universal AI assistant directives for using Chronicle across ALL projects
+
+**LOAD THIS FIRST!** Provides:
+- Pre-flight checklist (search first, use MCP, check roadmap)
+- Real examples of time saved by searching first (2,700x ROI!)
+- MCP tool reference
+- Best practices and common workflows
+
+**Use when:** Always! This skill should be loaded in every Chronicle-enabled project.
+
+**Key benefit:** Project-agnostic - works across all repos with Chronicle MCP configured. No need to duplicate directives in each project's CLAUDE.md.
+
 ### 📝 chronicle-session-documenter
 **Purpose:** Document development sessions to Obsidian vault
 
@@ -65,7 +78,12 @@ Use Chronicle's built-in project tracking to:
 
 ### Option 2: Individual Skills
 
-Load specific skills as needed:
+**Recommended: Load the assistant guide first**
+```
+/skill add /path/to/chronicle/chronicle-skills/chronicle-assistant-guide
+```
+
+Then load specific skills as needed:
 ```
 /skill add /path/to/chronicle/chronicle-skills/chronicle-session-documenter
 /skill add /path/to/chronicle/chronicle-skills/chronicle-context-retriever

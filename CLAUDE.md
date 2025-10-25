@@ -1,115 +1,48 @@
 # Chronicle - AI Assistant Guide
 
-> **Purpose**: This document tells AI assistants how to use Chronicle effectively.
+> **Purpose**: Project-specific guidance for working on Chronicle itself
+> **For Chronicle usage directives**: See `chronicle-assistant-guide` skill (universal, works in all projects)
 > **For project history**: See [DEVELOPMENT_HISTORY.md](./DEVELOPMENT_HISTORY.md)
 > **For users**: See [README.md](./README.md)
 
 ---
 
-## ⚡ CRITICAL: Pre-Flight Checklist
+## 📌 IMPORTANT: Load the Chronicle Assistant Guide Skill
 
-**Before starting ANY Chronicle-related task, run through this checklist:**
+**Before working on Chronicle, load the universal skill:**
+```
+/skill add chronicle-skills/chronicle-assistant-guide
+```
 
-1. ✅ **SEARCH FIRST**: `mcp__chronicle__search_sessions(query="relevant keywords", limit=5)`
-   - Has this been done before?
-   - What context exists about this feature/issue?
-   - What approaches failed or succeeded?
+This skill contains:
+- ⚡ Pre-flight checklist (search first, use MCP, check roadmap)
+- 🎯 Core directives with real examples
+- 📚 MCP tools reference
+- 🔄 Typical workflows
 
-2. ✅ **Check Skills**: Is there a Chronicle skill for this task?
-   - `chronicle-workflow` - Session workflow guidance
-   - `chronicle-session-documenter` - Document to Obsidian
-   - `chronicle-context-retriever` - Search past work
-   - `chronicle-project-tracker` - Roadmap and milestones
-
-3. ✅ **Use MCP, not CLI**: Query database directly with MCP tools
-   - Fast (<10ms vs >100ms for CLI)
-   - Returns structured JSON
-   - No subprocess overhead
-
-4. ✅ **Check roadmap**: `mcp__chronicle__get_roadmap(days=7)`
-   - Is this already tracked as a milestone?
-   - Are there related next steps?
-
-**Why this matters:** Chronicle dogfoods itself. Every mistake we make is recorded. Learn from history!
+**Why separate?** The `chronicle-assistant-guide` skill works across ALL projects with Chronicle MCP. This CLAUDE.md file contains Chronicle-the-project-specific context.
 
 ---
 
-## 🎯 Core Directives
+## 🔧 Project-Specific Context
 
-### 1. Check Chronicle History Before Implementing
+### Working on Chronicle Itself
 
-**ALWAYS search Chronicle before implementing or modifying features:**
+**Chronicle is meta:** It tracks its own development. This means:
+- Every session is recorded
+- Every mistake is in the database
+- Search first to avoid repeating work!
 
-```python
-# Before implementing transcript cleaning:
-mcp__chronicle__search_sessions(query="transcript clean", limit=5)
-
-# Before adding new summarization logic:
-mcp__chronicle__search_sessions(query="summarization", limit=5)
-
-# When user questions something ("why isn't X working?"):
-mcp__chronicle__search_sessions(query="X feature", limit=5)
-```
-
-**Why:** Chronicle tracks ALL past work. Searching takes <1s and prevents:
-- ❌ Reimplementing existing features
-- ❌ Breaking working code unknowingly
-- ❌ Missing context about WHY decisions were made
-- ❌ Wasting time on already-solved problems
-
-**When to search:**
-- User says "I can't believe..." or "why isn't..." → Search first!
-- Before adding any new feature → Check if it exists
-- When debugging → Check past sessions for similar issues
-- When confused about architecture → Search for design decisions
-
-**Real examples from Chronicle's own history:**
-
-**Example 1: Session 21 transcript cleaning confusion**
-```
-User: "I can't believe there's no cleaning to be done on session 21"
-❌ Without search: Spent time debugging, confused why 0% reduction
-✅ With search: Would have found Session 13 implemented transcript cleaning
-→ Result: Immediately understood cleaning happens at storage time
-→ Time saved: 15+ minutes of debugging
-```
-
-**Example 2: Sessions 30 & 31 - Duplicate MCP optimization**
-```
-Session 30 (Oct 24): Fixed MCP response size by excluding summaries from get_sessions()
-Session 31 (Oct 24): SAME issue - MCP responses too large, same fix needed
-
-❌ What happened: Session 31 didn't search for "MCP response size"
-✅ What should have happened: Search finds Session 30's solution immediately
-→ Result: Could have referenced Session 30's approach instead of rediscovering
-→ Time saved: 10+ minutes of diagnosis and implementation
-```
-
-**Example 3: Skill documentation update (Session 32)**
-```
-Task: Update chronicle-session-documenter skill with MCP tool instructions
-❌ What I did: Jumped straight to editing SKILL.md without searching
-✅ What I should have done: Search "skill documentation update" first
-→ Result: Might have found context about skill format standards
-→ Lesson: Even when search finds nothing, the habit prevents future mistakes
-```
-
-**The Pattern:** Chronicle is meta - it tracks building Chronicle. These examples are REAL and recorded in the database. Search before implementing!
-
-**Cost Calculator:**
-```
-Time to search:        <1 second
-Time saved (average):  10-20 minutes per incident
-Incidents so far:      3+ documented cases
-Total time wasted:     ~45+ minutes that could have been saved
-Cost of skipping:      45 minutes / 1 second = 2,700x ROI on searching!
-```
-
-**Make it a reflex:** The 1-second search is ALWAYS worth it. No exceptions.
+**Key differences when working on Chronicle vs using Chronicle:**
+1. **Test with Chronicle:** Use `chronicle start claude` to track your work
+2. **Dogfooding:** The tool must work well for its own development
+3. **MCP server needs restart:** After changing `backend/mcp/server.py`, restart Claude Code
 
 ---
 
-### 2. ALWAYS Use MCP Tools (Never CLI)
+## 🎯 Quick Reference for Chronicle Development
+
+### ALWAYS Use MCP Tools (Never CLI)
 
 **When working with Chronicle data, ALWAYS use MCP tools or Skills, NEVER use CLI commands.**
 
