@@ -6,6 +6,34 @@
 
 ---
 
+## ⚡ CRITICAL: Pre-Flight Checklist
+
+**Before starting ANY Chronicle-related task, run through this checklist:**
+
+1. ✅ **SEARCH FIRST**: `mcp__chronicle__search_sessions(query="relevant keywords", limit=5)`
+   - Has this been done before?
+   - What context exists about this feature/issue?
+   - What approaches failed or succeeded?
+
+2. ✅ **Check Skills**: Is there a Chronicle skill for this task?
+   - `chronicle-workflow` - Session workflow guidance
+   - `chronicle-session-documenter` - Document to Obsidian
+   - `chronicle-context-retriever` - Search past work
+   - `chronicle-project-tracker` - Roadmap and milestones
+
+3. ✅ **Use MCP, not CLI**: Query database directly with MCP tools
+   - Fast (<10ms vs >100ms for CLI)
+   - Returns structured JSON
+   - No subprocess overhead
+
+4. ✅ **Check roadmap**: `mcp__chronicle__get_roadmap(days=7)`
+   - Is this already tracked as a milestone?
+   - Are there related next steps?
+
+**Why this matters:** Chronicle dogfoods itself. Every mistake we make is recorded. Learn from history!
+
+---
+
 ## 🎯 Core Directives
 
 ### 1. Check Chronicle History Before Implementing
@@ -35,13 +63,51 @@ mcp__chronicle__search_sessions(query="X feature", limit=5)
 - When debugging → Check past sessions for similar issues
 - When confused about architecture → Search for design decisions
 
-**Real example from Session 21:**
+**Real examples from Chronicle's own history:**
+
+**Example 1: Session 21 transcript cleaning confusion**
 ```
 User: "I can't believe there's no cleaning to be done on session 21"
 ❌ Without search: Spent time debugging, confused why 0% reduction
 ✅ With search: Would have found Session 13 implemented transcript cleaning
 → Result: Immediately understood cleaning happens at storage time
+→ Time saved: 15+ minutes of debugging
 ```
+
+**Example 2: Sessions 30 & 31 - Duplicate MCP optimization**
+```
+Session 30 (Oct 24): Fixed MCP response size by excluding summaries from get_sessions()
+Session 31 (Oct 24): SAME issue - MCP responses too large, same fix needed
+
+❌ What happened: Session 31 didn't search for "MCP response size"
+✅ What should have happened: Search finds Session 30's solution immediately
+→ Result: Could have referenced Session 30's approach instead of rediscovering
+→ Time saved: 10+ minutes of diagnosis and implementation
+```
+
+**Example 3: Skill documentation update (Session 32)**
+```
+Task: Update chronicle-session-documenter skill with MCP tool instructions
+❌ What I did: Jumped straight to editing SKILL.md without searching
+✅ What I should have done: Search "skill documentation update" first
+→ Result: Might have found context about skill format standards
+→ Lesson: Even when search finds nothing, the habit prevents future mistakes
+```
+
+**The Pattern:** Chronicle is meta - it tracks building Chronicle. These examples are REAL and recorded in the database. Search before implementing!
+
+**Cost Calculator:**
+```
+Time to search:        <1 second
+Time saved (average):  10-20 minutes per incident
+Incidents so far:      3+ documented cases
+Total time wasted:     ~45+ minutes that could have been saved
+Cost of skipping:      45 minutes / 1 second = 2,700x ROI on searching!
+```
+
+**Make it a reflex:** The 1-second search is ALWAYS worth it. No exceptions.
+
+---
 
 ### 2. ALWAYS Use MCP Tools (Never CLI)
 
