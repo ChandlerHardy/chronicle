@@ -641,6 +641,195 @@ def tag_session(session_id: int, tags: str, add: bool = False, remove: bool = Fa
     db_session.close()
 
 
+@cli.command("auto-title")
+@click.argument('session_id', type=int)
+def auto_title(session_id: int):
+    """Generate a descriptive title from session summary using AI.
+
+    Examples:
+        chronicle auto-title 32                 # Generate title for session 32
+    """
+    from backend.services.summarizer import Summarizer
+    import google.generativeai as genai
+
+    db_session = get_session()
+
+    # Find session
+    session = db_session.query(AIInteraction).filter_by(id=session_id).first()
+
+    if not session:
+        console.print(f"[red]✗[/red] Session {session_id} not found")
+        db_session.close()
+        return
+
+    # Check if summary exists
+    if not session.summary_generated or not session.response_summary:
+        console.print(f"[yellow]Session {session_id} needs to be summarized first[/yellow]")
+        console.print(f"Run: [cyan]chronicle session {session_id}[/cyan]")
+        db_session.close()
+        return
+
+    # Use Gemini to generate title
+    console.print(f"[cyan]Generating title for session {session_id}...[/cyan]")
+
+    try:
+        from backend.core.config import get_config
+        config = get_config()
+        api_key = config.get("ai.gemini_api_key")
+
+        if not api_key:
+            console.print("[red]✗[/red] Gemini API key not configured")
+            console.print("Set it with: [cyan]chronicle config ai.gemini_api_key YOUR_KEY[/cyan]")
+            db_session.close()
+            return
+
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel('gemini-2.0-flash-exp')
+
+        prompt = f"""Based on this development session summary, generate a concise, descriptive title (max 60 characters).
+
+The title should capture the main accomplishment or focus of the session.
+
+Examples of good titles:
+- "MCP Response Optimization"
+- "Session Organization Feature Implementation"
+- "Fix Authentication Bug in Login Flow"
+- "Add Markdown Export Functionality"
+
+Session summary:
+{session.response_summary[:2000]}
+
+Generate ONLY the title, nothing else:"""
+
+        response = model.generate_content(prompt)
+        generated_title = response.text.strip().strip('"').strip("'")
+
+        # Truncate if needed
+        if len(generated_title) > 60:
+            generated_title = generated_title[:57] + "..."
+
+        # Update session
+        old_title = session.title or "(no title)"
+        session.title = generated_title
+        db_session.commit()
+
+        console.print(f"[green]✓[/green] Generated title for session {session_id}")
+        console.print(f"  [dim]Old:[/dim] {old_title}")
+        console.print(f"  [dim]New:[/dim] {generated_title}")
+
+    except Exception as e:
+        console.print(f"[red]✗[/red] Error generating title: {e}")
+
+    db_session.close()
+
+
+@cli.command()
+@click.option('--sessions', 'session_range', type=str, help='Session range (e.g., "28-32" or "30,31,32")')
+@click.option('--repo', type=str, help='Filter by repository')
+@click.option('--days', type=int, help='Show sessions from last N days')
+def graph(session_range: str = None, repo: str = None, days: int = None):
+    """Visualize session relationships and connections.
+
+    Examples:
+        chronicle graph --sessions 28-32          # Graph sessions 28 through 32
+        chronicle graph --sessions 30,31,32       # Graph specific sessions
+        chronicle graph --days 7                  # Graph last week's sessions
+        chronicle graph --repo /path/to/project   # Graph sessions for a repo
+    """
+    from rich.tree import Tree
+    from rich.panel import Panel
+
+    db_session = get_session()
+
+    # Determine which sessions to graph
+    sessions_query = db_session.query(AIInteraction).filter_by(is_session=1)
+
+    if session_range:
+        # Parse range
+        if '-' in session_range:
+            start, end = map(int, session_range.split('-'))
+            session_ids = list(range(start, end + 1))
+        else:
+            session_ids = [int(sid.strip()) for sid in session_range.split(',')]
+        sessions_query = sessions_query.filter(AIInteraction.id.in_(session_ids))
+    elif days:
+        from datetime import datetime, timedelta
+        cutoff = datetime.now() - timedelta(days=days)
+        sessions_query = sessions_query.filter(AIInteraction.timestamp >= cutoff)
+    elif repo:
+        sessions_query = sessions_query.filter(AIInteraction.repo_path == repo)
+    else:
+        # Default: last 10 sessions
+        sessions_query = sessions_query.order_by(AIInteraction.timestamp.desc()).limit(10)
+
+    sessions = sessions_query.order_by(AIInteraction.timestamp).all()
+
+    if not sessions:
+        console.print("[yellow]No sessions found[/yellow]")
+        db_session.close()
+        return
+
+    console.print("\n[bold cyan]Session Relationship Graph[/bold cyan]")
+    console.print("═" * 80)
+
+    # Build relationship map
+    session_map = {s.id: s for s in sessions}
+    roots = []  # Sessions with no parent in this set
+    children_map = {}  # parent_id -> [child sessions]
+
+    for session in sessions:
+        if session.parent_session_id and session.parent_session_id in session_map:
+            if session.parent_session_id not in children_map:
+                children_map[session.parent_session_id] = []
+            children_map[session.parent_session_id].append(session)
+        else:
+            roots.append(session)
+
+    def format_session_node(s):
+        """Format a session for display in tree."""
+        title = s.title or f"Session {s.id}"
+        duration = f"{s.duration_ms/60000:.1f}m" if s.duration_ms else "Active"
+        tags = s.tags_list if s.tags else []
+        tag_str = f" [{', '.join(tags[:2])}]" if tags else ""
+
+        # Check for related sessions
+        related = s.related_sessions_list if s.related_session_ids else []
+        related_str = ""
+        if related:
+            related_in_graph = [r for r in related if r in session_map]
+            if related_in_graph:
+                related_str = f" → Related: {', '.join(map(str, related_in_graph))}"
+
+        return f"[bold]{s.id}:[/bold] {title} [dim]({duration}){tag_str}{related_str}[/dim]"
+
+    def build_tree(parent_session, tree_node):
+        """Recursively build tree."""
+        if parent_session.id in children_map:
+            for child in children_map[parent_session.id]:
+                child_node = tree_node.add(format_session_node(child))
+                build_tree(child, child_node)
+
+    # Create tree visualization
+    if len(roots) == 1:
+        # Single root tree
+        tree = Tree(format_session_node(roots[0]))
+        build_tree(roots[0], tree)
+        console.print(tree)
+    else:
+        # Multiple root trees or flat list
+        for root in roots:
+            tree = Tree(format_session_node(root))
+            build_tree(root, tree)
+            console.print(tree)
+            console.print()
+
+    # Show summary
+    linked_count = sum(1 for s in sessions if s.parent_session_id or s.related_session_ids)
+    console.print(f"\n[dim]{len(sessions)} sessions shown, {linked_count} with relationships[/dim]")
+
+    db_session.close()
+
+
 @cli.command()
 @click.argument('key', required=False)
 @click.argument('value', required=False)
@@ -1491,9 +1680,18 @@ def next_step_complete(step_id: int):
 
 @cli.command()
 @click.argument('session_id', type=int)
-@click.option('--milestone', type=int, required=True, help='Milestone ID to link to')
-def link_session(session_id: int, milestone: int):
-    """Link a session to a milestone."""
+@click.option('--milestone', type=int, help='Milestone ID to link to')
+@click.option('--continues-from', 'parent_id', type=int, help='Mark as continuation of this session')
+@click.option('--related-to', 'related_ids', type=str, help='Comma-separated related session IDs')
+def link_session(session_id: int, milestone: int = None, parent_id: int = None, related_ids: str = None):
+    """Link a session to milestones or other sessions.
+
+    Examples:
+        chronicle link-session 32 --milestone 3             # Link to milestone
+        chronicle link-session 32 --continues-from 31       # Session 32 continues 31
+        chronicle link-session 32 --related-to 30,31        # Related to 30 and 31
+        chronicle link-session 32 --milestone 3 --related-to 30   # Multiple links
+    """
     db_session = get_session()
 
     # Get session
@@ -1503,23 +1701,69 @@ def link_session(session_id: int, milestone: int):
         db_session.close()
         return
 
-    # Get milestone
-    milestone_obj = db_session.query(ProjectMilestone).filter_by(id=milestone).first()
-    if not milestone_obj:
-        console.print(f"[red]Error:[/red] Milestone #{milestone} not found")
+    changes = []
+
+    # Link to milestone
+    if milestone is not None:
+        milestone_obj = db_session.query(ProjectMilestone).filter_by(id=milestone).first()
+        if not milestone_obj:
+            console.print(f"[red]Error:[/red] Milestone #{milestone} not found")
+            db_session.close()
+            return
+
+        # Add session to milestone's sessions list
+        sessions = milestone_obj.sessions_list or []
+        if session_id not in sessions:
+            sessions.append(session_id)
+            milestone_obj.sessions_list = sessions
+            changes.append(f"Milestone: {milestone_obj.title}")
+        else:
+            console.print(f"[yellow]Session #{session_id} already linked to milestone #{milestone}[/yellow]")
+
+    # Set parent session
+    if parent_id is not None:
+        parent = db_session.query(AIInteraction).filter_by(id=parent_id).first()
+        if not parent:
+            console.print(f"[red]✗[/red] Parent session {parent_id} not found")
+            db_session.close()
+            return
+
+        session.parent_session_id = parent_id
+        parent_title = parent.title or f"Session {parent_id}"
+        changes.append(f"Continues from: {parent_title}")
+
+    # Add related sessions
+    if related_ids is not None:
+        new_related = [int(rid.strip()) for rid in related_ids.split(',') if rid.strip()]
+
+        # Verify all exist
+        for rid in new_related:
+            related = db_session.query(AIInteraction).filter_by(id=rid).first()
+            if not related:
+                console.print(f"[red]✗[/red] Related session {rid} not found")
+                db_session.close()
+                return
+
+        # Merge with existing
+        current_related = session.related_sessions_list if session.related_session_ids else []
+        updated_related = current_related + [r for r in new_related if r not in current_related]
+        session.related_sessions_list = updated_related
+
+        changes.append(f"Related to: Sessions {', '.join(map(str, updated_related))}")
+
+    if not changes:
+        console.print("[yellow]No changes specified. Use --milestone, --continues-from, or --related-to[/yellow]")
         db_session.close()
         return
 
-    # Add session to milestone's sessions list
-    sessions = milestone_obj.sessions_list or []
-    if session_id not in sessions:
-        sessions.append(session_id)
-        milestone_obj.sessions_list = sessions
-        db_session.commit()
+    # Save all changes
+    db_session.commit()
 
-        console.print(f"[green]✓[/green] Linked session #{session_id} to milestone: {milestone_obj.title}")
-    else:
-        console.print(f"[yellow]Session #{session_id} already linked to milestone #{milestone}[/yellow]")
+    console.print(f"[green]✓[/green] Linked session #{session_id}")
+    if session.title:
+        console.print(f"  [dim]Title:[/dim] {session.title}")
+    for change in changes:
+        console.print(f"  [dim]{change}[/dim]")
 
     db_session.close()
 
