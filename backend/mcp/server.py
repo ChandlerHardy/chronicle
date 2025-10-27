@@ -59,6 +59,7 @@ def format_session_dict(session: AIInteraction, include_summary: bool = True) ->
         # Session organization (v7)
         "title": session.title,
         "tags": session.tags_list if session.tags else [],
+        "keywords": session.keywords_list if session.keywords else [],
         "parent_session_id": session.parent_session_id,
         "related_session_ids": session.related_sessions_list if session.related_session_ids else [],
     }
@@ -169,14 +170,16 @@ def search_sessions(
     limit: int = 10,
     search_summaries: bool = True,
     search_prompts: bool = True,
+    search_keywords: bool = True,
 ) -> str:
     """Search Chronicle sessions by keywords.
 
     Args:
-        query: Search query (searches summaries and prompts)
+        query: Search query (searches summaries, prompts, and keywords)
         limit: Maximum number of results (default: 10, max: 50)
         search_summaries: Search in AI-generated summaries (default: True)
         search_prompts: Search in session prompts/descriptions (default: True)
+        search_keywords: Search in AI-extracted keywords (default: True)
 
     Returns:
         JSON string with matching sessions
@@ -188,9 +191,12 @@ def search_sessions(
         filters.append(AIInteraction.response_summary.like(f"%{query}%"))
     if search_prompts:
         filters.append(AIInteraction.prompt.like(f"%{query}%"))
+    if search_keywords:
+        # Search keywords (stored as JSON array, so use LIKE on the JSON text)
+        filters.append(AIInteraction.keywords.like(f"%{query}%"))
 
     if not filters:
-        return json.dumps({"error": "Must search summaries or prompts"})
+        return json.dumps({"error": "Must search at least one field"})
 
     limit = min(limit, 50)
     sessions = db.query(AIInteraction).options(

@@ -277,6 +277,88 @@ class Summarizer:
         finally:
             db.close()
 
+    def extract_keywords(self, summary: str) -> list:
+        """Extract searchable keywords from a session summary.
+
+        Args:
+            summary: The session summary text
+
+        Returns:
+            List of 5-15 relevant keywords/phrases
+        """
+        if not summary or len(summary) < 50:
+            return []
+
+        prompt = f"""Extract 5-15 searchable keywords/phrases from this development session summary.
+
+REQUIREMENTS:
+- Focus on technical terms, technologies, features, and concepts
+- Include both single words and short phrases (2-3 words max)
+- Prioritize terms that would help find this session later
+- Avoid generic terms like "code", "session", "work", "implementation"
+- Include framework names, file types, API names, bug types, etc.
+
+EXAMPLES of good keywords:
+- "MCP server", "rate limiting", "Gemini API", "SQLite migration"
+- "authentication", "error handling", "database schema", "CSS styling"
+- "pytest", "React", "TypeScript", "git hooks", "CI/CD"
+
+Return ONLY a JSON array of strings, nothing else.
+
+Summary:
+{summary}
+
+Keywords (JSON array only):"""
+
+        try:
+            if self.provider == "gemini":
+                response = self.model.generate_content(prompt)
+                keywords_json = response.text.strip()
+                # Remove markdown code blocks if present
+                if keywords_json.startswith("```"):
+                    keywords_json = keywords_json.split("```")[1]
+                    if keywords_json.startswith("json"):
+                        keywords_json = keywords_json[4:]
+                keywords_json = keywords_json.strip()
+
+                import json
+                keywords = json.loads(keywords_json)
+
+                # Validate and clean
+                if isinstance(keywords, list):
+                    # Keep only strings, lowercase, limit to 15
+                    keywords = [str(k).lower().strip() for k in keywords if k]
+                    keywords = [k for k in keywords if len(k) > 2]  # Min 3 chars
+                    return keywords[:15]
+
+            elif self.provider == "ollama":
+                response = self.ollama_client.generate(
+                    model=self.model_name,
+                    prompt=prompt,
+                )
+                keywords_json = response['response'].strip()
+                # Remove markdown code blocks if present
+                if keywords_json.startswith("```"):
+                    keywords_json = keywords_json.split("```")[1]
+                    if keywords_json.startswith("json"):
+                        keywords_json = keywords_json[4:]
+                keywords_json = keywords_json.strip()
+
+                import json
+                keywords = json.loads(keywords_json)
+
+                # Validate and clean
+                if isinstance(keywords, list):
+                    keywords = [str(k).lower().strip() for k in keywords if k]
+                    keywords = [k for k in keywords if len(k) > 2]
+                    return keywords[:15]
+
+        except Exception as e:
+            print(f"⚠️  Keyword extraction failed: {e}")
+            return []
+
+        return []
+
     def summarize_session(self, transcript: str, max_length: int = 2000) -> Optional[str]:
         """Summarize a session transcript.
 
@@ -614,12 +696,17 @@ Summary:"""
                 print(f"✅ All {len(existing_chunks)} chunks already completed!")
                 cumulative_summary = existing_chunks[-1].cumulative_summary
 
-                # Update session record with final summary
+                # Update session record with final summary and keywords
                 if not session.summary_generated:
+                    print("  Extracting keywords from summary...")
+                    keywords = self.extract_keywords(cumulative_summary)
+                    print(f"  📌 Extracted {len(keywords)} keywords: {', '.join(keywords[:5])}...")
+
                     session.response_summary = cumulative_summary
+                    session.keywords_list = keywords
                     session.summary_generated = True
                     db_session.commit()
-                    print(f"✓ Updated session record with final summary")
+                    print(f"✓ Updated session record with final summary and keywords")
 
                 return cumulative_summary
 
@@ -817,13 +904,21 @@ Updated Summary:"""
                     time.sleep(delay)
                     print()
 
-        # Save final summary to the session
+        # Extract keywords from final summary
+        print()
+        print("  Extracting keywords from summary...")
+        keywords = self.extract_keywords(cumulative_summary)
+        print(f"  📌 Extracted {len(keywords)} keywords: {', '.join(keywords[:5])}...")
+
+        # Save final summary and keywords to the session
         session.response_summary = cumulative_summary
+        session.keywords_list = keywords
         session.summary_generated = True
         db_session.commit()
 
         print(f"✅ Session {session_id} fully summarized!")
         print(f"Final summary: {len(cumulative_summary)} characters")
+        print(f"Keywords: {', '.join(keywords)}")
         print(f"Saved {num_chunks} chunks to database")
 
         return cumulative_summary

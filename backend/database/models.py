@@ -70,6 +70,7 @@ class AIInteraction(Base):
     parent_session_id = Column(Integer, ForeignKey('ai_interactions.id'))  # Continues from this session
     related_session_ids = Column(Text)  # JSON array of related session IDs
     tags = Column(Text)  # JSON array of tags: ["optimization", "mcp", "performance"]
+    keywords = Column(Text)  # JSON array of AI-extracted keywords for searchability
 
     # Relationship
     commit = relationship("Commit", back_populates="ai_interactions")
@@ -112,6 +113,18 @@ class AIInteraction(Base):
     def related_sessions_list(self, value):
         """Set related_session_ids from a Python list."""
         self.related_session_ids = json.dumps(value) if value else None
+
+    @property
+    def keywords_list(self):
+        """Get keywords as a Python list."""
+        if self.keywords:
+            return json.loads(self.keywords)
+        return []
+
+    @keywords_list.setter
+    def keywords_list(self, value):
+        """Set keywords from a Python list."""
+        self.keywords = json.dumps(value) if value else None
 
 
 class SessionSummaryChunk(Base):

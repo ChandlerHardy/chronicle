@@ -369,6 +369,41 @@ def migrate_v6_to_v7(db_path: str = None):
     print("   Use 'chronicle rename-session' and 'chronicle tag-session' to organize sessions")
 
 
+def migrate_v7_to_v8(db_path: str = None):
+    """Migrate database from v7 to v8 (add keywords for searchability).
+
+    Adds keywords column to ai_interactions table for AI-extracted searchable keywords.
+    """
+    if db_path is None:
+        home = Path.home()
+        db_path = home / ".ai-session" / "sessions.db"
+
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+
+    # Check if column already exists
+    cursor.execute("PRAGMA table_info(ai_interactions)")
+    columns = [row[1] for row in cursor.fetchall()]
+
+    if 'keywords' in columns:
+        print("✅ Database is already at v8")
+        conn.close()
+        return
+
+    print(f"📝 Running migration to v8 (keywords support)...")
+
+    # Add keywords column
+    cursor.execute("ALTER TABLE ai_interactions ADD COLUMN keywords TEXT")
+    print(f"  - Adding column: keywords")
+
+    conn.commit()
+    conn.close()
+
+    print("✅ Migration to v8 complete!")
+    print("   New column: keywords (JSON array of AI-extracted search terms)")
+    print("   Keywords will be automatically extracted when sessions are summarized")
+
+
 if __name__ == "__main__":
     print("Running all migrations...")
     migrate_v1_to_v2()
@@ -377,3 +412,4 @@ if __name__ == "__main__":
     migrate_v4_to_v5()
     migrate_v5_to_v6()
     migrate_v6_to_v7()
+    migrate_v7_to_v8()

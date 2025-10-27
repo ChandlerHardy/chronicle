@@ -429,6 +429,15 @@ def format_session_detail(interaction: AIInteraction) -> None:
         # Render as markdown for better formatting
         md = Markdown(interaction.response_summary)
         console.print(md)
+
+        # Keywords (if available)
+        keywords = interaction.keywords_list
+        if keywords and len(keywords) > 0:
+            console.print()
+            console.print("[bold]Keywords:[/bold]", end=" ")
+            keyword_tags = " ".join([f"[cyan]#{kw}[/cyan]" for kw in keywords])
+            console.print(keyword_tags)
+
     elif interaction.is_session:
         console.print(f"\n[dim]No summary generated yet. Run this command again to generate one.[/dim]")
 
