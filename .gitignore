@@ -28,6 +28,8 @@ env/
 # IDE
 .vscode/
 .idea/
+.claude/      # Claude Code local settings and agents
+.factory/     # Factory Droid local configurations
 *.swp
 *.swo
 *~
