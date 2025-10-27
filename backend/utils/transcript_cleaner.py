@@ -146,7 +146,12 @@ def clean_transcript(transcript: str) -> str:
     # These are purely visual and waste massive space (can be 50% of transcript!)
     lines = cleaned.split('\n')
     cleaned_lines = []
-    spinner_chars = ['·', '✢', '✳', '✶', '✻', '✽']
+
+    # Claude Code spinner chars
+    claude_spinner_chars = ['·', '✢', '✳', '✶', '✻', '✽']
+
+    # Gemini/Qwen/Droid spinner chars (Unicode Braille patterns)
+    gemini_spinner_chars = ['⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
 
     for line in lines:
         stripped = line.strip()
@@ -157,10 +162,16 @@ def clean_transcript(transcript: str) -> str:
             # Line is >20 chars and uses only 1-2 unique characters = decorator
             continue
 
-        # Skip spinner lines (completely useless for summaries)
+        # Skip Claude Code spinner lines (completely useless for summaries)
         # Format: "· Osmosing… (esc to interrupt)" or "· Osmosing… (esc to interrupt · 6s · ↓ 66 tokens)"
-        is_spinner = any(stripped.startswith(spinner + ' ') for spinner in spinner_chars)
-        if is_spinner and 'esc to interrupt' in stripped:
+        is_claude_spinner = any(stripped.startswith(spinner + ' ') for spinner in claude_spinner_chars)
+        if is_claude_spinner and 'esc to interrupt' in stripped:
+            continue
+
+        # Skip Gemini/Qwen/Droid spinner lines
+        # Format: "⠙ Initializing..." or "⠦ Connecting to MCP servers... (1/3)"
+        is_gemini_spinner = any(stripped.startswith(spinner + ' ') for spinner in gemini_spinner_chars)
+        if is_gemini_spinner:
             continue
 
         # Skip empty prompts (just ">" or "> " with only whitespace after)
@@ -219,6 +230,56 @@ def clean_transcript(transcript: str) -> str:
 
         # Skip "Using chunked summarization" status messages
         if 'Using chunked summarization' in stripped:
+            continue
+
+        # Skip Gemini/Qwen/Droid decorative box borders
+        # These repeat thousands of times and add no value
+        # Patterns: ╭─────...─╮, ╰─────...─╯, │ ... │, │ ...
+        if stripped.startswith('╭') or stripped.startswith('╰'):
+            continue
+
+        # Skip lines starting with │ (box borders, even without ending │)
+        if stripped.startswith('│'):
+            inner = stripped[1:].strip()
+            # Skip if it's decorative UI elements
+            # Check for spinner inside box: │ ⠋ Waiting...
+            if any(inner.startswith(spinner) for spinner in gemini_spinner_chars):
+                continue
+            # Skip if it's an input prompt (including keystroke-by-keystroke typing)
+            # Examples: │ > Type..., │ > /, │ > /m, │ > /mcp
+            if inner.startswith('>'):
+                # Extract the actual content (remove ending │ if present)
+                actual_content = inner
+                if stripped.endswith('│'):
+                    actual_content = stripped[1:-1].strip()
+                # Skip if it's the input prompt template or short keystrokes
+                # Short inputs like "> /", "> /m" are keystroke redraws
+                if 'Type your message' in actual_content or len(actual_content) <= 50:
+                    continue
+            # Also skip MCP permission prompts and execution UI (multi-line UI boxes)
+            if any(keyword in inner for keyword in [
+                'Allow execution of MCP', 'Tool:', 'MCP Server:', 'suggest changes',
+                'Yes, allow once', 'Yes, always allow', 'No, suggest changes',
+                '?  get_', '⊶  get_', '✓  get_',  # MCP tool execution indicators
+                '?  search_', '⊶  search_', '✓  search_',
+                '?  mcp__', '⊶  mcp__', '✓  mcp__'
+            ]):
+                continue
+            # Skip autocomplete menus and other UI chrome
+            if any(keyword in inner for keyword in ['show version info', 'change the auth method', 'submit a bug report', 'Manage conversation']):
+                continue
+            # Skip "Waiting for auth" screens
+            if 'Waiting for auth' in inner or 'Press ESC or CTRL+C to cancel' in inner:
+                continue
+
+        # Skip Gemini status lines (repeat constantly during UI redraws)
+        # Format: "Using: N open files (ctrl+g to view) | ..."
+        if 'Using:' in stripped and 'open files' in stripped and 'ctrl+' in stripped:
+            continue
+
+        # Skip Gemini status bar (repo path, sandbox status, model name)
+        # Format: "~/repos/chronicle (main*)    no sandbox (see /docs)    gemini-2.5-pro (100% context left)"
+        if '(main' in stripped and 'sandbox' in stripped and '% context left' in stripped:
             continue
 
         cleaned_lines.append(line)
