@@ -521,6 +521,45 @@ Claude: [Automatically uses chronicle-session-documenter skill]
 
 ---
 
+### 🤖 Intelligent Agents (Cross-Platform)
+
+Chronicle includes two **specialized agents** that proactively enforce best practices. Unlike skills (Claude Code only), **agent prompts work across platforms** - adaptable for Cursor, Windsurf, and other AI assistants.
+
+**Available Agents:**
+
+1. **Chronicle Advocate Agent**
+   - Reminds to search Chronicle before implementing (2,700x ROI!)
+   - Checks if session is being tracked
+   - Enforces MCP usage over slow CLI commands
+   - Suggests organizing sessions with titles/tags
+   - Prevents repeating work from past sessions
+
+2. **TDD Advocate Agent**
+   - Encourages test-driven development workflow
+   - Reminds to write tests before implementation
+   - Runs pytest after code changes
+   - Ensures all tests pass before commits
+   - Celebrates test successes ✅
+
+**Setup (Claude Code):**
+```bash
+# Use the /agents command in Claude Code
+/agents
+# Select "Create new agent"
+# Copy prompts from AGENTS.md
+# Restart Claude Code to activate
+```
+
+**Key Advantage:** Agent prompts are portable! The same prompt works in:
+- Claude Code (via `/agents`)
+- Cursor (via `.cursorrules`)
+- Windsurf (via project config)
+- Any AI tool with custom instructions
+
+**Documentation:** See **[AGENTS.md](AGENTS.md)** for full prompts and cross-platform setup.
+
+---
+
 ### 📝 Obsidian Integration (Optional)
 
 Export Chronicle sessions to Obsidian for visual knowledge graphs and bidirectional linking.
@@ -1024,6 +1063,7 @@ MIT License - see [LICENSE](LICENSE)
 
 ## 📚 Documentation
 
+- **[AGENTS.md](AGENTS.md)** - Chronicle Advocate & TDD Advocate agents (cross-platform)
 - **[MCP_SERVER.md](MCP_SERVER.md)** - Chronicle MCP server guide (setup, tools, examples)
 - **[CLAUDE.md](CLAUDE.md)** - Development context for AI assistants
 - [Project Specification](AI_SESSION_RECORDER_SPEC.md) - Full specification and roadmap
