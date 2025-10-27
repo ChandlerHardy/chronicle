@@ -442,3 +442,51 @@ def format_session_detail(interaction: AIInteraction) -> None:
             console.print(f"  [dim]... and {len(files) - 10} more files[/dim]")
 
     console.print()
+
+
+def print_chronicle_banner(session_id: int, tool: str) -> None:
+    """Print Chronicle ASCII art banner on session start.
+
+    Args:
+        session_id: The session ID being started
+        tool: The tool being launched (claude, gemini, etc.)
+    """
+    # ASCII art banner
+    banner = """
+ ███            ██████╗██╗  ██╗██████╗  ██████╗ ███╗   ██╗██╗ ██████╗██╗     ███████╗
+░░░███         ██╔════╝██║  ██║██╔══██╗██╔═══██╗████╗  ██║██║██╔════╝██║     ██╔════╝
+  ░░░███       ██║     ███████║██████╔╝██║   ██║██╔██╗ ██║██║██║     ██║     █████╗
+    ░░░███     ██║     ██╔══██║██╔══██╗██║   ██║██║╚██╗██║██║██║     ██║     ██╔══╝
+     ███░      ╚██████╗██║  ██║██║  ██║╚██████╔╝██║ ╚████║██║╚██████╗███████╗███████╗
+   ███░         ╚═════╝╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═══╝╚═╝ ╚═════╝╚══════╝╚══════╝
+ ███░
+░░░                 ███████╗████████╗ █████╗ ██████╗ ████████╗
+                    ██╔════╝╚══██╔══╝██╔══██╗██╔══██╗╚══██╔══╝
+                    ███████╗   ██║   ███████║██████╔╝   ██║
+                    ╚════██║   ██║   ██╔══██║██╔══██╗   ██║
+                    ███████║   ██║   ██║  ██║██║  ██║   ██║
+                    ╚══════╝   ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝
+"""
+
+    # Print banner in cyan color
+    console.print(banner, style="cyan")
+
+    # Print session info
+    console.print(f"[bold cyan]Session #{session_id}[/bold cyan] [dim]•[/dim] [bold]{tool.title()}[/bold]")
+    console.print("[dim]Tracking all activity...[/dim]\n")
+
+
+def print_quit_banner() -> None:
+    """Print /quit ASCII art banner on session end."""
+    # ASCII art banner for /quit
+    banner = """
+                ██╗ ██████╗ ██╗   ██╗██╗████████╗
+               ██╔╝██╔═══██╗██║   ██║██║╚══██╔══╝
+              ██╔╝ ██║   ██║██║   ██║██║   ██║
+             ██╔╝  ██║▄▄ ██║██║   ██║██║   ██║
+            ██╔╝   ╚██████╔╝╚██████╔╝██║   ██║
+            ╚═╝     ╚══▀▀═╝  ╚═════╝ ╚═╝   ╚═╝
+"""
+
+    # Print banner in dim gray color
+    console.print(banner, style="dim")

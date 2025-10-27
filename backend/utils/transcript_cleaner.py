@@ -282,6 +282,21 @@ def clean_transcript(transcript: str) -> str:
         if '(main' in stripped and 'sandbox' in stripped and '% context left' in stripped:
             continue
 
+        # Skip Droid status bar (mode, model name)
+        # Format: "Auto (Low) - edits and read-only commands  shift+tab cycles ... Droid Core (GLM-4.6)"
+        if 'Auto (' in stripped and 'shift+tab cycles' in stripped and 'Droid Core' in stripped:
+            continue
+
+        # Skip Droid help/status line
+        # Format: " ? for help ... IDE ◌ | MCP ◌" or "[⏱ 11s] ? for help ... settings.json •"
+        if stripped.startswith('? for help') or '] ? for help' in stripped:
+            continue
+
+        # Skip Droid navigation hints
+        # Format: "Use ↑↓ to navigate, Tab/Enter to select, Esc to cancel"
+        if 'Use ↑↓ to navigate' in stripped or 'Tab/Enter to select' in stripped:
+            continue
+
         cleaned_lines.append(line)
     cleaned = '\n'.join(cleaned_lines)
 

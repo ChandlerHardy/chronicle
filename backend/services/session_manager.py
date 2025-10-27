@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from backend.database.models import AIInteraction
 from backend.utils.transcript_cleaner import clean_transcript
+from backend.cli.formatters import print_chronicle_banner, print_quit_banner
 
 
 class SessionManager:
@@ -73,9 +74,8 @@ class SessionManager:
         }
         self._save_metadata(session_id, metadata)
 
-        print(f"🎯 Chronicle session #{session_id} started - tracking all activity")
-        print(f"Launching {tool}...")
-        print()
+        # Print ASCII art banner
+        print_chronicle_banner(session_id, tool)
 
         # Launch the tool with script to capture output
         # Using -q for quiet (no start/stop messages)
@@ -138,6 +138,9 @@ class SessionManager:
             session.prompt = f"Interactive session ({duration_ms / 1000 / 60:.1f}m)"
             self.db.commit()
 
+        # Print quit banner
+        print()
+        print_quit_banner()
         print()
         print(f"📊 Session #{session_id} complete! Duration: {duration_ms / 1000 / 60:.1f} minutes")
         print(f"🧹 Cleaned transcript: {original_size:,} → {cleaned_size:,} chars ({reduction:.1f}% reduction)")

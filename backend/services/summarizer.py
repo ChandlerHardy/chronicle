@@ -610,9 +610,18 @@ Summary:"""
                 else:
                     print(f"🔄 Starting from chunk 1/{num_chunks} (no previous chunks found)")
             else:
-                # All chunks complete
+                # All chunks complete - update session record if not already done
                 print(f"✅ All {len(existing_chunks)} chunks already completed!")
-                return existing_chunks[-1].cumulative_summary
+                cumulative_summary = existing_chunks[-1].cumulative_summary
+
+                # Update session record with final summary
+                if not session.summary_generated:
+                    session.response_summary = cumulative_summary
+                    session.summary_generated = True
+                    db_session.commit()
+                    print(f"✓ Updated session record with final summary")
+
+                return cumulative_summary
 
         print()
 
