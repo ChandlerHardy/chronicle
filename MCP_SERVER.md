@@ -246,6 +246,293 @@ Get Chronicle usage statistics.
 - Unique repositories
 - Sessions per AI tool
 
+---
+
+### `get_milestones`
+
+Get project milestones with filtering options.
+
+**Parameters:**
+- `status` (str, optional): Filter by status (planned, in_progress, completed, archived)
+- `milestone_type` (str, optional): Filter by type (feature, bugfix, optimization, documentation)
+- `limit` (int, optional): Maximum number of milestones (default: 20, max: 100)
+
+**Example:**
+```json
+{
+  "status": "in_progress",
+  "limit": 10
+}
+```
+
+**Returns:** JSON array of milestones with titles, descriptions, and related sessions/commits.
+
+---
+
+### `get_milestone`
+
+Get detailed information about a specific milestone.
+
+**Parameters:**
+- `milestone_id` (int, required): The milestone ID
+
+**Example:**
+```json
+{
+  "milestone_id": 1
+}
+```
+
+**Returns:** Milestone details including linked sessions and commits.
+
+---
+
+### `get_next_steps`
+
+Get next steps / TODO items.
+
+**Parameters:**
+- `completed` (bool, optional): Filter by completion status (true = completed, false = pending, null = all)
+- `milestone_id` (int, optional): Filter by related milestone ID
+- `limit` (int, optional): Maximum number of items (default: 20, max: 100)
+
+**Example:**
+```json
+{
+  "completed": false,
+  "milestone_id": 1,
+  "limit": 10
+}
+```
+
+**Returns:** JSON array of next steps with priorities and categories.
+
+---
+
+### `get_roadmap`
+
+Get project roadmap showing current progress and planned work.
+
+**Parameters:**
+- `days` (int, optional): Number of days to look back for recent completions (default: 7)
+
+**Example:**
+```json
+{
+  "days": 7
+}
+```
+
+**Returns:** Roadmap summary with in-progress milestones, recently completed items, and pending next steps.
+
+---
+
+### `create_milestone`
+
+Create a new project milestone.
+
+**Parameters:**
+- `title` (str, required): Title of the milestone
+- `description` (str, optional): Detailed description
+- `milestone_type` (str, optional): Type (feature, bugfix, optimization, documentation) - default: "feature"
+- `priority` (int, optional): Priority (1=highest, 5=lowest) - default: 3
+- `tags` (str, optional): Comma-separated tags (e.g., "phase-4,mcp,obsidian")
+
+**Example:**
+```json
+{
+  "title": "Add export functionality",
+  "description": "Export sessions to markdown and PDF formats",
+  "milestone_type": "feature",
+  "priority": 2,
+  "tags": "phase-7,export,documentation"
+}
+```
+
+**Returns:** JSON with created milestone ID and details.
+
+---
+
+### `create_next_step`
+
+Create a new next step / TODO item.
+
+**Parameters:**
+- `description` (str, required): Description of the next step
+- `priority` (int, optional): Priority (1=highest, 5=lowest) - default: 3
+- `effort` (str, optional): Estimated effort (small, medium, large)
+- `category` (str, optional): Category (feature, optimization, fix, docs) - default: "feature"
+- `milestone_id` (int, optional): Link to milestone ID
+
+**Example:**
+```json
+{
+  "description": "Add unit tests for MCP export functions",
+  "priority": 2,
+  "effort": "medium",
+  "category": "docs",
+  "milestone_id": 4
+}
+```
+
+**Returns:** JSON with created next step ID and details.
+
+---
+
+### `update_milestone_status`
+
+Update the status of a milestone.
+
+**Parameters:**
+- `milestone_id` (int, required): The milestone ID
+- `new_status` (str, required): New status (planned, in_progress, completed, archived)
+
+**Example:**
+```json
+{
+  "milestone_id": 1,
+  "new_status": "completed"
+}
+```
+
+**Returns:** JSON with update result.
+
+---
+
+### `complete_next_step`
+
+Mark a next step as completed.
+
+**Parameters:**
+- `step_id` (int, required): The next step ID
+
+**Example:**
+```json
+{
+  "step_id": 5
+}
+```
+
+**Returns:** JSON with completion timestamp and details.
+
+---
+
+### `update_milestone`
+
+Update an existing milestone's details.
+
+**Parameters:**
+- `milestone_id` (int, required): The milestone ID to update
+- `title` (str, optional): New title
+- `description` (str, optional): New description
+- `milestone_type` (str, optional): New type (feature, bugfix, optimization, documentation)
+- `priority` (int, optional): New priority (1=highest, 5=lowest)
+- `tags` (str, optional): New comma-separated tags (replaces existing tags)
+
+**Example:**
+```json
+{
+  "milestone_id": 2,
+  "title": "Enhanced Export Functionality",
+  "priority": 1,
+  "tags": "phase-7,export,high-priority"
+}
+```
+
+**Returns:** JSON with updated milestone details.
+
+---
+
+### `update_next_step`
+
+Update an existing next step's details.
+
+**Parameters:**
+- `step_id` (int, required): The next step ID to update
+- `description` (str, optional): New description
+- `priority` (int, optional): New priority (1=highest, 5=lowest)
+- `effort` (str, optional): New estimated effort (small, medium, large)
+- `category` (str, optional): New category (feature, optimization, fix, docs)
+- `milestone_id` (int, optional): New milestone ID to link to (use -1 to unlink)
+
+**Example:**
+```json
+{
+  "step_id": 8,
+  "priority": 1,
+  "effort": "large",
+  "milestone_id": 3
+}
+```
+
+**Returns:** JSON with updated next step details.
+
+---
+
+### `delete_milestone`
+
+Delete a milestone (requires confirmation).
+
+**Parameters:**
+- `milestone_id` (int, required): The milestone ID to delete
+- `confirm` (bool, required): Must be `true` to confirm deletion (safety check)
+
+**Example:**
+```json
+{
+  "milestone_id": 5,
+  "confirm": true
+}
+```
+
+**Returns:** JSON with deletion confirmation. Related next steps are automatically unlinked.
+
+**Warning:** This action cannot be undone. Related next steps will have their milestone link removed.
+
+---
+
+### `delete_next_step`
+
+Delete a next step (requires confirmation).
+
+**Parameters:**
+- `step_id` (int, required): The next step ID to delete
+- `confirm` (bool, required): Must be `true` to confirm deletion (safety check)
+
+**Example:**
+```json
+{
+  "step_id": 12,
+  "confirm": true
+}
+```
+
+**Returns:** JSON with deletion confirmation.
+
+**Warning:** This action cannot be undone.
+
+---
+
+### `uncomplete_next_step`
+
+Reopen a completed next step (mark as not completed).
+
+**Parameters:**
+- `step_id` (int, required): The next step ID to reopen
+
+**Example:**
+```json
+{
+  "step_id": 7
+}
+```
+
+**Returns:** JSON with update result.
+
+**Use case:** When a next step was marked complete prematurely or needs to be revisited.
+
+---
+
 ## Usage Examples
 
 ### Example 1: Finding Past Work

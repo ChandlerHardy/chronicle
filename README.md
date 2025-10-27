@@ -1,5 +1,9 @@
 # Chronicle - AI Session Recorder
 
+<p align="center">
+  <img src="public/chronicle_paragraph.png" alt="Chronicle - Local-first development session recorder with AI-powered search" width="800">
+</p>
+
 > **Give your AI assistants a memory. Track every decision, search past conversations, and never lose context across sessions.**
 
 [![Tests](https://img.shields.io/badge/tests-25%20passing-brightgreen)]()
@@ -439,17 +443,36 @@ The Chronicle MCP (Model Context Protocol) server allows **any MCP-compatible AI
 
 **Available MCP Tools:**
 
-The Chronicle MCP server provides 7 tools that AI assistants can use:
+The Chronicle MCP server provides 21 tools that AI assistants can use:
 
+**Session & Commit Queries:**
 | Tool | Purpose | Example |
 |------|---------|---------|
 | `get_sessions` | List recent sessions | "Show me sessions from this week" |
 | `get_session_summary` | Get session details | "What happened in session 15?" |
 | `search_sessions` | Search session content | "Find where we discussed authentication" |
+| `get_sessions_summaries` | Batch retrieve summaries | "Get summaries for sessions 5, 6, 7" |
 | `get_commits` | List git commits | "Show commits from the my-app repo" |
 | `search_commits` | Search commit messages | "Find bug fix commits" |
 | `get_timeline` | Combined view | "Show me today's work" |
 | `get_stats` | Usage statistics | "How much did I use AI tools this month?" |
+
+**Project Management (CRUD Operations):**
+| Tool | Purpose | Example |
+|------|---------|---------|
+| `get_milestones` | List milestones | "Show in-progress features" |
+| `get_milestone` | Get milestone details | "What's milestone 3 about?" |
+| `create_milestone` | Create new milestone | "Plan new authentication feature" |
+| `update_milestone` | Edit milestone | "Update priority to 1" |
+| `delete_milestone` | Remove milestone | "Delete test milestone" |
+| `update_milestone_status` | Change status | "Mark as completed" |
+| `get_next_steps` | List TODOs | "What should I work on?" |
+| `create_next_step` | Add TODO | "Create task to write tests" |
+| `update_next_step` | Edit TODO | "Change priority" |
+| `delete_next_step` | Remove TODO | "Delete obsolete task" |
+| `complete_next_step` | Mark done | "Mark step 5 as done" |
+| `uncomplete_next_step` | Reopen TODO | "Reopen completed task" |
+| `get_roadmap` | Project overview | "Show current roadmap" |
 
 **Real-World Example:**
 
@@ -776,9 +799,10 @@ pytest --cov=backend tests/
 - [x] Multi-project tracking and filtering
 
 ### ✅ Phase 4: MCP Server + AI Integration (COMPLETE)
-- [x] Chronicle MCP server with 7 query tools
+- [x] Chronicle MCP server with 21 tools (8 query + 13 project management)
+- [x] Full CRUD operations for milestones and next steps
 - [x] FastMCP framework integration
-- [x] Read-only database access for AI tools
+- [x] Read/write database access for AI tools
 - [x] Support for any MCP-compatible AI (Claude, ChatGPT, etc.)
 - [x] Obsidian MCP server integration
 - [x] Claude Skills marketplace integration
@@ -888,23 +912,42 @@ chronicle roadmap --days 30                            # Last 30 days
 
 #### MCP Tools (AI-Queryable)
 
-AI assistants can query project state via Chronicle MCP server:
+AI assistants can query and manage project state via Chronicle MCP server:
 
 ```python
-# Query what's in progress
+# Read Operations
 milestones = mcp__chronicle__get_milestones(status="in_progress")
-
-# Get roadmap summary
 roadmap = mcp__chronicle__get_roadmap(days=7)
-
-# Check next steps for a milestone
 steps = mcp__chronicle__get_next_steps(milestone_id=1, completed=False)
 
-# Update milestone status
+# Create Operations
+new_milestone = mcp__chronicle__create_milestone(
+    title="Add export feature",
+    description="Export sessions to PDF/Markdown",
+    milestone_type="feature",
+    priority=2,
+    tags="phase-7,export"
+)
+new_step = mcp__chronicle__create_next_step(
+    description="Write export logic",
+    priority=1,
+    effort="large",
+    category="feature",
+    milestone_id=4
+)
+
+# Update Operations
+mcp__chronicle__update_milestone(milestone_id=4, priority=1, tags="urgent,export")
+mcp__chronicle__update_next_step(step_id=12, effort="medium", category="optimization")
 mcp__chronicle__update_milestone_status(milestone_id=1, new_status="completed")
 
-# Complete a next step
+# Complete/Reopen
 mcp__chronicle__complete_next_step(step_id=5)
+mcp__chronicle__uncomplete_next_step(step_id=5)  # Reopen if needed
+
+# Delete Operations (with confirmation)
+mcp__chronicle__delete_next_step(step_id=99, confirm=True)
+mcp__chronicle__delete_milestone(milestone_id=99, confirm=True)
 ```
 
 **AI Use Cases:**

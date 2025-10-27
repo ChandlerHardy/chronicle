@@ -734,6 +734,390 @@ def complete_next_step(step_id: int) -> str:
     return json.dumps(result, indent=2)
 
 
+@mcp.tool()
+def create_next_step(
+    description: str,
+    priority: int = 3,
+    effort: Optional[str] = None,
+    category: str = "feature",
+    milestone_id: Optional[int] = None,
+) -> str:
+    """Create a new next step / TODO item.
+
+    Args:
+        description: Description of the next step
+        priority: Priority (1=highest, 5=lowest, default: 3)
+        effort: Estimated effort (small, medium, large)
+        category: Category (feature, optimization, fix, docs)
+        milestone_id: Optional milestone ID to link to
+
+    Returns:
+        JSON string with created next step details
+    """
+    db = get_db()
+
+    # Validate effort if provided
+    if effort and effort not in ["small", "medium", "large"]:
+        return json.dumps({"error": "Effort must be 'small', 'medium', or 'large'"}, indent=2)
+
+    # Validate category
+    if category not in ["feature", "optimization", "fix", "docs"]:
+        return json.dumps({"error": "Category must be 'feature', 'optimization', 'fix', or 'docs'"}, indent=2)
+
+    # Validate priority
+    if priority < 1 or priority > 5:
+        return json.dumps({"error": "Priority must be between 1 (highest) and 5 (lowest)"}, indent=2)
+
+    # Check if milestone exists (if provided)
+    if milestone_id:
+        milestone = db.query(ProjectMilestone).filter_by(id=milestone_id).first()
+        if not milestone:
+            return json.dumps({"error": f"Milestone #{milestone_id} not found"}, indent=2)
+
+    # Create next step
+    step = NextStep(
+        description=description,
+        priority=priority,
+        estimated_effort=effort,
+        category=category,
+        created_by="mcp",
+        related_milestone_id=milestone_id,
+    )
+
+    db.add(step)
+    db.commit()
+
+    result = {
+        "success": True,
+        "step_id": step.id,
+        "description": step.description,
+        "priority": step.priority,
+        "category": step.category,
+        "estimated_effort": step.estimated_effort,
+        "related_milestone_id": step.related_milestone_id,
+        "created_at": step.created_at.isoformat(),
+    }
+
+    return json.dumps(result, indent=2)
+
+
+@mcp.tool()
+def create_milestone(
+    title: str,
+    description: Optional[str] = None,
+    milestone_type: str = "feature",
+    priority: int = 3,
+    tags: Optional[str] = None,
+) -> str:
+    """Create a new project milestone.
+
+    Args:
+        title: Title of the milestone
+        description: Detailed description
+        milestone_type: Type (feature, bugfix, optimization, documentation)
+        priority: Priority (1=highest, 5=lowest, default: 3)
+        tags: Comma-separated tags (e.g., "phase-4,mcp,obsidian")
+
+    Returns:
+        JSON string with created milestone details
+    """
+    db = get_db()
+
+    # Validate milestone type
+    if milestone_type not in ["feature", "bugfix", "optimization", "documentation"]:
+        return json.dumps(
+            {"error": "Type must be 'feature', 'bugfix', 'optimization', or 'documentation'"},
+            indent=2
+        )
+
+    # Validate priority
+    if priority < 1 or priority > 5:
+        return json.dumps({"error": "Priority must be between 1 (highest) and 5 (lowest)"}, indent=2)
+
+    # Create milestone
+    milestone = ProjectMilestone(
+        title=title,
+        description=description,
+        milestone_type=milestone_type,
+        priority=priority,
+        status="planned",
+    )
+
+    # Parse and set tags
+    if tags:
+        milestone.tags_list = [tag.strip() for tag in tags.split(",")]
+
+    db.add(milestone)
+    db.commit()
+
+    result = {
+        "success": True,
+        "milestone_id": milestone.id,
+        "title": milestone.title,
+        "description": milestone.description,
+        "milestone_type": milestone.milestone_type,
+        "priority": milestone.priority,
+        "status": milestone.status,
+        "tags": milestone.tags_list,
+        "created_at": milestone.created_at.isoformat(),
+    }
+
+    return json.dumps(result, indent=2)
+
+
+@mcp.tool()
+def update_milestone(
+    milestone_id: int,
+    title: Optional[str] = None,
+    description: Optional[str] = None,
+    milestone_type: Optional[str] = None,
+    priority: Optional[int] = None,
+    tags: Optional[str] = None,
+) -> str:
+    """Update an existing milestone's details.
+
+    Args:
+        milestone_id: The milestone ID to update
+        title: New title (optional)
+        description: New description (optional)
+        milestone_type: New type (feature, bugfix, optimization, documentation)
+        priority: New priority (1=highest, 5=lowest)
+        tags: New comma-separated tags (replaces existing tags)
+
+    Returns:
+        JSON string with update result
+    """
+    db = get_db()
+    milestone = db.query(ProjectMilestone).filter_by(id=milestone_id).first()
+
+    if not milestone:
+        return json.dumps({"error": f"Milestone #{milestone_id} not found"}, indent=2)
+
+    # Validate and update fields
+    if title is not None:
+        milestone.title = title
+
+    if description is not None:
+        milestone.description = description
+
+    if milestone_type is not None:
+        if milestone_type not in ["feature", "bugfix", "optimization", "documentation"]:
+            return json.dumps(
+                {"error": "Type must be 'feature', 'bugfix', 'optimization', or 'documentation'"},
+                indent=2
+            )
+        milestone.milestone_type = milestone_type
+
+    if priority is not None:
+        if priority < 1 or priority > 5:
+            return json.dumps({"error": "Priority must be between 1 (highest) and 5 (lowest)"}, indent=2)
+        milestone.priority = priority
+
+    if tags is not None:
+        milestone.tags_list = [tag.strip() for tag in tags.split(",")]
+
+    db.commit()
+
+    result = {
+        "success": True,
+        "milestone_id": milestone.id,
+        "title": milestone.title,
+        "description": milestone.description,
+        "milestone_type": milestone.milestone_type,
+        "priority": milestone.priority,
+        "status": milestone.status,
+        "tags": milestone.tags_list,
+    }
+
+    return json.dumps(result, indent=2)
+
+
+@mcp.tool()
+def update_next_step(
+    step_id: int,
+    description: Optional[str] = None,
+    priority: Optional[int] = None,
+    effort: Optional[str] = None,
+    category: Optional[str] = None,
+    milestone_id: Optional[int] = None,
+) -> str:
+    """Update an existing next step's details.
+
+    Args:
+        step_id: The next step ID to update
+        description: New description (optional)
+        priority: New priority (1=highest, 5=lowest)
+        effort: New estimated effort (small, medium, large)
+        category: New category (feature, optimization, fix, docs)
+        milestone_id: New milestone ID to link to (use -1 to unlink)
+
+    Returns:
+        JSON string with update result
+    """
+    db = get_db()
+    step = db.query(NextStep).filter_by(id=step_id).first()
+
+    if not step:
+        return json.dumps({"error": f"Next step #{step_id} not found"}, indent=2)
+
+    # Validate and update fields
+    if description is not None:
+        step.description = description
+
+    if priority is not None:
+        if priority < 1 or priority > 5:
+            return json.dumps({"error": "Priority must be between 1 (highest) and 5 (lowest)"}, indent=2)
+        step.priority = priority
+
+    if effort is not None:
+        if effort not in ["small", "medium", "large"]:
+            return json.dumps({"error": "Effort must be 'small', 'medium', or 'large'"}, indent=2)
+        step.estimated_effort = effort
+
+    if category is not None:
+        if category not in ["feature", "optimization", "fix", "docs"]:
+            return json.dumps({"error": "Category must be 'feature', 'optimization', 'fix', or 'docs'"}, indent=2)
+        step.category = category
+
+    if milestone_id is not None:
+        if milestone_id == -1:
+            # Unlink from milestone
+            step.related_milestone_id = None
+        else:
+            # Check if milestone exists
+            milestone = db.query(ProjectMilestone).filter_by(id=milestone_id).first()
+            if not milestone:
+                return json.dumps({"error": f"Milestone #{milestone_id} not found"}, indent=2)
+            step.related_milestone_id = milestone_id
+
+    db.commit()
+
+    result = {
+        "success": True,
+        "step_id": step.id,
+        "description": step.description,
+        "priority": step.priority,
+        "category": step.category,
+        "estimated_effort": step.estimated_effort,
+        "related_milestone_id": step.related_milestone_id,
+    }
+
+    return json.dumps(result, indent=2)
+
+
+@mcp.tool()
+def delete_milestone(milestone_id: int, confirm: bool = False) -> str:
+    """Delete a milestone.
+
+    Args:
+        milestone_id: The milestone ID to delete
+        confirm: Must be True to confirm deletion (safety check)
+
+    Returns:
+        JSON string with deletion result
+    """
+    if not confirm:
+        return json.dumps(
+            {"error": "Must set confirm=True to delete milestone (safety check)"},
+            indent=2
+        )
+
+    db = get_db()
+    milestone = db.query(ProjectMilestone).filter_by(id=milestone_id).first()
+
+    if not milestone:
+        return json.dumps({"error": f"Milestone #{milestone_id} not found"}, indent=2)
+
+    title = milestone.title
+
+    # Note: Related next steps will have their related_milestone_id set to NULL due to foreign key constraint
+    db.delete(milestone)
+    db.commit()
+
+    result = {
+        "success": True,
+        "deleted_milestone_id": milestone_id,
+        "title": title,
+        "message": "Milestone deleted successfully. Related next steps are now unlinked.",
+    }
+
+    return json.dumps(result, indent=2)
+
+
+@mcp.tool()
+def delete_next_step(step_id: int, confirm: bool = False) -> str:
+    """Delete a next step.
+
+    Args:
+        step_id: The next step ID to delete
+        confirm: Must be True to confirm deletion (safety check)
+
+    Returns:
+        JSON string with deletion result
+    """
+    if not confirm:
+        return json.dumps(
+            {"error": "Must set confirm=True to delete next step (safety check)"},
+            indent=2
+        )
+
+    db = get_db()
+    step = db.query(NextStep).filter_by(id=step_id).first()
+
+    if not step:
+        return json.dumps({"error": f"Next step #{step_id} not found"}, indent=2)
+
+    description = step.description
+
+    db.delete(step)
+    db.commit()
+
+    result = {
+        "success": True,
+        "deleted_step_id": step_id,
+        "description": description,
+        "message": "Next step deleted successfully.",
+    }
+
+    return json.dumps(result, indent=2)
+
+
+@mcp.tool()
+def uncomplete_next_step(step_id: int) -> str:
+    """Reopen a completed next step (mark as not completed).
+
+    Args:
+        step_id: The next step ID to reopen
+
+    Returns:
+        JSON string with update result
+    """
+    db = get_db()
+    step = db.query(NextStep).filter_by(id=step_id).first()
+
+    if not step:
+        return json.dumps({"error": f"Next step #{step_id} not found"}, indent=2)
+
+    if not step.completed:
+        return json.dumps(
+            {"error": f"Next step #{step_id} is already not completed"},
+            indent=2
+        )
+
+    step.completed = 0
+    step.completed_at = None
+    db.commit()
+
+    result = {
+        "success": True,
+        "step_id": step_id,
+        "description": step.description,
+        "message": "Next step reopened successfully.",
+    }
+
+    return json.dumps(result, indent=2)
+
+
 if __name__ == "__main__":
     # Run the MCP server
     mcp.run()

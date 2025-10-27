@@ -489,13 +489,13 @@ def print_quit_banner() -> None:
     """Print /quit ASCII art banner on session end."""
     # ASCII art banner for /quit
     banner = """
-                ██╗ ██████╗ ██╗   ██╗██╗████████╗
-               ██╔╝██╔═══██╗██║   ██║██║╚══██╔══╝
-              ██╔╝ ██║   ██║██║   ██║██║   ██║
-             ██╔╝  ██║▄▄ ██║██║   ██║██║   ██║
-            ██╔╝   ╚██████╔╝╚██████╔╝██║   ██║
-            ╚═╝     ╚══▀▀═╝  ╚═════╝ ╚═╝   ╚═╝
+    ██╗ ██████╗ ██╗   ██╗██╗████████╗
+   ██╔╝██╔═══██╗██║   ██║██║╚══██╔══╝
+  ██╔╝ ██║   ██║██║   ██║██║   ██║
+ ██╔╝  ██║▄▄ ██║██║   ██║██║   ██║
+██╔╝   ╚██████╔╝╚██████╔╝██║   ██║
+╚═╝     ╚══▀▀═╝  ╚═════╝ ╚═╝   ╚═╝
 """
 
-    # Print banner in dim gray color
-    console.print(banner, style="dim")
+    # Print banner in cyan color (matching start banner)
+    console.print(banner, style="cyan")
