@@ -54,6 +54,22 @@ class Config:
                 "ollama_model": "qwen2.5:7b",  # Fallback for local processing
                 "ollama_host": "http://localhost:11434",
             },
+            "claude_code": {
+                "current_provider": "anthropic",  # Current active provider
+                "providers": {
+                    "anthropic": {
+                        "type": "oauth",
+                        "description": "Official Anthropic Claude Code (OAuth)",
+                    },
+                    "zai": {
+                        "type": "api_key",
+                        "description": "Z.AI proxy (3x usage at lower cost)",
+                        "api_key": None,
+                        "base_url": "https://api.z.ai/api/anthropic",
+                        "timeout_ms": 3000000,
+                    },
+                },
+            },
             "retention": {
                 "raw_data_days": 7,
                 "summaries_days": 90,
@@ -190,6 +206,51 @@ class Config:
         if repo_path not in repos:
             repos.append(repo_path)
             self.set("repositories", repos)
+
+    # Claude Code provider management
+    @property
+    def current_claude_provider(self) -> str:
+        """Get current Claude Code provider."""
+        return self.get("claude_code.current_provider", "anthropic")
+
+    def get_claude_provider(self, provider_name: str) -> Optional[dict]:
+        """Get Claude provider configuration.
+
+        Args:
+            provider_name: Name of provider (anthropic, zai)
+
+        Returns:
+            Provider configuration dict or None
+        """
+        return self.get(f"claude_code.providers.{provider_name}")
+
+    def list_claude_providers(self) -> dict:
+        """Get all available Claude providers.
+
+        Returns:
+            Dictionary of provider configurations
+        """
+        return self.get("claude_code.providers", {})
+
+    def set_claude_provider_api_key(self, provider_name: str, api_key: str):
+        """Set API key for a Claude provider.
+
+        Args:
+            provider_name: Name of provider
+            api_key: API key to set
+        """
+        self.set(f"claude_code.providers.{provider_name}.api_key", api_key)
+
+    def set_current_claude_provider(self, provider_name: str):
+        """Set current active Claude provider.
+
+        Args:
+            provider_name: Name of provider to activate
+        """
+        providers = self.list_claude_providers()
+        if provider_name not in providers:
+            raise ValueError(f"Unknown provider: {provider_name}")
+        self.set("claude_code.current_provider", provider_name)
 
 
 # Global config instance

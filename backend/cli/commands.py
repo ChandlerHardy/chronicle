@@ -13,6 +13,7 @@ from rich.table import Table
 from backend.database.models import get_session, AIInteraction, ProjectMilestone, NextStep
 from backend.services.git_monitor import GitMonitor
 from backend.services.ai_tracker import AITracker
+from backend.services.claude_provider import ClaudeProviderSwitcher
 from backend.core.config import Config
 from backend.cli.formatters import (
     format_commits_list,
@@ -2375,3 +2376,249 @@ def import_summary():
         sys.exit(1)
     finally:
         db_session.close()
+
+
+# ============================================================================
+# Claude Code Provider Management
+# ============================================================================
+
+
+@cli.group(name="claude-provider")
+def claude_provider():
+    """Manage Claude Code providers (Anthropic OAuth vs Z.AI proxy)."""
+    pass
+
+
+@claude_provider.command(name="list")
+def provider_list():
+    """List all available Claude Code providers."""
+    config = Config()
+    providers = config.list_claude_providers()
+    current_provider = config.current_claude_provider
+
+    if not providers:
+        console.print("[yellow]⚠[/yellow]  No providers configured")
+        return
+
+    table = Table(title="Available Claude Code Providers", show_header=True, header_style="bold cyan")
+    table.add_column("Provider", style="cyan")
+    table.add_column("Type", style="dim")
+    table.add_column("Description")
+    table.add_column("Status", style="green")
+    table.add_column("API Key", style="dim")
+
+    for name, config_data in providers.items():
+        provider_type = config_data.get("type", "unknown")
+        description = config_data.get("description", "")
+        is_current = "✓ Active" if name == current_provider else ""
+
+        # Check if API key is configured
+        api_key_status = ""
+        if provider_type == "api_key":
+            api_key = config_data.get("api_key")
+            if api_key:
+                api_key_status = f"{api_key[:8]}...{api_key[-4:]}"
+            else:
+                api_key_status = "[red]Not configured[/red]"
+        elif provider_type == "oauth":
+            api_key_status = "[dim]OAuth (automatic)[/dim]"
+
+        table.add_row(name, provider_type, description, is_current, api_key_status)
+
+    console.print(table)
+
+
+@claude_provider.command(name="current")
+def provider_current():
+    """Show current active Claude Code provider."""
+    config = Config()
+    switcher = ClaudeProviderSwitcher()
+
+    current_provider = config.current_claude_provider
+    provider_config = config.get_claude_provider(current_provider)
+    settings_info = switcher.get_current_settings_info()
+
+    console.print(f"[bold]Current Provider:[/bold] [cyan]{current_provider}[/cyan]")
+
+    if provider_config:
+        console.print(f"[dim]Type: {provider_config.get('type')}[/dim]")
+        console.print(f"[dim]Description: {provider_config.get('description')}[/dim]")
+
+    console.print(f"\n[bold]Settings File:[/bold] {settings_info['settings_path']}")
+    console.print(f"[dim]Detected provider type: {settings_info['provider_type']}[/dim]")
+
+    if settings_info.get("base_url"):
+        console.print(f"[dim]Base URL: {settings_info['base_url']}[/dim]")
+
+    if settings_info.get("has_api_key"):
+        console.print("[dim]API Key: Configured ✓[/dim]")
+
+    # Show backup info
+    backups = switcher.list_backups()
+    if backups:
+        console.print(f"\n[dim]Available backups: {len(backups)}[/dim]")
+
+
+@claude_provider.command(name="use")
+@click.argument("provider", type=click.Choice(["anthropic", "zai"]))
+def provider_use(provider: str):
+    """Switch to a different Claude Code provider.
+
+    PROVIDER: anthropic or zai
+    """
+    config = Config()
+    switcher = ClaudeProviderSwitcher()
+
+    # Check if provider is configured
+    provider_config = config.get_claude_provider(provider)
+    if not provider_config:
+        console.print(f"[red]✗[/red] Unknown provider: {provider}")
+        return
+
+    # For Z.AI, check if API key is configured
+    if provider == "zai":
+        api_key = provider_config.get("api_key")
+        if not api_key:
+            console.print(f"[red]✗[/red] Z.AI API key not configured")
+            console.print(f"[dim]Run: chronicle claude-provider setup zai[/dim]")
+            return
+
+        base_url = provider_config.get("base_url", "https://api.z.ai/api/anthropic")
+        timeout_ms = provider_config.get("timeout_ms", 3000000)
+
+        # Switch to Z.AI
+        try:
+            switcher.switch_to_zai(api_key, base_url, timeout_ms)
+            config.set_current_claude_provider("zai")
+            console.print(f"[green]✓[/green] Switched to Z.AI provider")
+            console.print(f"[dim]Base URL: {base_url}[/dim]")
+            console.print(f"\n[yellow]⚠[/yellow]  Restart Claude Code for changes to take effect")
+        except Exception as e:
+            console.print(f"[red]✗[/red] Failed to switch provider: {e}")
+            return
+
+    elif provider == "anthropic":
+        # Switch to Anthropic OAuth
+        try:
+            switcher.switch_to_anthropic()
+            config.set_current_claude_provider("anthropic")
+            console.print(f"[green]✓[/green] Switched to Anthropic OAuth provider")
+            console.print(f"\n[yellow]⚠[/yellow]  Restart Claude Code for changes to take effect")
+        except Exception as e:
+            console.print(f"[red]✗[/red] Failed to switch provider: {e}")
+            return
+
+    # Show backup info
+    backups = switcher.list_backups()
+    if backups:
+        latest_backup = backups[0]
+        console.print(f"\n[dim]Previous settings backed up to: {latest_backup.name}[/dim]")
+
+
+@claude_provider.command(name="setup")
+@click.argument("provider", type=click.Choice(["zai"]))
+def provider_setup(provider: str):
+    """Configure API key for a provider.
+
+    PROVIDER: Currently only 'zai' requires setup
+    """
+    config = Config()
+
+    if provider == "zai":
+        console.print("[bold cyan]Z.AI Provider Setup[/bold cyan]\n")
+        console.print("Z.AI provides Claude Code access at 3x usage for lower cost.")
+        console.print("\nTo get a Z.AI API key:")
+        console.print("  1. Visit: [cyan]https://platform.z.ai[/cyan]")
+        console.print("  2. Sign up and navigate to API Keys")
+        console.print("  3. Create a new API key")
+        console.print("  4. Copy the key\n")
+
+        api_key = click.prompt(
+            "Enter your Z.AI API key",
+            type=str,
+            hide_input=True,
+            confirmation_prompt="Confirm API key"
+        )
+
+        if not api_key or len(api_key) < 10:
+            console.print("[red]✗[/red] Invalid API key. Setup cancelled.")
+            return
+
+        # Save API key
+        config.set_claude_provider_api_key("zai", api_key)
+        console.print(f"\n[green]✓[/green] Z.AI API key saved: {api_key[:8]}...{api_key[-4:]}")
+        console.print(f"\n[dim]To switch to Z.AI: chronicle claude-provider use zai[/dim]")
+
+
+@claude_provider.command(name="backups")
+def provider_backups():
+    """List available settings backups."""
+    switcher = ClaudeProviderSwitcher()
+    backups = switcher.list_backups()
+
+    if not backups:
+        console.print("[yellow]⚠[/yellow]  No backups found")
+        return
+
+    table = Table(title="Settings Backups", show_header=True, header_style="bold cyan")
+    table.add_column("#", style="dim")
+    table.add_column("Backup File", style="cyan")
+    table.add_column("Created", style="dim")
+
+    for idx, backup_path in enumerate(backups, 1):
+        # Extract timestamp from filename
+        # Format: settings_YYYYMMDD_HHMMSS.json
+        filename = backup_path.name
+        timestamp_str = filename.replace("settings_", "").replace(".json", "")
+
+        try:
+            # Parse timestamp
+            dt = datetime.strptime(timestamp_str, "%Y%m%d_%H%M%S")
+            created = dt.strftime("%Y-%m-%d %I:%M:%S %p")
+        except:
+            created = timestamp_str
+
+        table.add_row(str(idx), backup_path.name, created)
+
+    console.print(table)
+    console.print(f"\n[dim]To restore: chronicle claude-provider restore <backup-file>[/dim]")
+
+
+@claude_provider.command(name="restore")
+@click.argument("backup_file")
+def provider_restore(backup_file: str):
+    """Restore Claude settings from a backup.
+
+    BACKUP_FILE: Name of backup file (from 'chronicle claude-provider backups')
+    """
+    switcher = ClaudeProviderSwitcher()
+
+    # Find backup file
+    backup_path = switcher.backup_dir / backup_file
+
+    if not backup_path.exists():
+        console.print(f"[red]✗[/red] Backup file not found: {backup_file}")
+        console.print(f"[dim]Run: chronicle claude-provider backups[/dim]")
+        return
+
+    # Confirm restore
+    console.print(f"[yellow]⚠[/yellow]  This will restore settings from: [cyan]{backup_file}[/cyan]")
+    console.print(f"[dim]Current settings will be backed up first[/dim]\n")
+
+    if not click.confirm("Continue with restore?", default=False):
+        console.print("Restore cancelled.")
+        return
+
+    try:
+        # Backup current settings before restore
+        switcher.backup_current_settings()
+
+        # Restore from backup
+        switcher.restore_from_backup(backup_path)
+
+        console.print(f"[green]✓[/green] Settings restored from {backup_file}")
+        console.print(f"\n[yellow]⚠[/yellow]  Restart Claude Code for changes to take effect")
+
+    except Exception as e:
+        console.print(f"[red]✗[/red] Restore failed: {e}")
+        return
