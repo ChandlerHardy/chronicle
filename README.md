@@ -118,8 +118,8 @@ python3 -m pip install -e ".[mcp]"
 # Initialize Chronicle
 chronicle init
 
-# Configure Gemini API for summarization (optional)
-chronicle config ai.gemini_api_key YOUR_API_KEY
+# Configure Gemini API for summarization (interactive)
+chronicle setup
 
 # Add a repository to track
 chronicle add-repo /path/to/your/project
@@ -137,6 +137,7 @@ python3 -m pip install -e .
 
 # All CLI commands work normally
 chronicle init
+chronicle setup  # Configure API key
 chronicle start claude
 chronicle sessions
 chronicle search "your query"

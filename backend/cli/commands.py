@@ -9,6 +9,7 @@ from rich.console import Console
 from backend.database.models import get_session, AIInteraction, ProjectMilestone, NextStep
 from backend.services.git_monitor import GitMonitor
 from backend.services.ai_tracker import AITracker
+from backend.core.config import Config
 from backend.cli.formatters import (
     format_commits_list,
     format_today_summary,
@@ -45,8 +46,67 @@ def init():
     console.print(f"[dim]Config directory: {config_dir}[/dim]")
     console.print(f"[dim]Database: {config_dir / 'sessions.db'}[/dim]")
     console.print("\nNext steps:")
+    console.print("  1. Configure API key: [cyan]chronicle setup[/cyan]")
+    console.print("  2. Add a repository: [cyan]chronicle add-repo /path/to/repo[/cyan]")
+    console.print("  3. View today's activity: [cyan]chronicle show today[/cyan]")
+
+
+@cli.command()
+def setup():
+    """Interactive setup wizard for Chronicle configuration."""
+    console.print("[bold cyan]Chronicle Setup Wizard[/bold cyan]\n")
+
+    config = Config()
+
+    # Check if already configured
+    existing_key = config.get("ai.gemini_api_key")
+    if existing_key:
+        console.print(f"[yellow]⚠[/yellow]  Gemini API key already configured: {existing_key[:8]}...{existing_key[-4:]}")
+        if not click.confirm("Do you want to update it?", default=False):
+            console.print("[green]✓[/green] Setup cancelled. Configuration unchanged.")
+            return
+
+    # Prompt for API key
+    console.print("\n[bold]Gemini API Key Setup[/bold]")
+    console.print("Chronicle uses Google's Gemini API for AI summarization.")
+    console.print("\nTo get a free API key:")
+    console.print("  1. Visit: [cyan]https://aistudio.google.com/app/apikey[/cyan]")
+    console.print("  2. Sign in with Google")
+    console.print("  3. Click 'Create API Key'")
+    console.print("  4. Copy the key (starts with 'AIza...')\n")
+
+    api_key = click.prompt(
+        "Enter your Gemini API key",
+        type=str,
+        hide_input=True,
+        confirmation_prompt="Confirm API key"
+    )
+
+    if not api_key or len(api_key) < 20:
+        console.print("[red]✗[/red] Invalid API key. Setup cancelled.")
+        return
+
+    # Save API key
+    config.set("ai.gemini_api_key", api_key)
+    console.print(f"\n[green]✓[/green] API key saved: {api_key[:8]}...{api_key[-4:]}")
+
+    # Optional: Set default model
+    console.print("\n[bold]Summarization Model[/bold]")
+    console.print(f"Current model: [cyan]{config.get('ai.default_model')}[/cyan]")
+
+    if click.confirm("Use default model (gemini-2.0-flash)?", default=True):
+        console.print("[green]✓[/green] Using default model")
+    else:
+        custom_model = click.prompt("Enter model name", default="gemini-2.0-flash")
+        config.set("ai.default_model", custom_model)
+        console.print(f"[green]✓[/green] Model set to: {custom_model}")
+
+    # Summary
+    console.print("\n[bold green]Setup Complete![/bold green]")
+    console.print("\nNext steps:")
     console.print("  1. Add a repository: [cyan]chronicle add-repo /path/to/repo[/cyan]")
-    console.print("  2. View today's activity: [cyan]chronicle show today[/cyan]")
+    console.print("  2. Start tracking: [cyan]chronicle start claude[/cyan]")
+    console.print("  3. View configuration: [cyan]chronicle config --list[/cyan]")
 
 
 @cli.command()

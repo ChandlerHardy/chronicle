@@ -14,6 +14,23 @@
 
 ---
 
+## 🚨 CRITICAL: SEARCH FIRST (MANDATORY)
+
+**BEFORE IMPLEMENTING ANYTHING, YOU MUST SEARCH CHRONICLE:**
+
+```python
+mcp__chronicle__search_sessions(query="relevant keywords", limit=10)
+```
+
+**WHY THIS IS MANDATORY:**
+- Searching: **1 second**
+- Reinventing: **10-20 minutes**
+- **ROI: 2,700x** (proven from Sessions 21, 30, 31 - 45+ minutes wasted)
+
+**This is not optional. This is not a suggestion. Search first, ALWAYS.**
+
+---
+
 ## 🔧 Working on Chronicle (The Meta Project)
 
 **Chronicle is meta:** It tracks its own development.
@@ -23,6 +40,39 @@
 2. **Search first:** Past sessions contain solutions to problems you might encounter
 3. **MCP server restart required:** After changing `backend/mcp/server.py`, restart Claude Code
 4. **Test with Chronicle:** Use `chronicle start claude` to track your development work
+
+### Core Directives (MANDATORY - Apply Even With Chronicle Advocate Available)
+
+**YOU MUST FOLLOW THESE DIRECTIVES FOR EVERY INTERACTION:**
+
+1. **🔍 SEARCH FIRST (MANDATORY)** - Before implementing ANYTHING:
+   ```python
+   mcp__chronicle__search_sessions(query="relevant keywords", limit=10)
+   ```
+   **This is REQUIRED, not optional.** Past sessions contain solutions to current problems.
+
+2. **📊 CHECK SESSION STATUS (REQUIRED)** - Remind user if not tracking:
+   - Current session NOT tracked unless started with `chronicle start claude`
+   - **YOU MUST suggest exit and restart if meaningful work is happening**
+
+3. **⚡ USE MCP OVER CLI (MANDATORY)** - Always prefer MCP tools:
+   - `mcp__chronicle__*` returns structured JSON (10x faster)
+   - Bash commands are for users, not programmatic access
+   - **Using CLI instead of MCP is considered incorrect**
+
+4. **🗺️ CHECK ROADMAP BEFORE PLANNING (REQUIRED)** - Avoid duplicate work:
+   ```python
+   mcp__chronicle__get_roadmap(days=7)
+   mcp__chronicle__get_next_steps(completed=False)
+   ```
+   **Failure to check roadmap can result in duplicating already-planned work**
+
+5. **🏷️ SUGGEST SESSION ORGANIZATION (REQUIRED)** - After significant work:
+   - YOU MUST propose descriptive title
+   - YOU MUST suggest relevant tags (technologies, features, bugs)
+   - YOU MUST link to related sessions
+
+**For deep analysis and enforcement:** Launch the Chronicle Advocate agent (see [AGENTS.md](./AGENTS.md))
 
 ---
 
@@ -159,6 +209,16 @@ chronicle config ai.gemini_api_key YOUR_KEY
 
 ## 🛠️ Development Tasks
 
+**⚠️ REMINDER: SEARCH CHRONICLE FIRST**
+
+Before starting ANY development task below:
+```python
+mcp__chronicle__search_sessions(query="cli command|schema|mcp tool|<your task>", limit=10)
+```
+**Someone may have already done this work. Check first.**
+
+---
+
 ### Adding a New CLI Command
 
 1. Add to `backend/cli/commands.py`:
@@ -226,6 +286,18 @@ def my_tool(param: str) -> str:
 - Sessions: `~/.ai-session/sessions/`
 - Config: `~/.ai-session/config.yaml`
 - MCP config: `~/.mcp.json`
+
+---
+
+## 🎯 Final Reminder
+
+**Before you finish reading this file and start working:**
+
+1. **SEARCH CHRONICLE FIRST** - `mcp__chronicle__search_sessions(query="...", limit=10)`
+2. **CHECK ROADMAP** - `mcp__chronicle__get_roadmap(days=7)`
+3. **VERIFY SESSION TRACKING** - Remind user to run `chronicle start claude` if not tracked
+
+**This is mandatory. Every single time. No exceptions.**
 
 ---
 
