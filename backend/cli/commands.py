@@ -1,10 +1,13 @@
 """CLI commands for AI Session Recorder."""
 
 import os
+import sys
+import subprocess
 from datetime import datetime, timedelta
 from pathlib import Path
 import click
 from rich.console import Console
+from rich.table import Table
 
 from backend.database.models import get_session, AIInteraction, ProjectMilestone, NextStep
 from backend.services.git_monitor import GitMonitor
@@ -107,6 +110,150 @@ def setup():
     console.print("  1. Add a repository: [cyan]chronicle add-repo /path/to/repo[/cyan]")
     console.print("  2. Start tracking: [cyan]chronicle start claude[/cyan]")
     console.print("  3. View configuration: [cyan]chronicle config --list[/cyan]")
+
+
+@cli.command()
+@click.option('--check-only', is_flag=True, help='Check for updates without installing')
+def update(check_only: bool):
+    """Check for and install Chronicle updates."""
+    console.print("[bold cyan]Chronicle Update Check[/bold cyan]\n")
+
+    # Find Chronicle installation directory
+    try:
+        import backend
+        chronicle_path = Path(backend.__file__).parent.parent
+    except Exception:
+        console.print("[red]✗[/red] Could not locate Chronicle installation")
+        return
+
+    # Check if it's a git repository
+    if not (chronicle_path / ".git").exists():
+        console.print("[yellow]⚠[/yellow]  Chronicle is not installed from git")
+        console.print("This command only works for git-based installations (pip install -e .)")
+        console.print("\nTo update, reinstall from PyPI: [cyan]pip install --upgrade chronicle[/cyan]")
+        return
+
+    # Check for updates
+    try:
+        # Fetch latest from remote
+        console.print("Checking for updates...")
+        result = subprocess.run(
+            ["git", "fetch", "origin"],
+            cwd=chronicle_path,
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+
+        if result.returncode != 0:
+            console.print(f"[red]✗[/red] Failed to fetch updates: {result.stderr}")
+            return
+
+        # Get current branch
+        result = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            cwd=chronicle_path,
+            capture_output=True,
+            text=True
+        )
+        current_branch = result.stdout.strip()
+
+        # Check if behind remote
+        result = subprocess.run(
+            ["git", "rev-list", "--count", f"HEAD..origin/{current_branch}"],
+            cwd=chronicle_path,
+            capture_output=True,
+            text=True
+        )
+        commits_behind = int(result.stdout.strip())
+
+        if commits_behind == 0:
+            console.print("[green]✓[/green] Chronicle is up to date!")
+            return
+
+        # Show what's new
+        console.print(f"[yellow]⚠[/yellow]  Updates available: {commits_behind} new commit(s)\n")
+
+        result = subprocess.run(
+            ["git", "log", "--oneline", f"HEAD..origin/{current_branch}"],
+            cwd=chronicle_path,
+            capture_output=True,
+            text=True
+        )
+
+        console.print("[bold]What's new:[/bold]")
+        for line in result.stdout.strip().split('\n'):
+            console.print(f"  • {line}")
+
+        if check_only:
+            console.print("\n[dim]Run [cyan]chronicle update[/cyan] to install updates[/dim]")
+            return
+
+        # Confirm update
+        console.print("")
+        if not click.confirm("Install updates now?", default=True):
+            console.print("[yellow]Update cancelled[/yellow]")
+            return
+
+        # Pull updates
+        console.print("\nPulling updates...")
+        result = subprocess.run(
+            ["git", "pull", "origin", current_branch],
+            cwd=chronicle_path,
+            capture_output=True,
+            text=True
+        )
+
+        if result.returncode != 0:
+            console.print(f"[red]✗[/red] Failed to pull updates: {result.stderr}")
+            return
+
+        console.print("[green]✓[/green] Updates downloaded")
+
+        # Check if dependencies changed
+        result = subprocess.run(
+            ["git", "diff", "HEAD@{1}", "HEAD", "pyproject.toml"],
+            cwd=chronicle_path,
+            capture_output=True,
+            text=True
+        )
+
+        if result.stdout.strip():
+            console.print("\n[yellow]⚠[/yellow]  Dependencies changed, reinstalling...")
+
+            # Detect current install mode (check if fastmcp is installed)
+            try:
+                import fastmcp
+                install_cmd = ["pip", "install", "-e", ".[mcp]"]
+                console.print("[dim]Reinstalling with MCP support...[/dim]")
+            except ImportError:
+                install_cmd = ["pip", "install", "-e", "."]
+                console.print("[dim]Reinstalling (minimal)...[/dim]")
+
+            result = subprocess.run(
+                install_cmd,
+                cwd=chronicle_path,
+                capture_output=True,
+                text=True
+            )
+
+            if result.returncode != 0:
+                console.print(f"[red]✗[/red] Reinstall failed: {result.stderr}")
+                console.print("\nPlease reinstall manually:")
+                console.print(f"  cd {chronicle_path}")
+                console.print("  pip install -e .[mcp]  # or: pip install -e .")
+                return
+
+            console.print("[green]✓[/green] Dependencies reinstalled")
+
+        # Success
+        console.print("\n[bold green]Update Complete![/bold green]")
+        console.print("Chronicle is now up to date")
+
+    except subprocess.TimeoutExpired:
+        console.print("[red]✗[/red] Update check timed out")
+    except Exception as e:
+        console.print(f"[red]✗[/red] Update failed: {e}")
 
 
 @cli.command()

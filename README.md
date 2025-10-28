@@ -176,6 +176,33 @@ chronicle timeline today
 chronicle search "authentication"
 ```
 
+### Updating Chronicle
+
+Chronicle includes a built-in update command that handles everything automatically:
+
+```bash
+# Check for and install updates
+chronicle update
+
+# Check what's available without installing
+chronicle update --check-only
+```
+
+**What it does:**
+- ✅ Checks for new commits from GitHub
+- ✅ Shows what's changed (commit log)
+- ✅ Pulls latest code
+- ✅ Auto-detects if dependencies changed
+- ✅ Reinstalls with correct mode (MCP or minimal)
+- ✅ Auto-migrates database if schema changed
+
+**Manual update:**
+```bash
+cd /path/to/chronicle
+git pull origin main
+pip install -e ".[mcp]"  # Or: pip install -e .
+```
+
 ---
 
 ## 📖 Core Concepts

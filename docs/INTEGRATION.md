@@ -310,6 +310,37 @@ When you run `chronicle start claude`:
 
 ---
 
+## Updating Chronicle
+
+Chronicle includes an automatic update command:
+
+```bash
+# Check for and install updates (interactive)
+chronicle update
+
+# Just check what's available
+chronicle update --check-only
+```
+
+**What `chronicle update` does:**
+1. Checks GitHub for new commits
+2. Shows what's changed (commit messages)
+3. Pulls latest code
+4. Auto-detects dependency changes in `pyproject.toml`
+5. Reinstalls with correct mode (detects if MCP is installed)
+6. Database migrations happen automatically
+
+**Manual update** (if needed):
+```bash
+cd /path/to/chronicle
+git pull origin main
+pip install -e ".[mcp]"  # Full install
+# OR
+pip install -e .         # Minimal install
+```
+
+---
+
 ## Advanced Features
 
 ### Agents
