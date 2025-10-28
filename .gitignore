@@ -28,11 +28,13 @@ env/
 # IDE
 .vscode/
 .idea/
-.claude/      # Claude Code local settings and agents
-.factory/     # Factory Droid local configurations
 *.swp
 *.swo
 *~
+
+# Local AI assistant configurations (should not be committed)
+.claude/
+.factory/
 
 # Testing
 .pytest_cache/
