@@ -147,8 +147,8 @@ def clean_transcript(transcript: str) -> str:
     lines = cleaned.split('\n')
     cleaned_lines = []
 
-    # Claude Code spinner chars
-    claude_spinner_chars = ['·', '✢', '✳', '✶', '✻', '✽']
+    # Claude Code spinner chars (including thinking indicator ∴)
+    claude_spinner_chars = ['·', '✢', '✳', '✶', '✻', '✽', '∴']
 
     # Gemini/Qwen/Droid spinner chars (Unicode Braille patterns)
     gemini_spinner_chars = ['⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
@@ -162,10 +162,20 @@ def clean_transcript(transcript: str) -> str:
             # Line is >20 chars and uses only 1-2 unique characters = decorator
             continue
 
+        # Skip Claude Code header box-drawing characters
+        # Patterns: "▐▛███▜▌   Claude Code", "▝▜█████▛▘  Sonnet", "▘▘ ▝▝    /Users/..."
+        # These appear thousands of times and add zero value
+        if ('Claude Code' in stripped and any(char in stripped for char in ['▐', '▛', '█'])) or \
+           ('Sonnet' in stripped and any(char in stripped for char in ['▝', '█'])) or \
+           (stripped.count('▘') >= 2 and stripped.count('▝') >= 2) or \
+           (any(char in stripped for char in ['▐', '▛', '▜', '▌', '▝', '▘', '█']) and len(stripped) < 80):
+            continue
+
         # Skip Claude Code spinner lines (completely useless for summaries)
         # Format: "· Osmosing… (esc to interrupt)" or "· Osmosing… (esc to interrupt · 6s · ↓ 66 tokens)"
+        # Format: "∴ Thinking…" or "∴ Thought for 8s (ctrl+o to show thinking)"
         is_claude_spinner = any(stripped.startswith(spinner + ' ') for spinner in claude_spinner_chars)
-        if is_claude_spinner and 'esc to interrupt' in stripped:
+        if is_claude_spinner and ('esc to interrupt' in stripped or 'Thinking' in stripped or 'Thought for' in stripped):
             continue
 
         # Skip Gemini/Qwen/Droid spinner lines
@@ -445,6 +455,67 @@ def clean_transcript(transcript: str) -> str:
         i += 1
 
     cleaned = '\n'.join(multiline_deduplicated)
+
+    # 6.6. Global deduplication for large tool outputs (git diff, test results, etc.)
+    # These can appear hundreds of times non-consecutively, wasting massive space
+    # Strategy: Track large blocks (>500 chars), replace 2nd+ occurrences with marker
+    lines = cleaned.split('\n')
+    global_deduplicated = []
+    seen_blocks = {}  # hash -> (first_index, content_preview, occurrence_count)
+    i = 0
+
+    while i < len(lines):
+        # Look for tool output start (indented lines after ⏺ commands)
+        # Or diff markers (diff --git, index, @@, etc.)
+        line = lines[i]
+
+        # Check if this might be start of a large output block
+        is_tool_output = (
+            line.strip().startswith('diff --git') or
+            line.strip().startswith('index ') or
+            line.strip().startswith('@@') or
+            line.strip().startswith('===') or
+            (line.startswith('    ') and len(line.strip()) > 20)  # Indented tool output
+        )
+
+        if is_tool_output and i + 10 < len(lines):
+            # Try to capture a block (next 10-50 lines)
+            # Stop at next prompt or tool command
+            block_end = i + 1
+            block_lines = [line]
+
+            while block_end < len(lines) and block_end < i + 100:
+                next_line = lines[block_end]
+                # Stop if we hit a new prompt or tool command
+                if next_line.strip().startswith('>') or next_line.strip().startswith('⏺'):
+                    break
+                block_lines.append(next_line)
+                block_end += 1
+
+            # If block is substantial (>500 chars), check if we've seen it
+            block_text = '\n'.join(block_lines)
+            if len(block_text) > 500:
+                block_hash = hash(block_text)
+
+                if block_hash in seen_blocks:
+                    # We've seen this before - replace with marker
+                    first_idx, preview, count = seen_blocks[block_hash]
+                    seen_blocks[block_hash] = (first_idx, preview, count + 1)
+                    global_deduplicated.append(f"[... duplicate output, already shown at line {first_idx} (occurrence #{count + 1}) ...]")
+                    i = block_end
+                    continue
+                else:
+                    # First time seeing this block - keep it
+                    seen_blocks[block_hash] = (len(global_deduplicated), block_text[:100], 1)
+                    global_deduplicated.extend(block_lines)
+                    i = block_end
+                    continue
+
+        # Normal line - keep it
+        global_deduplicated.append(line)
+        i += 1
+
+    cleaned = '\n'.join(global_deduplicated)
 
     # 7. Final pass: Remove keystroke-by-keystroke typing that survived earlier steps
     # After removing all decorations, keystrokes end up consecutive

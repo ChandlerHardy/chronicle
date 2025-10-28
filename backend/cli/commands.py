@@ -2043,3 +2043,57 @@ def roadmap(days: int = 7):
     console.print(f"[dim]Milestones: {total_completed}/{total_milestones} completed | Next Steps: {completed_steps}/{total_steps} done[/dim]")
 
     db_session.close()
+
+
+@cli.command()
+def vacuum():
+    """Compact the database to reclaim freed space.
+
+    After cleaning sessions and removing transcripts from the database,
+    SQLite marks pages as free but doesn't reclaim disk space. This
+    command rebuilds the database file to reclaim that space.
+
+    Examples:
+        chronicle vacuum           # Compact database
+
+    When to use:
+    - After clearing session transcripts (cleanup operations)
+    - When database size seems larger than expected
+    - As part of regular maintenance
+    """
+    import sqlite3
+    from pathlib import Path
+
+    home = Path.home()
+    db_path = home / ".ai-session" / "sessions.db"
+
+    if not db_path.exists():
+        console.print(f"[red]✗[/red] Database not found: {db_path}")
+        return
+
+    # Get size before
+    size_before = db_path.stat().st_size
+
+    console.print(f"\n[cyan]Compacting database...[/cyan]")
+    console.print(f"[dim]Path: {db_path}[/dim]")
+    console.print(f"[dim]Size before: {size_before / 1024 / 1024:.1f} MB[/dim]")
+
+    try:
+        # Connect and vacuum
+        conn = sqlite3.connect(str(db_path))
+        console.print(f"[dim]Running VACUUM...[/dim]")
+        conn.execute("VACUUM")
+        conn.close()
+
+        # Get size after
+        size_after = db_path.stat().st_size
+        reduction = ((size_before - size_after) / size_before * 100) if size_before > 0 else 0
+
+        console.print(f"\n[green]✓[/green] Database compacted successfully!")
+        console.print(f"[bold]Size after: {size_after / 1024 / 1024:.1f} MB[/bold]")
+        console.print(f"[bold green]Space reclaimed: {(size_before - size_after) / 1024 / 1024:.1f} MB ({reduction:.1f}%)[/bold green]")
+
+    except Exception as e:
+        console.print(f"[red]✗[/red] Error during vacuum: {e}")
+        import traceback
+        traceback.print_exc()
