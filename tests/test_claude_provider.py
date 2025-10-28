@@ -170,9 +170,12 @@ def test_switch_to_zai_sets_correct_configuration(switcher):
 
     # Assert
     settings = switcher._load_settings()
-    assert settings["ANTHROPIC_AUTH_TOKEN"] == "test_zai_key"
-    assert settings["ANTHROPIC_BASE_URL"] == "https://api.z.ai/api/anthropic"
-    assert settings["API_TIMEOUT_MS"] == "3000000"
+    assert settings["env"]["ANTHROPIC_AUTH_TOKEN"] == "test_zai_key"
+    assert settings["env"]["ANTHROPIC_BASE_URL"] == "https://api.z.ai/api/anthropic"
+    assert settings["env"]["API_TIMEOUT_MS"] == "3000000"
+    assert settings["env"]["ANTHROPIC_DEFAULT_HAIKU_MODEL"] == "glm-4.5-air"
+    assert settings["env"]["ANTHROPIC_DEFAULT_SONNET_MODEL"] == "glm-4.6"
+    assert settings["env"]["ANTHROPIC_DEFAULT_OPUS_MODEL"] == "glm-4.6"
     assert switcher.get_current_provider_type() == "zai"
 
 
@@ -184,7 +187,7 @@ def test_switch_to_zai_with_custom_base_url(switcher):
 
     # Assert
     settings = switcher._load_settings()
-    assert settings["ANTHROPIC_BASE_URL"] == custom_url
+    assert settings["env"]["ANTHROPIC_BASE_URL"] == custom_url
 
 
 def test_switch_to_zai_with_custom_timeout(switcher):
@@ -194,7 +197,7 @@ def test_switch_to_zai_with_custom_timeout(switcher):
 
     # Assert
     settings = switcher._load_settings()
-    assert settings["API_TIMEOUT_MS"] == "5000000"
+    assert settings["env"]["API_TIMEOUT_MS"] == "5000000"
 
 
 def test_switch_to_zai_creates_backup(switcher):

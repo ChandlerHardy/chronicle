@@ -2201,7 +2201,7 @@ def import_session():
             ai_tool=session_data["ai_tool"],
             prompt="",  # Sessions don't have prompts (full transcript instead)
             is_session=True,
-            session_transcript=session_data["session_transcript"],
+            session_transcript=None,  # v6+: transcripts stored externally in .cleaned files
             duration_ms=session_data.get("duration_ms"),
             title=session_data.get("title"),
             tags=session_data.get("tags"),
@@ -2216,10 +2216,27 @@ def import_session():
         db_session.add(new_session)
         db_session.commit()
 
-        console.print(f"[green]✓[/green] Session imported as ID {new_session.id}", )
-        console.print(f"[dim]Original ID: {session_data.get('original_id')}[/dim]", )
-        console.print(f"[dim]Tool: {new_session.ai_tool}[/dim]", )
-        console.print(f"[dim]Transcript size: {len(new_session.session_transcript) if new_session.session_transcript else 0} chars[/dim]", )
+        # Create external transcript files for v6+ compatibility
+        transcript_content = session_data.get("session_transcript")
+        if transcript_content:
+            from pathlib import Path
+            sessions_dir = Path.home() / ".ai-session" / "sessions"
+            sessions_dir.mkdir(parents=True, exist_ok=True)
+
+            # Create .cleaned file (primary location for v6+ sessions)
+            cleaned_path = sessions_dir / f"session_{new_session.id}.cleaned"
+            cleaned_path.write_text(transcript_content, encoding='utf-8')
+
+            console.print(f"[green]✓[/green] Session imported as ID {new_session.id}", )
+            console.print(f"[dim]Original ID: {session_data.get('original_id')}[/dim]", )
+            console.print(f"[dim]Tool: {new_session.ai_tool}[/dim]", )
+            console.print(f"[dim]Transcript size: {len(transcript_content)} chars[/dim]", )
+            console.print(f"[dim]✓ Transcript saved to {cleaned_path.name}[/dim]", )
+        else:
+            console.print(f"[green]✓[/green] Session imported as ID {new_session.id}", )
+            console.print(f"[dim]Original ID: {session_data.get('original_id')}[/dim]", )
+            console.print(f"[dim]Tool: {new_session.ai_tool}[/dim]", )
+            console.print(f"[yellow]⚠[/yellow] No transcript data provided[/dim]", )
 
         # Output just the new ID to stdout (for piping)
         print(new_session.id)
@@ -2269,15 +2286,21 @@ def import_and_summarize(chunk_size: int):
         if isinstance(files_mentioned, list):
             files_mentioned = json.dumps(files_mentioned)
 
-        # Create new session
-        new_session = AIInteraction(
+        # Create temporary session with negative ID for cross-system summarization
+        # Find the lowest negative ID that doesn't exist
+        temp_id = -1
+        while db_session.query(AIInteraction).filter_by(id=temp_id).first():
+            temp_id -= 1
+
+        temp_session = AIInteraction(
+            id=temp_id,  # Explicit negative ID for temporary session
             timestamp=datetime.fromisoformat(session_data["timestamp"]) if session_data.get("timestamp") else datetime.now(),
             ai_tool=session_data["ai_tool"],
             prompt="",  # Sessions don't have prompts (full transcript instead)
             is_session=True,
-            session_transcript=session_data["session_transcript"],
+            session_transcript=None,  # v6+: transcripts stored externally in .cleaned files
             duration_ms=session_data.get("duration_ms"),
-            title=session_data.get("title"),
+            title=f"[TEMP] {session_data.get('title', 'Remote Session')}",  # Mark as temporary
             tags=session_data.get("tags"),
             keywords=session_data.get("keywords"),
             response_summary=None,
@@ -2287,32 +2310,73 @@ def import_and_summarize(chunk_size: int):
             related_session_ids=None,
         )
 
-        db_session.add(new_session)
+        db_session.add(temp_session)
         db_session.commit()
 
-        console.print(f"[green]✓[/green] Session imported as ID {new_session.id}", )
+        # Create external transcript files for v6+ compatibility
+        transcript_content = session_data.get("session_transcript")
+        cleaned_path = None
+        if transcript_content:
+            from pathlib import Path
+            sessions_dir = Path.home() / ".ai-session" / "sessions"
+            sessions_dir.mkdir(parents=True, exist_ok=True)
+
+            # Create .cleaned file (primary location for v6+ sessions)
+            cleaned_path = sessions_dir / f"session_{temp_session.id}.cleaned"
+            cleaned_path.write_text(transcript_content, encoding='utf-8')
+
+            console.print(f"[dim]✓ Transcript saved to {cleaned_path.name}[/dim]", )
+
+        console.print(f"[green]✓[/green] Temporary session created (ID: {temp_session.id})", )
         console.print(f"[dim]Summarizing (this may take a while)...[/dim]", )
 
-        # Summarize it
-        summarizer = Summarizer()
-        summary = summarizer.summarize_session_chunked(
-            session_id=new_session.id,
-            chunk_size_lines=chunk_size,
-            db_session=db_session
-        )
+        summary_data = None
+        try:
+            # Summarize it
+            summarizer = Summarizer()
+            summary = summarizer.summarize_session_chunked(
+                session_id=temp_session.id,
+                chunk_size_lines=chunk_size,
+                db_session=db_session
+            )
 
-        console.print(f"[green]✓[/green] Summary generated ({len(summary)} chars)", )
+            console.print(f"[green]✓[/green] Summary generated ({len(summary)} chars)", )
 
-        # Refresh session to get updated summary
-        db_session.refresh(new_session)
+            # Refresh session to get updated summary
+            db_session.refresh(temp_session)
+
+            # Save summary data before cleanup
+            summary_data = {
+                "summary": temp_session.response_summary,
+                "summary_generated": temp_session.summary_generated,
+                "keywords": temp_session.keywords,
+            }
+
+        except Exception as e:
+            console.print(f"[red]✗[/red] Summarization failed: {e}", )
+            raise
+
+        finally:
+            # Clean up temporary session and files (always run)
+            console.print(f"[dim]Cleaning up temporary session...[/dim]", )
+
+            # Delete external file if it exists
+            if cleaned_path and cleaned_path.exists():
+                cleaned_path.unlink()
+                console.print(f"[dim]✓ Deleted {cleaned_path.name}[/dim]", )
+
+            # Delete temporary session from database
+            db_session.delete(temp_session)
+            db_session.commit()
+            console.print(f"[dim]✓ Deleted temporary session {temp_session.id}[/dim]", )
 
         # Output summary JSON to stdout
         output = {
             "version": "1.0",
             "original_id": session_data.get("original_id"),
-            "summary": new_session.response_summary,
-            "summary_generated": new_session.summary_generated,
-            "keywords": new_session.keywords,
+            "summary": summary_data["summary"] if summary_data else None,
+            "summary_generated": summary_data["summary_generated"] if summary_data else False,
+            "keywords": summary_data["keywords"] if summary_data else None,
         }
 
         print(json.dumps(output, indent=2))

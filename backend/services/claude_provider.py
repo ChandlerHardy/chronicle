@@ -103,7 +103,16 @@ class ClaudeProviderSwitcher:
         """
         settings = self._load_settings()
 
-        # Z.AI uses ANTHROPIC_BASE_URL pointing to api.z.ai
+        # Check for env object first (new format)
+        env = settings.get("env", {})
+        if env:
+            base_url = env.get("ANTHROPIC_BASE_URL", "")
+            if "z.ai" in base_url:
+                return "zai"
+            if env.get("ANTHROPIC_AUTH_TOKEN") or env.get("ANTHROPIC_BASE_URL"):
+                return "custom"
+
+        # Fallback to root-level settings (old format)
         base_url = settings.get("ANTHROPIC_BASE_URL", "")
         if "z.ai" in base_url:
             return "zai"
@@ -126,7 +135,10 @@ class ClaudeProviderSwitcher:
         # Load current settings
         settings = self._load_settings()
 
-        # Remove Z.AI/custom provider settings
+        # Remove the entire env object to clean up all custom provider settings
+        settings.pop("env", None)
+
+        # Also remove any direct root-level settings that might exist
         settings.pop("ANTHROPIC_AUTH_TOKEN", None)
         settings.pop("ANTHROPIC_BASE_URL", None)
         settings.pop("API_TIMEOUT_MS", None)
@@ -151,10 +163,23 @@ class ClaudeProviderSwitcher:
         # Load current settings
         settings = self._load_settings()
 
-        # Add Z.AI settings
-        settings["ANTHROPIC_AUTH_TOKEN"] = api_key
-        settings["ANTHROPIC_BASE_URL"] = base_url
-        settings["API_TIMEOUT_MS"] = str(timeout_ms)  # Must be string per Z.AI docs
+        # Add Z.AI settings under env key
+        if "env" not in settings:
+            settings["env"] = {}
+
+        settings["env"]["ANTHROPIC_AUTH_TOKEN"] = api_key
+        settings["env"]["ANTHROPIC_BASE_URL"] = base_url
+        settings["env"]["API_TIMEOUT_MS"] = str(timeout_ms)  # Must be string per Z.AI docs
+
+        # Also add the model settings for GLM models
+        settings["env"]["ANTHROPIC_DEFAULT_HAIKU_MODEL"] = "glm-4.5-air"
+        settings["env"]["ANTHROPIC_DEFAULT_SONNET_MODEL"] = "glm-4.6"
+        settings["env"]["ANTHROPIC_DEFAULT_OPUS_MODEL"] = "glm-4.6"
+
+        # Remove any direct root-level settings that might conflict
+        settings.pop("ANTHROPIC_AUTH_TOKEN", None)
+        settings.pop("ANTHROPIC_BASE_URL", None)
+        settings.pop("API_TIMEOUT_MS", None)
 
         # Save updated settings
         self._save_settings(settings)
@@ -203,12 +228,22 @@ class ClaudeProviderSwitcher:
             "has_backup": len(self.list_backups()) > 0,
         }
 
-        # Add provider-specific details
-        if provider_type == "zai":
-            info["base_url"] = settings.get("ANTHROPIC_BASE_URL")
-            info["has_api_key"] = bool(settings.get("ANTHROPIC_AUTH_TOKEN"))
-        elif provider_type == "custom":
-            info["base_url"] = settings.get("ANTHROPIC_BASE_URL")
-            info["has_api_key"] = bool(settings.get("ANTHROPIC_AUTH_TOKEN"))
+        # Check for env object first (new format)
+        env = settings.get("env", {})
+        if env:
+            if provider_type == "zai":
+                info["base_url"] = env.get("ANTHROPIC_BASE_URL")
+                info["has_api_key"] = bool(env.get("ANTHROPIC_AUTH_TOKEN"))
+            elif provider_type == "custom":
+                info["base_url"] = env.get("ANTHROPIC_BASE_URL")
+                info["has_api_key"] = bool(env.get("ANTHROPIC_AUTH_TOKEN"))
+        else:
+            # Fallback to root-level settings (old format)
+            if provider_type == "zai":
+                info["base_url"] = settings.get("ANTHROPIC_BASE_URL")
+                info["has_api_key"] = bool(settings.get("ANTHROPIC_AUTH_TOKEN"))
+            elif provider_type == "custom":
+                info["base_url"] = settings.get("ANTHROPIC_BASE_URL")
+                info["has_api_key"] = bool(settings.get("ANTHROPIC_AUTH_TOKEN"))
 
         return info

@@ -134,6 +134,7 @@ def test_export_session_without_transcript(temp_db, monkeypatch):
 
     assert result.exit_code == 0
     exported = json.loads(result.output)
+
     assert exported["session"]["session_transcript"] is None
 
 
@@ -343,7 +344,7 @@ def test_import_session_valid_json(temp_db, sample_session_json, monkeypatch):
     imported = session.query(AIInteraction).filter_by(ai_tool="claude-code", is_session=True).first()
     assert imported is not None
     assert imported.title == "Import Test"
-    assert imported.session_transcript == "User: Test\nAssistant: Response"
+    assert imported.session_transcript is None  # v6+: transcripts stored externally
 
 
 def test_import_session_invalid_json(temp_db, monkeypatch):
@@ -425,8 +426,15 @@ def test_import_session_with_special_characters(temp_db, monkeypatch):
     assert result.exit_code == 0
 
     imported = session.query(AIInteraction).filter_by(is_session=True).first()
-    assert "👋" in imported.session_transcript
-    assert "你好" in imported.session_transcript
+    assert imported.session_transcript is None  # v6+: transcripts stored externally
+
+    # Check external file contains the unicode content
+    from pathlib import Path
+    cleaned_path = Path.home() / ".ai-session" / "sessions" / f"session_{imported.id}.cleaned"
+    if cleaned_path.exists():
+        content = cleaned_path.read_text(encoding='utf-8')
+        assert "👋" in content
+        assert "你好" in content
 
 
 def test_import_session_handles_list_files_mentioned(temp_db, sample_session_json, monkeypatch):
