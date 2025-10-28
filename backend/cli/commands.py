@@ -225,10 +225,10 @@ def update(check_only: bool):
             # Detect current install mode (check if fastmcp is installed)
             try:
                 import fastmcp
-                install_cmd = ["pip", "install", "-e", ".[mcp]"]
+                install_cmd = [sys.executable, "-m", "pip", "install", "-e", ".[mcp]"]
                 console.print("[dim]Reinstalling with MCP support...[/dim]")
             except ImportError:
-                install_cmd = ["pip", "install", "-e", "."]
+                install_cmd = [sys.executable, "-m", "pip", "install", "-e", "."]
                 console.print("[dim]Reinstalling (minimal)...[/dim]")
 
             result = subprocess.run(
@@ -242,7 +242,7 @@ def update(check_only: bool):
                 console.print(f"[red]✗[/red] Reinstall failed: {result.stderr}")
                 console.print("\nPlease reinstall manually:")
                 console.print(f"  cd {chronicle_path}")
-                console.print("  pip install -e .[mcp]  # or: pip install -e .")
+                console.print(f"  {sys.executable} -m pip install -e .[mcp]  # or: -e .")
                 return
 
             console.print("[green]✓[/green] Dependencies reinstalled")
@@ -2109,7 +2109,8 @@ def export_session(session_id: int):
         chronicle export-session 42 > session.json
         chronicle export-session 42 | ssh mac "chronicle import-and-summarize" > summary.json
     """
-    db_session = get_session()
+    db_path = os.getenv('CHRONICLE_DB')  # For testing
+    db_session = get_session(db_path)
 
     try:
         session = db_session.query(AIInteraction).filter_by(id=session_id).first()
@@ -2161,7 +2162,8 @@ def import_session():
         cat session.json | chronicle import-session
         chronicle export-session 42 | ssh mac "chronicle import-session"
     """
-    db_session = get_session()
+    db_path = os.getenv('CHRONICLE_DB')  # For testing
+    db_session = get_session(db_path)
 
     try:
         # Read JSON from stdin
@@ -2232,7 +2234,8 @@ def import_and_summarize(chunk_size: int):
     """
     from backend.services.summarizer import Summarizer
 
-    db_session = get_session()
+    db_path = os.getenv('CHRONICLE_DB')  # For testing
+    db_session = get_session(db_path)
 
     try:
         # Read JSON from stdin
@@ -2324,7 +2327,8 @@ def import_summary():
         cat summary.json | chronicle import-summary
         ssh mac "chronicle export-session 42 | chronicle import-and-summarize" | chronicle import-summary
     """
-    db_session = get_session()
+    db_path = os.getenv('CHRONICLE_DB')  # For testing
+    db_session = get_session(db_path)
 
     try:
         # Read JSON from stdin
