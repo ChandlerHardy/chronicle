@@ -2124,6 +2124,20 @@ def export_session(session_id: int):
             console.print(f"[red]✗[/red] ID {session_id} is not a session (use for full sessions only)", )
             sys.exit(1)
 
+        # Get transcript (fallback chain: database → .cleaned → .log → None)
+        transcript = session.session_transcript
+        if transcript is None:
+            # Try reading from .cleaned file (v6+ sessions after migration)
+            home = Path.home()
+            cleaned_path = home / ".ai-session" / "sessions" / f"session_{session_id}.cleaned"
+            log_path = home / ".ai-session" / "sessions" / f"session_{session_id}.log"
+
+            if cleaned_path.exists():
+                transcript = cleaned_path.read_text(encoding='utf-8', errors='ignore')
+            elif log_path.exists():
+                # Fallback to .log file (raw transcript, not cleaned)
+                transcript = log_path.read_text(encoding='utf-8', errors='ignore')
+
         # Build export JSON
         export_data = {
             "version": "1.0",
@@ -2132,7 +2146,7 @@ def export_session(session_id: int):
                 "timestamp": session.timestamp.isoformat() if session.timestamp else None,
                 "ai_tool": session.ai_tool,
                 "is_session": session.is_session,
-                "session_transcript": session.session_transcript,
+                "session_transcript": transcript,
                 "duration_ms": session.duration_ms,
                 "title": session.title,
                 "tags": session.tags,

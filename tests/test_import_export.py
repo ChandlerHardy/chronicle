@@ -137,6 +137,142 @@ def test_export_session_without_transcript(temp_db, monkeypatch):
     assert exported["session"]["session_transcript"] is None
 
 
+def test_export_session_with_cleaned_file_fallback(temp_db, monkeypatch, tmp_path):
+    """Export session reads from .cleaned file when session_transcript is NULL."""
+    session, db_path = temp_db
+    monkeypatch.setenv('CHRONICLE_DB', db_path)
+
+    # Create session with NULL transcript (v6+ sessions after migration)
+    ai_session = AIInteraction(
+        timestamp=datetime.now(),
+        ai_tool="claude-code",
+        prompt="",
+        is_session=True,
+        session_transcript=None,  # NULL in database (v6+)
+        title="Cleaned File Session"
+    )
+    session.add(ai_session)
+    session.commit()
+    session.refresh(ai_session)  # Get the auto-generated ID
+
+    # Create .cleaned file in ~/.ai-session/sessions/ under tmp_path
+    sessions_dir = tmp_path / ".ai-session" / "sessions"
+    sessions_dir.mkdir(parents=True, exist_ok=True)
+    cleaned_file = sessions_dir / f"session_{ai_session.id}.cleaned"
+    cleaned_content = "User: This is from .cleaned file\nAssistant: Response from cleaned file"
+    cleaned_file.write_text(cleaned_content)
+
+    # Mock Path.home() to return tmp_path
+    with patch('backend.cli.commands.Path.home', return_value=tmp_path):
+        runner = CliRunner()
+        result = runner.invoke(cli, ['export-session', str(ai_session.id)])
+
+    assert result.exit_code == 0
+    exported = json.loads(result.output)
+    # Should have read from .cleaned file, not database (which is NULL)
+    assert exported["session"]["session_transcript"] == cleaned_content
+
+
+def test_export_session_with_log_file_fallback(temp_db, monkeypatch, tmp_path):
+    """Export session reads from .log file if .cleaned doesn't exist."""
+    session, db_path = temp_db
+    monkeypatch.setenv('CHRONICLE_DB', db_path)
+
+    # Create session with NULL transcript
+    ai_session = AIInteraction(
+        timestamp=datetime.now(),
+        ai_tool="claude-code",
+        prompt="",
+        is_session=True,
+        session_transcript=None,
+        title="Log File Session"
+    )
+    session.add(ai_session)
+    session.commit()
+    session.refresh(ai_session)
+
+    # Create .log file (but NOT .cleaned) under ~/.ai-session/sessions/
+    sessions_dir = tmp_path / ".ai-session" / "sessions"
+    sessions_dir.mkdir(parents=True, exist_ok=True)
+    log_file = sessions_dir / f"session_{ai_session.id}.log"
+    log_content = "User: This is from .log file\nAssistant: Response from log file"
+    log_file.write_text(log_content)
+
+    with patch('backend.cli.commands.Path.home', return_value=tmp_path):
+        runner = CliRunner()
+        result = runner.invoke(cli, ['export-session', str(ai_session.id)])
+
+    assert result.exit_code == 0
+    exported = json.loads(result.output)
+    # Should have read from .log file
+    assert exported["session"]["session_transcript"] == log_content
+
+
+def test_export_session_prefers_cleaned_over_log(temp_db, monkeypatch, tmp_path):
+    """Export session prefers .cleaned file over .log file when both exist."""
+    session, db_path = temp_db
+    monkeypatch.setenv('CHRONICLE_DB', db_path)
+
+    ai_session = AIInteraction(
+        timestamp=datetime.now(),
+        ai_tool="claude-code",
+        prompt="",
+        is_session=True,
+        session_transcript=None,
+        title="Both Files Session"
+    )
+    session.add(ai_session)
+    session.commit()
+    session.refresh(ai_session)
+
+    # Create BOTH .cleaned and .log files under ~/.ai-session/sessions/
+    sessions_dir = tmp_path / ".ai-session" / "sessions"
+    sessions_dir.mkdir(parents=True, exist_ok=True)
+
+    cleaned_file = sessions_dir / f"session_{ai_session.id}.cleaned"
+    cleaned_file.write_text("CLEANED FILE CONTENT")
+
+    log_file = sessions_dir / f"session_{ai_session.id}.log"
+    log_file.write_text("LOG FILE CONTENT")
+
+    with patch('backend.cli.commands.Path.home', return_value=tmp_path):
+        runner = CliRunner()
+        result = runner.invoke(cli, ['export-session', str(ai_session.id)])
+
+    assert result.exit_code == 0
+    exported = json.loads(result.output)
+    # Should prefer .cleaned over .log
+    assert exported["session"]["session_transcript"] == "CLEANED FILE CONTENT"
+
+
+def test_export_session_no_transcript_sources(temp_db, monkeypatch, tmp_path):
+    """Export session with NULL transcript and no files returns None gracefully."""
+    session, db_path = temp_db
+    monkeypatch.setenv('CHRONICLE_DB', db_path)
+
+    ai_session = AIInteraction(
+        timestamp=datetime.now(),
+        ai_tool="claude-code",
+        prompt="",
+        is_session=True,
+        session_transcript=None,  # NULL
+        title="No Transcript Anywhere"
+    )
+    session.add(ai_session)
+    session.commit()
+    session.refresh(ai_session)
+
+    # NO .cleaned or .log files exist
+    with patch('backend.cli.commands.Path.home', return_value=tmp_path):
+        runner = CliRunner()
+        result = runner.invoke(cli, ['export-session', str(ai_session.id)])
+
+    assert result.exit_code == 0
+    exported = json.loads(result.output)
+    # Should return None when no transcript source exists
+    assert exported["session"]["session_transcript"] is None
+
+
 def test_export_session_json_structure(sample_session, monkeypatch):
     """Exported JSON has all required fields."""
     ai_session, session, db_path = sample_session

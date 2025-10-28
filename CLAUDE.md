@@ -45,32 +45,103 @@ mcp__chronicle__search_sessions(query="relevant keywords", limit=10)
 
 **YOU MUST FOLLOW THESE DIRECTIVES FOR EVERY INTERACTION:**
 
-1. **🔍 SEARCH FIRST (MANDATORY)** - Before implementing ANYTHING:
-   ```python
-   mcp__chronicle__search_sessions(query="relevant keywords", limit=10)
-   ```
-   **This is REQUIRED, not optional.** Past sessions contain solutions to current problems.
+#### 1. 🔍 SEARCH FIRST (MANDATORY)
 
-2. **📊 CHECK SESSION STATUS (REQUIRED)** - Remind user if not tracking:
-   - Current session NOT tracked unless started with `chronicle start claude`
-   - **YOU MUST suggest exit and restart if meaningful work is happening**
+**ALWAYS search Chronicle before implementing or modifying anything:**
 
-3. **⚡ USE MCP OVER CLI (MANDATORY)** - Always prefer MCP tools:
-   - `mcp__chronicle__*` returns structured JSON (10x faster)
-   - Bash commands are for users, not programmatic access
-   - **Using CLI instead of MCP is considered incorrect**
+```python
+mcp__chronicle__search_sessions(query="relevant keywords", limit=10)
+```
 
-4. **🗺️ CHECK ROADMAP BEFORE PLANNING (REQUIRED)** - Avoid duplicate work:
-   ```python
-   mcp__chronicle__get_roadmap(days=7)
-   mcp__chronicle__get_next_steps(completed=False)
-   ```
-   **Failure to check roadmap can result in duplicating already-planned work**
+**Why this is mandatory:**
+- ❌ Not searching → Reimplementing features, breaking working code, wasting 10-20 minutes
+- ✅ Searching → Finding past solutions in <1 second, understanding WHY decisions were made
+- **Proven ROI: 2,700x** (Sessions 21, 30, 31 - 45+ minutes wasted by not searching)
 
-5. **🏷️ SUGGEST SESSION ORGANIZATION (REQUIRED)** - After significant work:
-   - YOU MUST propose descriptive title
-   - YOU MUST suggest relevant tags (technologies, features, bugs)
-   - YOU MUST link to related sessions
+**Trigger phrases that REQUIRE searching:**
+- User says "I can't believe..." → Search first!
+- User says "why isn't..." → Search first!
+- User says "this should work..." → Search first!
+- Before adding any feature → Check if it exists
+- When debugging → Check past sessions for similar issues
+
+**Real example from Session 21:**
+```
+User: "I can't believe there's no cleaning to be done on session 21"
+❌ Without search: Spent 15+ minutes debugging, confused why 0% reduction
+✅ With search: Would have found Session 13 implemented transcript cleaning
+  → Result: Immediately understood cleaning happens at storage time
+```
+
+#### 2. ✍️ WRITE TESTS FIRST (MANDATORY - TDD)
+
+**NEVER write implementation code without tests:**
+
+```python
+# ❌ WRONG: Writing implementation first
+def export_session(session_id):
+    # ... implementation ...
+
+# ✅ CORRECT: Writing test first (red-green-refactor)
+def test_export_session_with_file_fallback():
+    # ... test that fails ...
+    # THEN write implementation to make it pass
+```
+
+**When you MUST write tests:**
+- Before implementing new features
+- Before fixing bugs (write failing test that reproduces bug)
+- Before refactoring (ensure tests pass before AND after)
+- When user asks "why don't you write tests??" (you violated this!)
+
+**Real violations from this project:**
+- Session 52: Created 4 CLI commands WITHOUT tests → User called out violation
+- Session 52: Implemented file fallback WITHOUT tests → User called out violation again
+- **Never repeat these mistakes**
+
+#### 3. 📊 CHECK SESSION STATUS (REQUIRED)
+
+**Remind user if not tracking:**
+- Current session NOT tracked unless started with `chronicle start claude`
+- **YOU MUST suggest exit and restart if meaningful work is happening**
+
+#### 4. ⚡ USE MCP OVER CLI (MANDATORY)
+
+**Always prefer MCP tools, NEVER use CLI for programmatic access:**
+
+```python
+# ✅ CORRECT (MCP - fast, structured JSON):
+sessions = mcp__chronicle__search_sessions(query="storage", limit=5)
+roadmap = mcp__chronicle__get_roadmap(days=7)
+
+# ❌ WRONG (CLI - slow, hard to parse):
+Bash("chronicle search 'storage'")
+Bash("chronicle roadmap")
+```
+
+**Why MCP over CLI:**
+- **Speed**: MCP queries DB directly (<10ms), CLI spawns subprocess (>100ms)
+- **Programmatic**: Returns structured JSON, not formatted text
+- **Reliable**: No parsing of human-readable output
+
+#### 5. 🗺️ CHECK ROADMAP BEFORE PLANNING (REQUIRED)
+
+**Avoid duplicate work:**
+```python
+mcp__chronicle__get_roadmap(days=7)
+mcp__chronicle__get_next_steps(completed=False)
+```
+
+**Failure to check roadmap can result in duplicating already-planned work**
+
+#### 6. 🏷️ SUGGEST SESSION ORGANIZATION (REQUIRED)
+
+**After significant work:**
+- YOU MUST propose descriptive title
+- YOU MUST suggest relevant tags (technologies, features, bugs)
+- YOU MUST link to related sessions
+
+---
 
 **For deep analysis and enforcement:** Launch the Chronicle Advocate agent (see [AGENTS.md](./AGENTS.md))
 
@@ -87,7 +158,9 @@ Unix `script` captures terminal I/O
     ↓
 On exit: Transcript → ~/.ai-session/sessions/session_N.log
     ↓
-Database entry created (transcript stored inline)
+Cleaned → ~/.ai-session/sessions/session_N.cleaned (v6+ optimization)
+    ↓
+Database entry created (transcript reference, NOT inline storage)
     ↓
 AI summary generated on first view (chunked for large sessions)
 ```
@@ -95,7 +168,10 @@ AI summary generated on first view (chunked for large sessions)
 ### Key Locations
 
 - **Database**: `~/.ai-session/sessions.db` (SQLite)
-- **Transcripts**: Stored inline in database `session_transcript` column
+- **Transcripts**: Stored in external files (v6+ optimization, see Milestone #2)
+  - `.log` files: Raw terminal output
+  - `.cleaned` files: Processed transcripts with control chars removed
+  - Database `session_transcript` column: NULL for v6+ sessions (uses file storage)
 - **Config**: `~/.ai-session/config.yaml`
 - **MCP Config**: `~/.mcp.json` (global) or `.mcp.json` (project-local)
 
@@ -104,7 +180,10 @@ AI summary generated on first view (chunked for large sessions)
 **ai_interactions** (main session table):
 - `is_session=True` → Full session with transcript
 - `is_session=False` → One-shot interaction
-- `session_transcript` → Full transcript text (stored inline)
+- `session_transcript` → **NULL for v6+ sessions** (stored in `.cleaned` files instead)
+  - **Legacy sessions**: Inline text storage (pre-v6)
+  - **Modern sessions**: NULL (see Milestone #2 - transcript optimization)
+  - **Fallback chain**: database → `.cleaned` file → `.log` file → None
 - `summary_generated` → Whether AI summary exists
 - `title`, `tags`, `keywords` → Organization fields
 - `parent_session_id`, `related_session_ids` → Session linking
@@ -192,10 +271,11 @@ chronicle config ai.gemini_api_key YOUR_KEY
 
 ## 🚨 Known Issues
 
-### Database Size (110MB for 13 sessions)
-**Cause**: Transcripts stored inline (~47MB of text)
-**Status**: Optimization planned (move to external files)
-**Impact**: None for functionality
+### Database Size ✅ RESOLVED
+**Previous issue**: 110MB for 13 sessions (transcripts stored inline)
+**Resolution**: Milestone #2 - Moved transcripts to external `.cleaned` files
+**Current**: Database only stores metadata, transcripts in separate files
+**Impact**: Database is now much smaller and faster
 
 ### MCP Server Hangs
 **Cause**: Configuration changes require restart
@@ -209,19 +289,55 @@ chronicle config ai.gemini_api_key YOUR_KEY
 
 ## 🛠️ Development Tasks
 
-**⚠️ REMINDER: SEARCH CHRONICLE FIRST**
+### 🚨 PRE-FLIGHT CHECKLIST (DO THIS FIRST!)
 
-Before starting ANY development task below:
-```python
-mcp__chronicle__search_sessions(query="cli command|schema|mcp tool|<your task>", limit=10)
-```
-**Someone may have already done this work. Check first.**
+**Before starting ANY development task, run this checklist:**
+
+1. **SEARCH CHRONICLE** (1 second, saves 10-20 minutes):
+   ```python
+   mcp__chronicle__search_sessions(query="<your task>", limit=10)
+   ```
+
+2. **CHECK ROADMAP** (avoid duplicate planning):
+   ```python
+   mcp__chronicle__get_roadmap(days=7)
+   mcp__chronicle__get_next_steps(completed=False)
+   ```
+
+3. **WRITE TESTS FIRST** (TDD red-green-refactor):
+   - Write failing test
+   - Implement feature to make test pass
+   - Refactor
+
+**Violating this checklist wastes time and frustrates the user. Follow it religiously.**
 
 ---
 
 ### Adding a New CLI Command
 
-1. Add to `backend/cli/commands.py`:
+**✅ TDD APPROACH (REQUIRED):**
+
+1. **Write tests FIRST** in `tests/test_*.py`:
+```python
+def test_my_command_success(temp_db):
+    """Test my_command with valid input."""
+    result = runner.invoke(cli, ['my-command', '--flag', 'value'])
+    assert result.exit_code == 0
+    assert "expected output" in result.output
+
+def test_my_command_invalid_input(temp_db):
+    """Test my_command with invalid input."""
+    result = runner.invoke(cli, ['my-command', '--flag', 'bad'])
+    assert result.exit_code != 0
+    assert "error message" in result.output
+```
+
+2. **Run tests** (they should FAIL):
+```bash
+pytest tests/test_*.py -v  # Red phase
+```
+
+3. **Implement command** in `backend/cli/commands.py`:
 ```python
 @cli.command()
 @click.option('--flag', help='Description')
@@ -230,15 +346,27 @@ def my_command(flag: str):
     # Implementation
 ```
 
-2. Use formatters from `backend/cli/formatters.py`
-3. Add tests to `tests/test_*.py`
+4. **Use formatters** from `backend/cli/formatters.py`
+
+5. **Run tests again** (they should PASS):
+```bash
+pytest tests/test_*.py -v  # Green phase
+```
+
+**❌ DO NOT skip tests. User will call you out.**
 
 ### Modifying Database Schema
 
-1. Update `backend/database/models.py`
-2. Add migration in `backend/database/migrate.py`
-3. Test with fresh database: `rm ~/.ai-session/sessions.db && chronicle init`
-4. Update this document's schema section
+**✅ TDD APPROACH (REQUIRED):**
+
+1. **Write tests FIRST** that verify schema changes
+2. **Update** `backend/database/models.py`
+3. **Add migration** in `backend/database/migrate.py`
+4. **Test with fresh database**: `rm ~/.ai-session/sessions.db && chronicle init`
+5. **Run all tests**: `pytest tests/ -v`
+6. **Update this document's schema section**
+
+**Search Chronicle first!** Schema changes often already implemented.
 
 ### Adding MCP Tools
 
@@ -289,15 +417,76 @@ def my_tool(param: str) -> str:
 
 ---
 
+## ⚠️ Common Mistakes to Avoid
+
+**Learn from real violations in this project:**
+
+### Mistake #1: Not Searching Chronicle First
+
+**Real example from Session 52:**
+```
+User: "oh right! we stopped storing transcripts in the db a while back.
+       why didn't you check chronicle??"
+
+❌ What I did: Implemented file fallback without searching
+✅ What I should have done:
+   mcp__chronicle__search_sessions(query="transcript storage", limit=10)
+   → Would have found Milestone #2 documenting the change
+```
+
+**Impact**: Wasted 20+ minutes debugging, user had to remind me
+
+### Mistake #2: Writing Code Without Tests
+
+**Real example from Session 52:**
+```
+User: "what does the tdd advocate say about it all? it seems you haven't
+       been checking CLAUDE.md or chronicle, why is that?"
+
+❌ What I did: Created 4 CLI commands (export/import) without any tests
+✅ What I should have done: Write tests FIRST for each command
+   → TDD advocate had to be launched to fix the violation
+```
+
+**Impact**: Had to write 17 tests retroactively, added extra work
+
+### Mistake #3: Using CLI Instead of MCP
+
+**Real pattern to avoid:**
+```python
+# ❌ WRONG (slow, hard to parse):
+output = Bash("chronicle sessions")
+sessions = parse_table_output(output)  # Fragile!
+
+# ✅ CORRECT (fast, structured):
+sessions = mcp__chronicle__get_sessions(limit=10)
+# Returns clean JSON, 10x faster
+```
+
+### Mistake #4: Not Checking Roadmap
+
+**Pattern to avoid:**
+```
+User: "I want to add export functionality"
+❌ Start implementing immediately
+✅ Check roadmap first: mcp__chronicle__get_roadmap(days=7)
+   → Might already be planned or partially implemented
+```
+
+---
+
 ## 🎯 Final Reminder
 
 **Before you finish reading this file and start working:**
 
 1. **SEARCH CHRONICLE FIRST** - `mcp__chronicle__search_sessions(query="...", limit=10)`
 2. **CHECK ROADMAP** - `mcp__chronicle__get_roadmap(days=7)`
-3. **VERIFY SESSION TRACKING** - Remind user to run `chronicle start claude` if not tracked
+3. **WRITE TESTS FIRST** - TDD red-green-refactor cycle
+4. **VERIFY SESSION TRACKING** - Remind user to run `chronicle start claude` if not tracked
 
 **This is mandatory. Every single time. No exceptions.**
+
+**If you hear trigger phrases ("I can't believe...", "why isn't..."), STOP and search Chronicle.**
 
 ---
 
