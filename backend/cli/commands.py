@@ -3,6 +3,7 @@
 import os
 import sys
 import subprocess
+import json
 from datetime import datetime, timedelta
 from pathlib import Path
 import click
@@ -2097,3 +2098,276 @@ def vacuum():
         console.print(f"[red]✗[/red] Error during vacuum: {e}")
         import traceback
         traceback.print_exc()
+
+
+@cli.command()
+@click.argument('session_id', type=int)
+def export_session(session_id: int):
+    """Export a session as JSON (for cross-system summarization).
+
+    Example:
+        chronicle export-session 42 > session.json
+        chronicle export-session 42 | ssh mac "chronicle import-and-summarize" > summary.json
+    """
+    db_session = get_session()
+
+    try:
+        session = db_session.query(AIInteraction).filter_by(id=session_id).first()
+
+        if not session:
+            console.print(f"[red]✗[/red] Session {session_id} not found", )
+            sys.exit(1)
+
+        if not session.is_session:
+            console.print(f"[red]✗[/red] ID {session_id} is not a session (use for full sessions only)", )
+            sys.exit(1)
+
+        # Build export JSON
+        export_data = {
+            "version": "1.0",
+            "session": {
+                "original_id": session.id,
+                "timestamp": session.timestamp.isoformat() if session.timestamp else None,
+                "ai_tool": session.ai_tool,
+                "is_session": session.is_session,
+                "session_transcript": session.session_transcript,
+                "duration_ms": session.duration_ms,
+                "title": session.title,
+                "tags": session.tags,
+                "keywords": session.keywords,
+                "response_summary": session.response_summary,
+                "summary_generated": session.summary_generated,
+                "files_mentioned": session.files_mentioned,
+                "parent_session_id": session.parent_session_id,
+                "related_session_ids": session.related_session_ids,
+            }
+        }
+
+        # Output to stdout (for piping)
+        print(json.dumps(export_data, indent=2))
+
+    except Exception as e:
+        console.print(f"[red]✗[/red] Export failed: {e}", )
+        sys.exit(1)
+    finally:
+        db_session.close()
+
+
+@cli.command()
+def import_session():
+    """Import a session from JSON (stdin) and return new session ID.
+
+    Example:
+        cat session.json | chronicle import-session
+        chronicle export-session 42 | ssh mac "chronicle import-session"
+    """
+    db_session = get_session()
+
+    try:
+        # Read JSON from stdin
+        import_data = json.load(sys.stdin)
+
+        if import_data.get("version") != "1.0":
+            console.print(f"[red]✗[/red] Unsupported export version: {import_data.get('version')}", )
+            sys.exit(1)
+
+        session_data = import_data["session"]
+
+        # JSON-encode files_mentioned if it's a list
+        files_mentioned = session_data.get("files_mentioned")
+        if isinstance(files_mentioned, list):
+            files_mentioned = json.dumps(files_mentioned)
+
+        # Create new session (with new ID)
+        new_session = AIInteraction(
+            timestamp=datetime.fromisoformat(session_data["timestamp"]) if session_data.get("timestamp") else datetime.now(),
+            ai_tool=session_data["ai_tool"],
+            prompt="",  # Sessions don't have prompts (full transcript instead)
+            is_session=True,
+            session_transcript=session_data["session_transcript"],
+            duration_ms=session_data.get("duration_ms"),
+            title=session_data.get("title"),
+            tags=session_data.get("tags"),
+            keywords=session_data.get("keywords"),
+            response_summary=None,  # Clear summary - will re-generate if needed
+            summary_generated=False,  # Mark as not summarized
+            files_mentioned=files_mentioned,
+            parent_session_id=None,  # Clear relationships (different DB)
+            related_session_ids=None,
+        )
+
+        db_session.add(new_session)
+        db_session.commit()
+
+        console.print(f"[green]✓[/green] Session imported as ID {new_session.id}", )
+        console.print(f"[dim]Original ID: {session_data.get('original_id')}[/dim]", )
+        console.print(f"[dim]Tool: {new_session.ai_tool}[/dim]", )
+        console.print(f"[dim]Transcript size: {len(new_session.session_transcript) if new_session.session_transcript else 0} chars[/dim]", )
+
+        # Output just the new ID to stdout (for piping)
+        print(new_session.id)
+
+    except json.JSONDecodeError as e:
+        console.print(f"[red]✗[/red] Invalid JSON: {e}", )
+        sys.exit(1)
+    except Exception as e:
+        console.print(f"[red]✗[/red] Import failed: {e}", )
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
+    finally:
+        db_session.close()
+
+
+@cli.command()
+@click.option('--chunk-size', type=int, default=10000, help='Lines per chunk for large sessions')
+def import_and_summarize(chunk_size: int):
+    """Import session from JSON (stdin) and immediately summarize it.
+
+    Outputs JSON with summary to stdout.
+
+    Example:
+        cat session.json | chronicle import-and-summarize > summary.json
+        chronicle export-session 42 | ssh mac "chronicle import-and-summarize" > summary.json
+    """
+    from backend.services.summarizer import Summarizer
+
+    db_session = get_session()
+
+    try:
+        # Read JSON from stdin
+        import_data = json.load(sys.stdin)
+
+        if import_data.get("version") != "1.0":
+            console.print(f"[red]✗[/red] Unsupported export version: {import_data.get('version')}", )
+            sys.exit(1)
+
+        session_data = import_data["session"]
+
+        console.print(f"[dim]Importing session from {session_data['ai_tool']}...[/dim]", )
+
+        # JSON-encode files_mentioned if it's a list
+        files_mentioned = session_data.get("files_mentioned")
+        if isinstance(files_mentioned, list):
+            files_mentioned = json.dumps(files_mentioned)
+
+        # Create new session
+        new_session = AIInteraction(
+            timestamp=datetime.fromisoformat(session_data["timestamp"]) if session_data.get("timestamp") else datetime.now(),
+            ai_tool=session_data["ai_tool"],
+            prompt="",  # Sessions don't have prompts (full transcript instead)
+            is_session=True,
+            session_transcript=session_data["session_transcript"],
+            duration_ms=session_data.get("duration_ms"),
+            title=session_data.get("title"),
+            tags=session_data.get("tags"),
+            keywords=session_data.get("keywords"),
+            response_summary=None,
+            summary_generated=False,
+            files_mentioned=files_mentioned,
+            parent_session_id=None,
+            related_session_ids=None,
+        )
+
+        db_session.add(new_session)
+        db_session.commit()
+
+        console.print(f"[green]✓[/green] Session imported as ID {new_session.id}", )
+        console.print(f"[dim]Summarizing (this may take a while)...[/dim]", )
+
+        # Summarize it
+        summarizer = Summarizer()
+        summary = summarizer.summarize_session_chunked(
+            session_id=new_session.id,
+            chunk_size_lines=chunk_size,
+            db_session=db_session
+        )
+
+        console.print(f"[green]✓[/green] Summary generated ({len(summary)} chars)", )
+
+        # Refresh session to get updated summary
+        db_session.refresh(new_session)
+
+        # Output summary JSON to stdout
+        output = {
+            "version": "1.0",
+            "original_id": session_data.get("original_id"),
+            "summary": new_session.response_summary,
+            "summary_generated": new_session.summary_generated,
+            "keywords": new_session.keywords,
+        }
+
+        print(json.dumps(output, indent=2))
+
+    except ImportError as e:
+        console.print(f"[red]✗[/red] {e}", )
+        console.print("[dim]Install with: pip install --user google-generativeai[/dim]", )
+        console.print("[dim]Or use Ollama: chronicle config ai.summarization_provider ollama[/dim]", )
+        sys.exit(1)
+    except json.JSONDecodeError as e:
+        console.print(f"[red]✗[/red] Invalid JSON: {e}", )
+        sys.exit(1)
+    except Exception as e:
+        console.print(f"[red]✗[/red] Failed: {e}", )
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
+    finally:
+        db_session.close()
+
+
+@cli.command()
+def import_summary():
+    """Import a summary from JSON (stdin) and update the original session.
+
+    Example:
+        cat summary.json | chronicle import-summary
+        ssh mac "chronicle export-session 42 | chronicle import-and-summarize" | chronicle import-summary
+    """
+    db_session = get_session()
+
+    try:
+        # Read JSON from stdin
+        summary_data = json.load(sys.stdin)
+
+        if summary_data.get("version") != "1.0":
+            console.print(f"[red]✗[/red] Unsupported summary version: {summary_data.get('version')}", )
+            sys.exit(1)
+
+        original_id = summary_data.get("original_id")
+        summary = summary_data.get("summary")
+        keywords = summary_data.get("keywords")
+
+        if not original_id:
+            console.print(f"[red]✗[/red] No original_id in summary JSON", )
+            sys.exit(1)
+
+        # Find the original session
+        session = db_session.query(AIInteraction).filter_by(id=original_id).first()
+
+        if not session:
+            console.print(f"[red]✗[/red] Session {original_id} not found", )
+            sys.exit(1)
+
+        # Update with summary
+        session.response_summary = summary
+        session.summary_generated = True
+        if keywords:
+            session.keywords = keywords
+
+        db_session.commit()
+
+        console.print(f"[green]✓[/green] Summary imported for session {original_id}")
+        console.print(f"[dim]Summary length: {len(summary) if summary else 0} chars[/dim]")
+        console.print(f"[dim]Keywords: {keywords}[/dim]")
+
+    except json.JSONDecodeError as e:
+        console.print(f"[red]✗[/red] Invalid JSON: {e}", )
+        sys.exit(1)
+    except Exception as e:
+        console.print(f"[red]✗[/red] Import failed: {e}", )
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
+    finally:
+        db_session.close()

@@ -24,6 +24,9 @@ include = ["backend*"]
 exclude = ["tests*", "public*", "example*", "chronicle-skills*"]
 
 [project.optional-dependencies]
+ai = [
+    "google-generativeai>=0.8.0",
+]
 mcp = [
     "fastmcp>=0.1.0",
 ]

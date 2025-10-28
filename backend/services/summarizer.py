@@ -58,7 +58,15 @@ class Summarizer:
         self._get_db_session = get_session
 
         if self.provider == "gemini":
-            import google.generativeai as genai
+            try:
+                import google.generativeai as genai
+            except ImportError:
+                raise ImportError(
+                    "google-generativeai package not installed. "
+                    "Install with: pip install --user google-generativeai\n"
+                    "Or switch to Ollama: chronicle config ai.summarization_provider ollama"
+                )
+
             self.api_key = self.config.gemini_api_key
 
             if not self.api_key:
@@ -806,8 +814,7 @@ Updated Summary:"""
                         self.recent_requests.append((time.time(), estimated_tokens))
 
                         # Create a temporary client for this specific model
-                        import google.generativeai as genai
-                        temp_model = genai.GenerativeModel(model_name)
+                        temp_model = self.genai.GenerativeModel(model_name)
                         response = temp_model.generate_content(prompt)
                         chunk_summary = response.text.strip()
 
