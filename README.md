@@ -107,11 +107,13 @@ Chronicle is a **local-first development memory system** that gives AI assistant
 
 ### Installation
 
+#### Standard Installation (with MCP server support)
+
 ```bash
-# Clone and install
+# Clone and install with MCP support
 git clone https://github.com/ChandlerHardy/chronicle
 cd chronicle
-python3 -m pip install -e .
+python3 -m pip install -e ".[mcp]"
 
 # Initialize Chronicle
 chronicle init
@@ -122,6 +124,25 @@ chronicle config ai.gemini_api_key YOUR_API_KEY
 # Add a repository to track
 chronicle add-repo /path/to/your/project
 ```
+
+#### Minimal Installation (CLI only, no MCP server)
+
+For environments where you can't install Rust dependencies (e.g., restricted FreeBSD systems), you can install Chronicle without MCP support:
+
+```bash
+# Clone and install without MCP dependencies
+git clone https://github.com/ChandlerHardy/chronicle
+cd chronicle
+python3 -m pip install -e .
+
+# All CLI commands work normally
+chronicle init
+chronicle start claude
+chronicle sessions
+chronicle search "your query"
+```
+
+**Note:** Without MCP support, AI assistants cannot query Chronicle directly. All features work via CLI.
 
 ### Basic Usage
 

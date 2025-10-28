@@ -20,14 +20,18 @@ Chronicle includes two specialized agents to improve development workflow. These
 **Key behaviors:**
 - **Search First**: Cites the 2,700x ROI (1 second to search vs 10-20 minutes wasted)
 - **Session Tracking**: Reminds to run `chronicle start claude` if not tracked
-- **MCP Over CLI**: Stops Bash("chronicle ...") and suggests MCP tools
+- **Smart Access**: Uses MCP tools when available, falls back to bash commands when not
 - **Roadmap Awareness**: Checks for existing milestones before new work
 - **Session Organization**: Suggests titles, tags, and linking after significant work
+
+**Adaptive Mode:**
+- **With MCP** (standard install): Enforces fast MCP access over slow CLI calls
+- **Without MCP** (minimal install on FreeBSD/restricted environments): Uses `chronicle search`, `chronicle sessions` via bash
 
 **Real impact:**
 - Prevents repeating work from Sessions 21, 30, 31 (45+ minutes wasted)
 - Ensures development history is captured
-- Enforces fast MCP access over slow CLI calls
+- Works in any environment (with or without MCP server)
 
 ---
 

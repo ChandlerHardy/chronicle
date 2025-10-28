@@ -289,7 +289,7 @@ class Summarizer:
         if not summary or len(summary) < 50:
             return []
 
-        prompt = f"""Extract 5-15 searchable keywords/phrases from this development session summary.
+        prompt = f"""Extract 5-25 searchable keywords/phrases from this development session summary.
 
 REQUIREMENTS:
 - Focus on technical terms, technologies, features, and concepts
@@ -326,10 +326,10 @@ Keywords (JSON array only):"""
 
                 # Validate and clean
                 if isinstance(keywords, list):
-                    # Keep only strings, lowercase, limit to 15
+                    # Keep only strings, lowercase, limit to 25
                     keywords = [str(k).lower().strip() for k in keywords if k]
                     keywords = [k for k in keywords if len(k) > 2]  # Min 3 chars
-                    return keywords[:15]
+                    return keywords[:25]
 
             elif self.provider == "ollama":
                 response = self.ollama_client.generate(
@@ -351,7 +351,7 @@ Keywords (JSON array only):"""
                 if isinstance(keywords, list):
                     keywords = [str(k).lower().strip() for k in keywords if k]
                     keywords = [k for k in keywords if len(k) > 2]
-                    return keywords[:15]
+                    return keywords[:25]
 
         except Exception as e:
             print(f"⚠️  Keyword extraction failed: {e}")

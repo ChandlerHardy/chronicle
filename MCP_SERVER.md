@@ -18,10 +18,12 @@ The Model Context Protocol (MCP) is a standardized way for AI assistants to acce
 
 ```bash
 cd /path/to/chronicle
-pip install -e .
+pip install -e ".[mcp]"
 ```
 
 This installs Chronicle along with the `fastmcp` dependency required for the MCP server.
+
+**Note:** If you previously installed Chronicle without MCP support (`pip install -e .`), you'll need to reinstall with the `[mcp]` extra to enable the MCP server.
 
 ### 2. Configure MCP Client
 
