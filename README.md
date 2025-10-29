@@ -6,7 +6,7 @@
 
 > **Give your AI assistants a memory. Track every decision, search past conversations, and never lose context across sessions.**
 
-[![Tests](https://img.shields.io/badge/tests-25%20passing-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-140%20passing-brightgreen)]()
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue)]()
 [![License](https://img.shields.io/badge/license-MIT-blue)]()
 [![MCP](https://img.shields.io/badge/MCP-enabled-purple)]()
@@ -271,7 +271,7 @@ chronicle session 5         # View session details
 - Records all input/output from AI conversations
 - Automatic timestamp tracking
 - Session duration calculation
-- Lazy summarization (transcript saved immediately, summary generated on-demand)
+- Automatic summarization (generated when you view the session)
 
 #### One-Shot AI Commands
 
@@ -324,7 +324,7 @@ chronicle config ai.default_model               # View default model
 - `ai.summarization_provider` - Summarization provider (gemini or ollama)
 - `ai.ollama_model` - Ollama model name (qwen2.5:32b)
 - `ai.ollama_host` - Ollama host URL (http://localhost:11434)
-- `ai.auto_summarize_sessions` - Auto-summarize on session exit
+- `ai.auto_summarize_sessions` - Auto-summarize when viewing session (disabled by default)
 - `retention.raw_data_days` - How long to keep raw transcripts (7 days)
 - `retention.summaries_days` - How long to keep summaries (90 days)
 
@@ -394,7 +394,7 @@ chronicle summarize week        # AI summary of last 7 days
 **Features:**
 - **Multi-provider support** - Choose between Gemini (cloud, 1M context) or Ollama (local, unlimited)
 - **Transcript cleaning** - Removes ANSI codes and duplicates (typically 50-90% size reduction)
-- **Lazy summarization** - Summaries generated on-demand, not blocking
+- **Automatic summarization** - AI summary generated when you view the session
 - **Auto-caching** - Generate once, view instantly forever
 - **Intelligent prompts** - Extracts key decisions, files modified, blockers
 - **Markdown formatting** - Beautiful, structured summaries
@@ -407,7 +407,7 @@ chronicle summarize week        # AI summary of last 7 days
 - Added chronicle session command with auto-summarization
 
 ## Key Decisions
-- Used lazy loading to avoid blocking session exit
+- Automatic summarization triggered when viewing sessions
 - Cached summaries in database for instant retrieval
 
 ## Files/Components Modified
@@ -813,9 +813,16 @@ pytest
 # Run with coverage
 pytest --cov=backend tests/
 
-# Current status: 16 passing tests
-# - 8 tests for git monitoring
-# - 8 tests for AI tracking
+# Current status: 140 passing tests, 1 skipped
+# Test modules:
+# - test_ai_tracker.py: 13 tests (AI interaction logging)
+# - test_claude_provider.py: 44 tests (Claude Code provider)
+# - test_cli_commands.py: 17 tests (CLI command interface)
+# - test_git_monitor.py: 8 tests (Git commit tracking)
+# - test_import_export.py: 15 tests (Data import/export, 1 skipped)
+# - test_project_tracking.py: 9 tests (Project milestones & next steps)
+# - test_session_manager.py: 22 tests (Session recording & management)
+# - test_summarizer.py: 15 tests (AI summarization)
 ```
 
 ---
@@ -826,7 +833,7 @@ pytest --cov=backend tests/
 - [x] Git commit monitoring
 - [x] CLI query interface
 - [x] Search and statistics
-- [x] 8 passing tests
+- [x] Comprehensive test coverage
 
 ### ✅ Phase 2: AI Tracking (COMPLETE)
 - [x] AI interaction logging
@@ -834,7 +841,7 @@ pytest --cov=backend tests/
 - [x] Multi-AI timeline view
 - [x] Usage statistics
 - [x] Configuration system
-- [x] 8 passing tests
+- [x] Comprehensive test coverage
 
 ### ✅ Phase 3: Summarization (COMPLETE)
 - [x] Gemini API integration
@@ -842,7 +849,7 @@ pytest --cov=backend tests/
 - [x] `chronicle session` command with auto-summarization
 - [x] `chronicle summarize today/week` commands
 - [x] Chunked summarization for unlimited session sizes
-- [x] Lazy loading with caching
+- [x] Automatic summarization with caching
 - [x] Intelligent prompt engineering
 - [x] Markdown-formatted summaries
 - [x] Multi-project tracking and filtering
@@ -1096,9 +1103,9 @@ Chronicle is designed to be **private and fast**:
 - ✅ Works offline
 - ✅ Full control over your data
 
-### Lazy Summarization
+### Automatic Summarization
 
-Sessions are recorded immediately, summaries generated on-demand:
+Sessions are recorded immediately, summaries are generated automatically when you view them:
 
 ```
 Session Start
@@ -1112,7 +1119,7 @@ Cache summary for future views
 
 **Benefits:**
 - Fast session exit (no waiting for summarization)
-- Summaries only generated when needed
+- Automatic summarization when you view sessions
 - Can work offline (view raw transcripts)
 
 ---
