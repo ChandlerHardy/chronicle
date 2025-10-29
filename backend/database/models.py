@@ -313,10 +313,15 @@ def init_db(db_path: str = None):
     """
     if db_path is None:
         import os
-        home = os.path.expanduser("~")
-        ai_session_dir = os.path.join(home, ".ai-session")
-        os.makedirs(ai_session_dir, exist_ok=True)
-        db_path = os.path.join(ai_session_dir, "sessions.db")
+        # Check for CHRONICLE_DB environment variable (used in tests)
+        db_path = os.getenv('CHRONICLE_DB')
+
+        if db_path is None:
+            # Default to ~/.ai-session/sessions.db
+            home = os.path.expanduser("~")
+            ai_session_dir = os.path.join(home, ".ai-session")
+            os.makedirs(ai_session_dir, exist_ok=True)
+            db_path = os.path.join(ai_session_dir, "sessions.db")
 
     engine = create_engine(f'sqlite:///{db_path}', echo=False)
     Base.metadata.create_all(engine)
