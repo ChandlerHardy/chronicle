@@ -17,29 +17,35 @@ class GeminiModel(Enum):
     #     "priority": 1,
     #     "use_case": "large_sessions"
     # }
-    FLASH_PREVIEW = {
-        "name": "gemini-2.5-flash-preview-09-2025",
-        "daily_limit": 250,
+    FLASH_2_0 = {
+        "name": "gemini-2.0-flash",
+        "daily_limit": 200,  # Free tier: 200 RPD
         "priority": 1,
-        "use_case": "default"  # Preferred for all sessions (latest features, 250K TPM)
+        "use_case": "primary"  # Primary model - 1M TPM, good balance of speed and quality
+    }
+    FLASH_2_0_LITE = {
+        "name": "gemini-2.0-flash-lite",
+        "daily_limit": 200,  # Free tier: 200 RPD (same as 2.0-flash)
+        "priority": 2,
+        "use_case": "first_fallback"  # First fallback - 1M TPM, faster but slightly lower quality
     }
     FLASH_2_5 = {
         "name": "gemini-2.5-flash",
         "daily_limit": 250,
-        "priority": 2,
-        "use_case": "fallback_2_5"  # Stable 2.5 fallback (250K TPM)
-    }
-    FLASH_2_0 = {
-        "name": "gemini-2.0-flash",
-        "daily_limit": 200,  # Free tier: 200 RPD
         "priority": 3,
-        "use_case": "high_tpm"  # 1M TPM - perfect for large chunks (10K lines)
+        "use_case": "second_fallback"  # Second fallback - stable 2.5, 250K TPM
+    }
+    FLASH_PREVIEW = {
+        "name": "gemini-2.5-flash-preview-09-2025",
+        "daily_limit": 250,
+        "priority": 4,
+        "use_case": "preview"  # Latest preview features, 250K TPM
     }
     FLASH_LITE = {
         "name": "gemini-2.5-flash-lite",
         "daily_limit": 1000,
-        "priority": 4,
-        "use_case": "high_volume"  # Large quota for fallback (250K TPM)
+        "priority": 5,
+        "use_case": "high_volume"  # High quota fallback (250K TPM)
     }
 
 
@@ -211,25 +217,29 @@ class Summarizer:
         """
         today = date.today()
 
-        # Model selection based on session size
+        # Model selection varies by session size:
+        # - Small/medium sessions: Prefer 2.5 models (latest features, 250K TPM sufficient)
+        # - Large sessions: Prefer 2.0 models (need 1M TPM for 10K line chunks)
+
         if complexity == "large":
-            # Large sessions (>50K lines) benefit from 2.0 Flash's 1M TPM
-            # Can handle 10K line chunks (~200K tokens) comfortably
-            # Fallback to 2.5 models if quota exhausted
+            # Large sessions (>50K lines): Need 1M TPM for 10K line chunks
+            # Fallback to 2.5 models with smaller chunks if 2.0 models exhausted
             preferred_order = [
-                GeminiModel.FLASH_2_0,        # 1M TPM - perfect for large chunks
-                GeminiModel.FLASH_LITE,       # 1000/day - high volume fallback
-                GeminiModel.FLASH_PREVIEW,    # 250K TPM - slower but works
-                GeminiModel.FLASH_2_5,        # Last resort
+                GeminiModel.FLASH_2_0,         # 1M TPM - perfect for large chunks
+                GeminiModel.FLASH_2_0_LITE,    # 1M TPM - faster fallback
+                GeminiModel.FLASH_2_5,         # 250K TPM - will reduce chunk size
+                GeminiModel.FLASH_PREVIEW,     # 250K TPM - preview features
+                GeminiModel.FLASH_LITE,        # 250K TPM - high volume fallback
             ]
         else:
-            # Small/medium sessions prefer 2.5 models (latest features)
-            # 250K TPM is fine for 3-5K line chunks
+            # Small/medium sessions: Prefer 2.5 models (latest features)
+            # 250K TPM is sufficient for 3-5K line chunks
             preferred_order = [
-                GeminiModel.FLASH_PREVIEW,    # Latest features, 250K TPM
-                GeminiModel.FLASH_2_5,        # Stable 2.5
-                GeminiModel.FLASH_2_0,        # 1M TPM safety net
-                GeminiModel.FLASH_LITE,       # High volume fallback
+                GeminiModel.FLASH_2_5,         # Latest stable features, 250K TPM
+                GeminiModel.FLASH_PREVIEW,     # Preview features, 250K TPM
+                GeminiModel.FLASH_2_0,         # 1M TPM - overkill but available
+                GeminiModel.FLASH_2_0_LITE,    # 1M TPM - faster fallback
+                GeminiModel.FLASH_LITE,        # High volume fallback
             ]
 
         # Find first available model with quota remaining
@@ -669,6 +679,19 @@ Summary:"""
             complexity = "small"
             # Small sessions: 3K chunks (provided default)
             # Already safe for all models
+
+        # Check which model we'll likely use and adjust chunk size if needed
+        # This ensures large sessions use smaller chunks when falling back to 2.5 models (250K TPM)
+        if complexity == "large" and self.provider == "gemini":
+            test_model = self._select_best_available_model(complexity)
+            if test_model:
+                # Check if it's a 2.5 model (has 250K TPM instead of 1M TPM)
+                is_2_5_model = test_model in [GeminiModel.FLASH_2_5, GeminiModel.FLASH_PREVIEW, GeminiModel.FLASH_LITE]
+                if is_2_5_model:
+                    # Reduce chunk size for 2.5 models (250K TPM)
+                    # Math: 5K lines × 80 chars × 0.25 tokens/char ≈ 100K tokens (40% of 250K TPM - safe margin)
+                    chunk_size_lines = 5000
+                    print(f"⚠️  Using 2.5 model ({test_model.value['name']}) - reducing chunk size for 250K TPM limit")
 
         print(f"📦 Chunk size: {chunk_size_lines:,} lines (optimized for {complexity} session)")
 

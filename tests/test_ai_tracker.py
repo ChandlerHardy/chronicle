@@ -192,3 +192,155 @@ def test_files_mentioned(temp_db):
     assert "auth.py" in interaction.files_list
     assert "middleware.py" in interaction.files_list
     assert "tests/test_auth.py" in interaction.files_list
+
+
+def test_get_active_session_returns_session_with_no_duration(temp_db):
+    """Test that get_active_session returns a session that has no duration (still running)."""
+    tracker = AITracker(temp_db)
+
+    # Create an active session (no duration)
+    active_session = AIInteraction(
+        ai_tool="claude-code",
+        timestamp=datetime.now(),
+        prompt="Test session",
+        is_session=True,
+        duration_ms=None  # Active session has no duration
+    )
+    temp_db.add(active_session)
+    temp_db.commit()
+
+    # Create a completed session (has duration)
+    completed_session = AIInteraction(
+        ai_tool="gemini-cli",
+        timestamp=datetime.now() - timedelta(hours=1),
+        prompt="Completed session",
+        is_session=True,
+        duration_ms=3600000  # 1 hour
+    )
+    temp_db.add(completed_session)
+    temp_db.commit()
+
+    # Get active session
+    result = tracker.get_active_session()
+
+    assert result is not None
+    assert result.id == active_session.id
+    assert result.duration_ms is None
+
+
+def test_get_active_session_returns_none_when_no_active(temp_db):
+    """Test that get_active_session returns None when all sessions are completed."""
+    tracker = AITracker(temp_db)
+
+    # Create only completed sessions
+    completed_session1 = AIInteraction(
+        ai_tool="claude-code",
+        timestamp=datetime.now() - timedelta(hours=2),
+        prompt="Completed 1",
+        is_session=True,
+        duration_ms=7200000
+    )
+    completed_session2 = AIInteraction(
+        ai_tool="gemini-cli",
+        timestamp=datetime.now() - timedelta(hours=1),
+        prompt="Completed 2",
+        is_session=True,
+        duration_ms=3600000
+    )
+    temp_db.add(completed_session1)
+    temp_db.add(completed_session2)
+    temp_db.commit()
+
+    # Get active session
+    result = tracker.get_active_session()
+
+    assert result is None
+
+
+def test_get_active_session_filters_by_tool(temp_db):
+    """Test that get_active_session can filter by AI tool."""
+    tracker = AITracker(temp_db)
+
+    # Create active sessions for different tools
+    claude_session = AIInteraction(
+        ai_tool="claude-code",
+        timestamp=datetime.now() - timedelta(minutes=10),
+        prompt="Claude session",
+        is_session=True,
+        duration_ms=None
+    )
+    gemini_session = AIInteraction(
+        ai_tool="gemini-cli",
+        timestamp=datetime.now(),
+        prompt="Gemini session",
+        is_session=True,
+        duration_ms=None
+    )
+    temp_db.add(claude_session)
+    temp_db.add(gemini_session)
+    temp_db.commit()
+
+    # Get active Claude session
+    result = tracker.get_active_session(ai_tool="claude-code")
+
+    assert result is not None
+    assert result.id == claude_session.id
+    assert result.ai_tool == "claude-code"
+
+    # Get active Gemini session
+    result = tracker.get_active_session(ai_tool="gemini-cli")
+
+    assert result is not None
+    assert result.id == gemini_session.id
+    assert result.ai_tool == "gemini-cli"
+
+
+def test_get_active_session_returns_most_recent(temp_db):
+    """Test that get_active_session returns the most recent active session."""
+    tracker = AITracker(temp_db)
+
+    # Create multiple active sessions
+    older_session = AIInteraction(
+        ai_tool="claude-code",
+        timestamp=datetime.now() - timedelta(hours=1),
+        prompt="Older active session",
+        is_session=True,
+        duration_ms=None
+    )
+    newer_session = AIInteraction(
+        ai_tool="claude-code",
+        timestamp=datetime.now(),
+        prompt="Newer active session",
+        is_session=True,
+        duration_ms=None
+    )
+    temp_db.add(older_session)
+    temp_db.add(newer_session)
+    temp_db.commit()
+
+    # Get active session - should return the newer one
+    result = tracker.get_active_session()
+
+    assert result is not None
+    assert result.id == newer_session.id
+
+
+def test_get_active_session_ignores_non_sessions(temp_db):
+    """Test that get_active_session ignores one-shot interactions (is_session=False)."""
+    tracker = AITracker(temp_db)
+
+    # Create a one-shot interaction (not a session)
+    one_shot = AIInteraction(
+        ai_tool="claude-code",
+        timestamp=datetime.now(),
+        prompt="Quick question",
+        is_session=False,  # Not a session
+        duration_ms=None
+    )
+    temp_db.add(one_shot)
+    temp_db.commit()
+
+    # Get active session
+    result = tracker.get_active_session()
+
+    assert result is None  # Should not find the one-shot interaction

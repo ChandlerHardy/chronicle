@@ -762,6 +762,83 @@ def sessions(repo: str = None, limit: int = 10):
     db_session.close()
 
 
+@cli.command()
+def status():
+    """Check if Chronicle is currently tracking an active session.
+
+    This shows whether the current terminal session is being recorded,
+    which session ID is active, and how long it's been running.
+    """
+    from backend.database.models import init_db
+    from backend.services.ai_tracker import AITracker
+    from backend.cli.formatters import console
+    from rich.panel import Panel
+    from rich.table import Table
+
+    _, SessionLocal = init_db()
+    db_session = SessionLocal()
+    tracker = AITracker(db_session)
+
+    # Get active session
+    active_session = tracker.get_active_session()
+
+    if not active_session:
+        console.print(Panel(
+            "[yellow]No active Chronicle session detected[/yellow]\n\n"
+            "💡 To start tracking:\n"
+            "   • Claude Code: [cyan]chronicle start claude[/cyan]\n"
+            "   • Gemini CLI:  [cyan]chronicle start gemini[/cyan]\n"
+            "   • Qwen CLI:    [cyan]chronicle start qwen[/cyan]",
+            title="[bold]Chronicle Status[/bold]",
+            border_style="yellow"
+        ))
+        db_session.close()
+        return
+
+    # Calculate elapsed time
+    from datetime import datetime
+    elapsed = datetime.now() - active_session.timestamp
+    elapsed_minutes = elapsed.total_seconds() / 60
+
+    # Format elapsed time nicely
+    if elapsed_minutes < 60:
+        elapsed_str = f"{int(elapsed_minutes)} minutes"
+    else:
+        hours = int(elapsed_minutes / 60)
+        minutes = int(elapsed_minutes % 60)
+        elapsed_str = f"{hours}h {minutes}m"
+
+    # Build info table
+    table = Table(show_header=False, box=None, padding=(0, 2))
+    table.add_column("Key", style="dim")
+    table.add_column("Value")
+
+    table.add_row("Session ID", f"[bold cyan]{active_session.id}[/bold cyan]")
+    table.add_row("Tool", active_session.ai_tool)
+    table.add_row("Started", active_session.timestamp.strftime("%Y-%m-%d %H:%M:%S"))
+    table.add_row("Duration", elapsed_str)
+
+    if active_session.working_directory:
+        table.add_row("Directory", active_session.working_directory)
+
+    if active_session.repo_path:
+        table.add_row("Repository", active_session.repo_path)
+
+    if active_session.title:
+        table.add_row("Title", active_session.title)
+
+    if active_session.tags_list:
+        table.add_row("Tags", ", ".join(active_session.tags_list))
+
+    console.print(Panel(
+        table,
+        title="[bold green]✓ Active Chronicle Session[/bold green]",
+        border_style="green"
+    ))
+
+    db_session.close()
+
+
 @cli.command("rename-session")
 @click.argument('session_id', type=int)
 @click.argument('title', type=str)

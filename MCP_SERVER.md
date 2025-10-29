@@ -250,6 +250,30 @@ Get Chronicle usage statistics.
 
 ---
 
+### `get_current_session`
+
+Get the currently active (in-progress) Chronicle session.
+
+This helps AI assistants determine if the current conversation is being tracked. A session is considered active if it has no duration set (still running).
+
+**Parameters:**
+- `ai_tool` (string, optional): Filter by AI tool ('claude-code', 'gemini-cli', 'qwen-cli', 'claude-session'). If not specified, returns any active session.
+
+**Example:**
+```json
+{
+  "ai_tool": "claude-code"
+}
+```
+
+**Returns:**
+- If active: `{"active": true, "session": {...}}` with session details (id, tool, start_time, elapsed_minutes, working_directory, repo_path, title, tags)
+- If not active: `{"active": false, "session": null}`
+
+**Use Case:** Before suggesting the user exit and restart with `chronicle start claude`, check if they're already tracking with this tool.
+
+---
+
 ### `get_milestones`
 
 Get project milestones with filtering options.

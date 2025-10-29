@@ -215,6 +215,33 @@ class AITracker:
 
         return interaction, commit
 
+    def get_active_session(self, ai_tool: str = None) -> Optional[AIInteraction]:
+        """Get the currently active (in-progress) Chronicle session.
+
+        A session is considered active if:
+        - It's marked as a session (is_session=True)
+        - It has no duration set (duration_ms IS NULL)
+        - Optionally matches the specified AI tool
+
+        Args:
+            ai_tool: Optional filter by AI tool ('claude-code', 'gemini-cli', 'qwen-cli', 'claude-session')
+
+        Returns:
+            Active AIInteraction session or None if no active session
+        """
+        query = self.db.query(AIInteraction).filter(
+            AIInteraction.is_session == True,
+            AIInteraction.duration_ms == None
+        )
+
+        if ai_tool:
+            query = query.filter(AIInteraction.ai_tool == ai_tool)
+
+        # Order by timestamp descending to get most recent active session
+        active_session = query.order_by(AIInteraction.timestamp.desc()).first()
+
+        return active_session
+
     def _find_git_root(self, start_path: str) -> Optional[str]:
         """Find the git repository root from a starting path.
 

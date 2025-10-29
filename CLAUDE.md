@@ -101,9 +101,17 @@ def test_export_session_with_file_fallback():
 
 #### 3. 📊 CHECK SESSION STATUS (REQUIRED)
 
-**Remind user if not tracking:**
+**Verify if current session is being tracked:**
+```python
+# Check if conversation is being tracked
+status = mcp__chronicle__get_current_session()
+# Returns: {"active": true, "session": {...}} or {"active": false}
+```
+
+**If not tracking:**
 - Current session NOT tracked unless started with `chronicle start claude`
 - **YOU MUST suggest exit and restart if meaningful work is happening**
+- User can verify with: `chronicle status` command
 
 #### 4. ⚡ USE MCP OVER CLI (MANDATORY)
 
@@ -244,6 +252,30 @@ chronicle session 16
 - Automatic retry: 3 attempts per chunk with exponential backoff
 - Resume capability: If fails mid-process, can resume from last successful chunk
 
+### Gemini Model Fallback Strategy
+
+Chronicle automatically selects the best available Gemini model based on **session size** and **quota usage**:
+
+**Small/Medium Sessions (<50K lines):**
+1. **gemini-2.5-flash** - 250K TPM, 250 RPD - Latest stable features (preferred)
+2. **gemini-2.5-flash-preview-09-2025** - 250K TPM, 250 RPD - Preview features
+3. **gemini-2.0-flash** - 1M TPM, 200 RPD - Fallback (overkill for small sessions)
+4. **gemini-2.0-flash-lite** - 1M TPM, 200 RPD - Additional fallback
+5. **gemini-2.5-flash-lite** - 250K TPM, 1000 RPD - High volume fallback
+
+**Large Sessions (>50K lines):**
+1. **gemini-2.0-flash** - 1M TPM, 200 RPD - Primary (handles 10K line chunks)
+2. **gemini-2.0-flash-lite** - 1M TPM, 200 RPD - First fallback (same capacity)
+3. **gemini-2.5-flash** - 250K TPM, 250 RPD - **Reduces chunks to 5K lines** for 250K TPM
+4. **gemini-2.5-flash-preview-09-2025** - 250K TPM, 250 RPD
+5. **gemini-2.5-flash-lite** - 250K TPM, 1000 RPD
+
+**Why Vary by Size:**
+- **Small/medium**: 2.5 models have latest features, 250K TPM is sufficient for 3-5K line chunks
+- **Large**: 2.0 models have 1M TPM (4x more), enabling 10K line chunks for faster processing
+- **Automatic chunk size adjustment**: When large sessions fall back to 2.5 models, chunk size reduces from 10K→5K to fit within 250K TPM
+- **Smart failover**: Tracks usage per model in database for intelligent selection
+
 ### Retry Logic
 
 - Rate limit errors: 15s, 30s, 45s delays
@@ -264,6 +296,8 @@ chronicle config ai.gemini_api_key YOUR_KEY
 ### Key Settings
 
 - `ai.default_model` → Gemini model (default: `gemini-2.0-flash`)
+  - **Available models**: `gemini-2.0-flash`, `gemini-2.0-flash-lite`, `gemini-2.5-flash`, `gemini-2.5-flash-preview-09-2025`, `gemini-2.5-flash-lite`
+  - **Note**: Chronicle auto-selects models based on quota, so you rarely need to change this
 - `ai.gemini_api_key` → API key for summarization
 - `ai.summarization_provider` → "gemini" or "ollama"
 
@@ -482,7 +516,7 @@ User: "I want to add export functionality"
 1. **SEARCH CHRONICLE FIRST** - `mcp__chronicle__search_sessions(query="...", limit=10)`
 2. **CHECK ROADMAP** - `mcp__chronicle__get_roadmap(days=7)`
 3. **WRITE TESTS FIRST** - TDD red-green-refactor cycle
-4. **VERIFY SESSION TRACKING** - Remind user to run `chronicle start claude` if not tracked
+4. **VERIFY SESSION TRACKING** - `mcp__chronicle__get_current_session()` to check if active
 
 **This is mandatory. Every single time. No exceptions.**
 

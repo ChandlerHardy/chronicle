@@ -183,3 +183,221 @@ class TestExtractKeywords:
                 # Original case should not exist
                 assert "PyTest" not in keywords
                 assert "TESTING" not in keywords
+
+
+class TestModelSelection:
+    """Tests for Gemini model selection and fallback logic."""
+
+    def test_select_best_available_model_prefers_2_5_flash_for_small_medium(self):
+        """Test that gemini-2.5-flash is selected first for small/medium sessions when available."""
+        from backend.services.summarizer import GeminiModel
+        from backend.database.models import GeminiModelUsage
+        from datetime import date
+
+        with patch('backend.core.config.get_config') as mock_config:
+            mock_config.return_value.summarization_provider = "gemini"
+            mock_config.return_value.gemini_api_key = "test_key"
+            mock_config.return_value.default_model = "gemini-2.0-flash"
+
+            summarizer = Summarizer()
+
+            # Mock database to return zero usage for all models
+            with patch.object(summarizer, '_get_usage_for_date', return_value=0):
+                # Act - select model for general/small/medium complexity
+                model = summarizer._select_best_available_model(complexity="general")
+
+                # Assert - should return FLASH_2_5 (gemini-2.5-flash) for small/medium
+                assert model is not None
+                assert model.value["name"] == "gemini-2.5-flash"
+
+    def test_select_best_available_model_small_medium_falls_back_to_preview(self):
+        """Test fallback to gemini-2.5-flash-preview when 2.5-flash is exhausted (small/medium)."""
+        from backend.services.summarizer import GeminiModel
+
+        with patch('backend.core.config.get_config') as mock_config:
+            mock_config.return_value.summarization_provider = "gemini"
+            mock_config.return_value.gemini_api_key = "test_key"
+            mock_config.return_value.default_model = "gemini-2.0-flash"
+
+            summarizer = Summarizer()
+
+            # Mock: 2.5-flash is at limit, others available
+            def mock_usage(model_name, date):
+                if model_name == "gemini-2.5-flash":
+                    return 250  # At daily limit
+                return 0
+
+            with patch.object(summarizer, '_get_usage_for_date', side_effect=mock_usage):
+                # Act - small/medium sessions prefer 2.5 models
+                model = summarizer._select_best_available_model(complexity="general")
+
+                # Assert - should fallback to FLASH_PREVIEW (next 2.5 model)
+                assert model is not None
+                assert model.value["name"] == "gemini-2.5-flash-preview-09-2025"
+
+    def test_select_best_available_model_large_falls_back_to_2_0_flash_lite(self):
+        """Test fallback to gemini-2.0-flash-lite when 2.0-flash is exhausted (large sessions)."""
+        from backend.services.summarizer import GeminiModel
+
+        with patch('backend.core.config.get_config') as mock_config:
+            mock_config.return_value.summarization_provider = "gemini"
+            mock_config.return_value.gemini_api_key = "test_key"
+            mock_config.return_value.default_model = "gemini-2.0-flash"
+
+            summarizer = Summarizer()
+
+            # Mock: 2.0-flash exhausted, others available
+            def mock_usage(model_name, date):
+                if model_name == "gemini-2.0-flash":
+                    return 200  # At limit
+                return 0
+
+            with patch.object(summarizer, '_get_usage_for_date', side_effect=mock_usage):
+                # Act - large sessions prefer 2.0 models
+                model = summarizer._select_best_available_model(complexity="large")
+
+                # Assert - should fallback to FLASH_2_0_LITE (next 2.0 model)
+                assert model is not None
+                assert model.value["name"] == "gemini-2.0-flash-lite"
+
+    def test_select_best_available_model_large_falls_back_to_2_5_flash(self):
+        """Test fallback to gemini-2.5-flash when both 2.0 models are exhausted (large sessions)."""
+        from backend.services.summarizer import GeminiModel
+
+        with patch('backend.core.config.get_config') as mock_config:
+            mock_config.return_value.summarization_provider = "gemini"
+            mock_config.return_value.gemini_api_key = "test_key"
+            mock_config.return_value.default_model = "gemini-2.0-flash"
+
+            summarizer = Summarizer()
+
+            # Mock: both 2.0 models exhausted
+            def mock_usage(model_name, date):
+                if model_name == "gemini-2.0-flash":
+                    return 200  # At limit
+                if model_name == "gemini-2.0-flash-lite":
+                    return 200  # At limit
+                return 0
+
+            with patch.object(summarizer, '_get_usage_for_date', side_effect=mock_usage):
+                # Act - large sessions
+                model = summarizer._select_best_available_model(complexity="large")
+
+                # Assert - should fallback to FLASH_2_5 (first 2.5 model)
+                assert model is not None
+                assert model.value["name"] == "gemini-2.5-flash"
+
+    def test_select_best_available_model_returns_none_when_all_exhausted(self):
+        """Test that None is returned when all models are at their daily limits."""
+        with patch('backend.core.config.get_config') as mock_config:
+            mock_config.return_value.summarization_provider = "gemini"
+            mock_config.return_value.gemini_api_key = "test_key"
+            mock_config.return_value.default_model = "gemini-2.0-flash"
+
+            summarizer = Summarizer()
+
+            # Mock: all models at their limits
+            def mock_usage(model_name, date):
+                # Return usage equal to each model's daily limit
+                if model_name == "gemini-2.0-flash":
+                    return 200
+                if model_name == "gemini-2.0-flash-lite":
+                    return 200
+                if model_name == "gemini-2.5-flash":
+                    return 250
+                if model_name == "gemini-2.5-flash-preview-09-2025":
+                    return 250
+                if model_name == "gemini-2.5-flash-lite":
+                    return 1000
+                return 0
+
+            with patch.object(summarizer, '_get_usage_for_date', side_effect=mock_usage):
+                # Act
+                model = summarizer._select_best_available_model(complexity="general")
+
+                # Assert - should return None
+                assert model is None
+
+    def test_select_best_available_model_for_large_sessions_prefers_2_0_flash(self):
+        """Test that large sessions (>50K lines) prefer gemini-2.0-flash for 1M TPM."""
+        from backend.services.summarizer import GeminiModel
+
+        with patch('backend.core.config.get_config') as mock_config:
+            mock_config.return_value.summarization_provider = "gemini"
+            mock_config.return_value.gemini_api_key = "test_key"
+            mock_config.return_value.default_model = "gemini-2.0-flash"
+
+            summarizer = Summarizer()
+
+            # Mock database to return zero usage for all models
+            with patch.object(summarizer, '_get_usage_for_date', return_value=0):
+                # Act - select model for large complexity (>50K lines)
+                model = summarizer._select_best_available_model(complexity="large")
+
+                # Assert - should prefer FLASH_2_0 for 1M TPM
+                assert model is not None
+                assert model.value["name"] == "gemini-2.0-flash"
+
+    def test_increment_usage_creates_new_record_for_model(self):
+        """Test that _increment_usage creates a new usage record if none exists."""
+        from backend.database.models import GeminiModelUsage
+        from datetime import date
+
+        with patch('backend.core.config.get_config') as mock_config:
+            mock_config.return_value.summarization_provider = "gemini"
+            mock_config.return_value.gemini_api_key = "test_key"
+            mock_config.return_value.default_model = "gemini-2.0-flash"
+
+            summarizer = Summarizer()
+
+            # Mock database session
+            mock_db = Mock()
+            mock_query = Mock()
+            mock_query.filter.return_value.first.return_value = None  # No existing record
+
+            mock_db.query.return_value = mock_query
+
+            with patch.object(summarizer, '_get_db_session', return_value=mock_db):
+                # Act - increment usage for a model
+                summarizer._increment_usage("gemini-2.0-flash", input_chars=1000, output_chars=500)
+
+                # Assert - should create new record
+                mock_db.add.assert_called_once()
+                mock_db.commit.assert_called_once()
+
+    def test_increment_usage_updates_existing_record(self):
+        """Test that _increment_usage updates an existing usage record."""
+        from backend.database.models import GeminiModelUsage
+        from datetime import date
+
+        with patch('backend.core.config.get_config') as mock_config:
+            mock_config.return_value.summarization_provider = "gemini"
+            mock_config.return_value.gemini_api_key = "test_key"
+            mock_config.return_value.default_model = "gemini-2.0-flash"
+
+            summarizer = Summarizer()
+
+            # Mock existing usage record
+            existing_usage = Mock(spec=GeminiModelUsage)
+            existing_usage.request_count = 5
+            existing_usage.total_input_characters = 5000
+            existing_usage.total_output_characters = 2500
+            existing_usage.total_input_tokens = 1250
+            existing_usage.total_output_tokens = 625
+
+            # Mock database session
+            mock_db = Mock()
+            mock_query = Mock()
+            mock_query.filter.return_value.first.return_value = existing_usage
+
+            mock_db.query.return_value = mock_query
+
+            with patch.object(summarizer, '_get_db_session', return_value=mock_db):
+                # Act - increment usage
+                summarizer._increment_usage("gemini-2.0-flash", input_chars=1000, output_chars=500)
+
+                # Assert - should update existing record
+                assert existing_usage.request_count == 6
+                assert existing_usage.total_input_characters == 6000
+                assert existing_usage.total_output_characters == 3000
+                mock_db.commit.assert_called_once()

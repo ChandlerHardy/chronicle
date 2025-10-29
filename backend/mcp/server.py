@@ -424,6 +424,50 @@ def get_stats(days: int = 7) -> str:
 
 
 @mcp.tool()
+def get_current_session(ai_tool: Optional[str] = None) -> str:
+    """Get the currently active (in-progress) Chronicle session.
+
+    This helps AI assistants determine if the current conversation is being tracked.
+    A session is considered active if it has no duration set (still running).
+
+    Args:
+        ai_tool: Optional filter by AI tool ('claude-code', 'gemini-cli', 'qwen-cli', 'claude-session')
+                If not specified, returns any active session.
+
+    Returns:
+        JSON string with active session details or {"active": false} if no active session
+    """
+    from backend.services.ai_tracker import AITracker
+
+    db = get_db()
+    tracker = AITracker(db)
+
+    active_session = tracker.get_active_session(ai_tool=ai_tool)
+
+    if not active_session:
+        return json.dumps({"active": False, "session": None}, indent=2)
+
+    # Calculate how long the session has been running
+    elapsed_minutes = (datetime.now() - active_session.timestamp).total_seconds() / 60
+
+    result = {
+        "active": True,
+        "session": {
+            "id": active_session.id,
+            "tool": active_session.ai_tool,
+            "start_time": active_session.timestamp.isoformat(),
+            "elapsed_minutes": round(elapsed_minutes, 1),
+            "working_directory": active_session.working_directory,
+            "repo_path": active_session.repo_path,
+            "title": active_session.title,
+            "tags": active_session.tags_list if active_session.tags_list else [],
+        }
+    }
+
+    return json.dumps(result, indent=2)
+
+
+@mcp.tool()
 def search_commits(query: str, limit: int = 20) -> str:
     """Search git commits by commit message.
 
