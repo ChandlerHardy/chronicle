@@ -112,7 +112,7 @@ def test_export_session_nonexistent_id(temp_db, monkeypatch):
     assert "not found" in result.output
 
 
-def test_export_session_without_transcript(temp_db, monkeypatch):
+def test_export_session_without_transcript(temp_db, monkeypatch, tmp_path):
     """Export session without transcript includes null."""
     session, db_path = temp_db
     monkeypatch.setenv('CHRONICLE_DB', db_path)
@@ -128,6 +128,12 @@ def test_export_session_without_transcript(temp_db, monkeypatch):
     )
     session.add(ai_session)
     session.commit()
+
+    # Mock Path.home() to use temp directory (ensures no .cleaned/.log files exist)
+    from pathlib import Path
+    mock_home = tmp_path / "mock_home"
+    mock_home.mkdir()
+    monkeypatch.setattr(Path, "home", lambda: mock_home)
 
     runner = CliRunner()
     result = runner.invoke(cli, ['export-session', str(ai_session.id)])
