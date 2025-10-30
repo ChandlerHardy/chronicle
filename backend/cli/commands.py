@@ -2376,14 +2376,15 @@ def import_session():
 
 @cli.command()
 @click.option('--chunk-size', type=int, default=10000, help='Lines per chunk for large sessions')
-def import_and_summarize(chunk_size: int):
+@click.option('--quiet', is_flag=True, help='Suppress status messages, output only JSON')
+def import_and_summarize(chunk_size: int, quiet: bool):
     """Import session from JSON (stdin) and immediately summarize it.
 
     Outputs JSON with summary to stdout.
 
     Example:
         cat session.json | chronicle import-and-summarize > summary.json
-        chronicle export-session 42 | ssh mac "chronicle import-and-summarize" > summary.json
+        chronicle export-session 42 | ssh mac "chronicle import-and-summarize --quiet" > summary.json
     """
     from backend.services.summarizer import Summarizer
 
@@ -2400,7 +2401,8 @@ def import_and_summarize(chunk_size: int):
 
         session_data = import_data["session"]
 
-        console.print(f"[dim]Importing session from {session_data['ai_tool']}...[/dim]", )
+        if not quiet:
+            console.print(f"[dim]Importing session from {session_data['ai_tool']}...[/dim]", )
 
         # JSON-encode files_mentioned if it's a list
         files_mentioned = session_data.get("files_mentioned")
@@ -2446,10 +2448,12 @@ def import_and_summarize(chunk_size: int):
             cleaned_path = sessions_dir / f"session_{temp_session.id}.cleaned"
             cleaned_path.write_text(transcript_content, encoding='utf-8')
 
-            console.print(f"[dim]✓ Transcript saved to {cleaned_path.name}[/dim]", )
+            if not quiet:
+                console.print(f"[dim]✓ Transcript saved to {cleaned_path.name}[/dim]", )
 
-        console.print(f"[green]✓[/green] Temporary session created (ID: {temp_session.id})", )
-        console.print(f"[dim]Summarizing (this may take a while)...[/dim]", )
+        if not quiet:
+            console.print(f"[green]✓[/green] Temporary session created (ID: {temp_session.id})", )
+            console.print(f"[dim]Summarizing (this may take a while)...[/dim]", )
 
         summary_data = None
         try:
@@ -2458,10 +2462,12 @@ def import_and_summarize(chunk_size: int):
             summary = summarizer.summarize_session_chunked(
                 session_id=temp_session.id,
                 chunk_size_lines=chunk_size,
-                db_session=db_session
+                db_session=db_session,
+                quiet=quiet
             )
 
-            console.print(f"[green]✓[/green] Summary generated ({len(summary)} chars)", )
+            if not quiet:
+                console.print(f"[green]✓[/green] Summary generated ({len(summary)} chars)", )
 
             # Refresh session to get updated summary
             db_session.refresh(temp_session)
@@ -2479,17 +2485,20 @@ def import_and_summarize(chunk_size: int):
 
         finally:
             # Clean up temporary session and files (always run)
-            console.print(f"[dim]Cleaning up temporary session...[/dim]", )
+            if not quiet:
+                console.print(f"[dim]Cleaning up temporary session...[/dim]", )
 
             # Delete external file if it exists
             if cleaned_path and cleaned_path.exists():
                 cleaned_path.unlink()
-                console.print(f"[dim]✓ Deleted {cleaned_path.name}[/dim]", )
+                if not quiet:
+                    console.print(f"[dim]✓ Deleted {cleaned_path.name}[/dim]", )
 
             # Delete temporary session from database
             db_session.delete(temp_session)
             db_session.commit()
-            console.print(f"[dim]✓ Deleted temporary session {temp_session.id}[/dim]", )
+            if not quiet:
+                console.print(f"[dim]✓ Deleted temporary session {temp_session.id}[/dim]", )
 
         # Output summary JSON to stdout
         output = {

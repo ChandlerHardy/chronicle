@@ -575,3 +575,125 @@ def test_import_summary_invalid_json(temp_db, monkeypatch):
 
     assert result.exit_code == 1
     assert "Invalid JSON" in result.output
+
+
+# ============================================================================
+# --quiet Flag Tests
+# ============================================================================
+
+@patch('backend.services.summarizer.Summarizer.summarize_session_chunked')
+def test_import_and_summarize_quiet_flag_suppresses_output(mock_summarize, temp_db, sample_session_json, monkeypatch):
+    """--quiet flag suppresses status messages, outputs only JSON."""
+    session, db_path = temp_db
+    monkeypatch.setenv('CHRONICLE_DB', db_path)
+
+    mock_summarize.return_value = "AI-generated summary of the session"
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ['import-and-summarize', '--quiet'], input=json.dumps(sample_session_json))
+
+    assert result.exit_code == 0
+
+    # Output should be ONLY JSON (no status messages)
+    output_lines = result.output.strip().split('\n')
+
+    # First line should start with { (JSON)
+    assert output_lines[0].strip().startswith('{'), f"Expected JSON at line 1, got: {output_lines[0]}"
+
+    # Should NOT contain status messages
+    assert "Importing session" not in result.output
+    assert "Temporary session created" not in result.output
+    assert "Summarizing" not in result.output
+    assert "Summary generated" not in result.output
+    assert "Cleaning up" not in result.output
+    assert "Deleted" not in result.output
+
+    # Should be valid JSON
+    output_json = json.loads(result.output.strip())
+    assert output_json["version"] == "1.0"
+    assert output_json["original_id"] == 999
+    assert "summary" in output_json
+
+
+@patch('backend.services.summarizer.Summarizer.summarize_session_chunked')
+def test_import_and_summarize_without_quiet_includes_status(mock_summarize, temp_db, sample_session_json, monkeypatch):
+    """Without --quiet flag, status messages are included."""
+    session, db_path = temp_db
+    monkeypatch.setenv('CHRONICLE_DB', db_path)
+
+    mock_summarize.return_value = "AI-generated summary of the session"
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ['import-and-summarize'], input=json.dumps(sample_session_json))
+
+    assert result.exit_code == 0
+
+    # Should contain status messages (NOT suppressed)
+    # Note: We can't check ALL messages because Rich console may not render in tests
+    # But we can verify JSON is NOT at line 1
+    output_lines = result.output.strip().split('\n')
+    first_line = output_lines[0].strip()
+
+    # First line should NOT be JSON (should be status message or empty)
+    assert not first_line.startswith('{'), "Expected status messages before JSON"
+
+    # Should still have valid JSON somewhere in output
+    # Find the JSON (last non-empty lines)
+    json_start = None
+    for i, line in enumerate(output_lines):
+        if line.strip().startswith('{'):
+            json_start = i
+            break
+
+    assert json_start is not None, "JSON not found in output"
+    assert json_start > 0, "JSON should not be at line 1 when status messages are enabled"
+
+
+@patch('backend.services.summarizer.Summarizer.summarize_session_chunked')
+def test_import_and_summarize_quiet_json_at_line_1(mock_summarize, temp_db, sample_session_json, monkeypatch):
+    """--quiet flag ensures JSON starts at line 1 (no prefix lines)."""
+    session, db_path = temp_db
+    monkeypatch.setenv('CHRONICLE_DB', db_path)
+
+    mock_summarize.return_value = "AI-generated summary"
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ['import-and-summarize', '--quiet'], input=json.dumps(sample_session_json))
+
+    assert result.exit_code == 0
+
+    # Parse as JSON directly (no need for line extraction)
+    output_json = json.loads(result.output.strip())
+    assert output_json["version"] == "1.0"
+
+    # Verify first character is '{'
+    assert result.output.strip()[0] == '{'
+
+
+@patch('backend.services.summarizer.Summarizer.summarize_session_chunked')
+def test_import_and_summarize_quiet_one_line_piping(mock_summarize, temp_db, sample_session_json, monkeypatch):
+    """--quiet flag enables clean one-line piping (integration test)."""
+    session, db_path = temp_db
+    monkeypatch.setenv('CHRONICLE_DB', db_path)
+
+    mock_summarize.return_value = "Summary for piping test"
+
+    runner = CliRunner()
+
+    # Step 1: export-session (would be on remote)
+    result_export = runner.invoke(cli, ['export-session', '1'], catch_exceptions=False)
+    # (would fail with non-existent session, but testing the piping pattern)
+
+    # Step 2: import-and-summarize --quiet (this is what we're testing)
+    result_summarize = runner.invoke(cli, ['import-and-summarize', '--quiet'], input=json.dumps(sample_session_json))
+
+    assert result_summarize.exit_code == 0
+
+    # Step 3: Verify output can be piped to import-summary without extraction
+    summary_json = json.loads(result_summarize.output.strip())
+
+    # This JSON should be directly pipeable to import-summary
+    # (we'll test that the structure is correct)
+    assert "version" in summary_json
+    assert "original_id" in summary_json
+    assert "summary" in summary_json

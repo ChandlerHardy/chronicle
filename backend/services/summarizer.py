@@ -581,7 +581,8 @@ Summary:"""
         chunk_size_lines: int = 3000,
         db_session = None,
         use_cli: bool = False,
-        cli_tool: str = "qwen"
+        cli_tool: str = "qwen",
+        quiet: bool = False
     ) -> str:
         """Summarize a large session incrementally using rolling summaries.
 
@@ -600,6 +601,7 @@ Summary:"""
             db_session: SQLAlchemy database session (required)
             use_cli: If True, use CLI tools (qwen/gemini) instead of API (bypasses rate limits)
             cli_tool: Which CLI tool to use if use_cli=True ("qwen" or "gemini")
+            quiet: If True, suppress all status messages
 
         Returns:
             Final cumulative summary
@@ -609,6 +611,11 @@ Summary:"""
         """
         from backend.database.models import AIInteraction, SessionSummaryChunk
         from datetime import datetime
+
+        # Helper function for conditional printing
+        def qprint(*args, **kwargs):
+            if not quiet:
+                print(*args, **kwargs)
 
         if db_session is None:
             raise ValueError("db_session is required for chunked summarization")
@@ -623,7 +630,7 @@ Summary:"""
 
         # Read from .cleaned file (100x faster than SQLite!)
         # Cleaned files have ANSI codes removed and deduplication applied
-        print("  Retrieving transcript...")
+        qprint("  Retrieving transcript...")
         from pathlib import Path
 
         cleaned_path = Path.home() / ".ai-session" / "sessions" / f"session_{session_id}.cleaned"
@@ -631,28 +638,28 @@ Summary:"""
 
         if cleaned_path.exists():
             # Read from .cleaned file (FASTEST - already cleaned!)
-            print(f"  📁 Reading from {cleaned_path.name}...")
+            qprint(f"  📁 Reading from {cleaned_path.name}...")
             with open(cleaned_path, 'r', encoding='utf-8', errors='ignore') as f:
                 transcript = f.read()
-            print(f"  📄 Transcript size: {len(transcript):,} chars ({len(transcript) / 1024 / 1024:.2f} MB)")
+            qprint(f"  📄 Transcript size: {len(transcript):,} chars ({len(transcript) / 1024 / 1024:.2f} MB)")
         elif log_path.exists():
             # Fallback to .log file (needs cleaning)
-            print(f"  📁 Reading from {log_path.name} (will clean)...")
+            qprint(f"  📁 Reading from {log_path.name} (will clean)...")
             with open(log_path, 'r', encoding='utf-8', errors='ignore') as f:
                 raw_transcript = f.read()
-            print(f"  🧹 Cleaning transcript...")
+            qprint(f"  🧹 Cleaning transcript...")
             transcript = clean_transcript(raw_transcript)
-            print(f"  📄 Transcript size: {len(transcript):,} chars ({len(transcript) / 1024 / 1024:.2f} MB)")
+            qprint(f"  📄 Transcript size: {len(transcript):,} chars ({len(transcript) / 1024 / 1024:.2f} MB)")
         elif session.session_transcript:
             # Fallback to database (SLOW but backward compatible with old sessions)
-            print(f"  ⚠️  Reading from database (legacy session, slow)...")
+            qprint(f"  ⚠️  Reading from database (legacy session, slow)...")
             transcript = session.session_transcript
-            print(f"  📄 Transcript size: {len(transcript):,} chars ({len(transcript) / 1024 / 1024:.2f} MB)")
+            qprint(f"  📄 Transcript size: {len(transcript):,} chars ({len(transcript) / 1024 / 1024:.2f} MB)")
         else:
             raise ValueError(f"Session {session_id} has no transcript (no .cleaned, .log, or database entry)")
 
         # Check for existing chunks (resume capability)
-        print("  Checking for existing chunks...")
+        qprint("  Checking for existing chunks...")
         existing_chunks = (
             db_session.query(SessionSummaryChunk)
             .filter_by(session_id=session_id)
@@ -663,7 +670,7 @@ Summary:"""
         # Split transcript into lines
         lines = transcript.split('\n')
         total_lines = len(lines)
-        print(f"📄 Total lines: {total_lines:,}")
+        qprint(f"📄 Total lines: {total_lines:,}")
 
         # Determine complexity and optimize chunk size based on session size
         if total_lines > 50000:
@@ -691,12 +698,12 @@ Summary:"""
                     # Reduce chunk size for 2.5 models (250K TPM)
                     # Math: 5K lines × 80 chars × 0.25 tokens/char ≈ 100K tokens (40% of 250K TPM - safe margin)
                     chunk_size_lines = 5000
-                    print(f"⚠️  Using 2.5 model ({test_model.value['name']}) - reducing chunk size for 250K TPM limit")
+                    qprint(f"⚠️  Using 2.5 model ({test_model.value['name']}) - reducing chunk size for 250K TPM limit")
 
-        print(f"📦 Chunk size: {chunk_size_lines:,} lines (optimized for {complexity} session)")
+        qprint(f"📦 Chunk size: {chunk_size_lines:,} lines (optimized for {complexity} session)")
 
         num_chunks = (total_lines + chunk_size_lines - 1) // chunk_size_lines  # Ceiling division
-        print(f"🔢 Total chunks: {num_chunks}")
+        qprint(f"🔢 Total chunks: {num_chunks}")
 
         # Resume from first missing chunk (detects gaps)
         start_chunk = 0
@@ -717,31 +724,31 @@ Summary:"""
                     chunk_before_gap = [c for c in existing_chunks if c.chunk_number == first_missing - 1]
                     if chunk_before_gap:
                         cumulative_summary = chunk_before_gap[0].cumulative_summary
-                        print(f"🔄 Resuming from chunk {first_missing}/{num_chunks} ({len(missing_chunks)} chunks remaining)")
+                        qprint(f"🔄 Resuming from chunk {first_missing}/{num_chunks} ({len(missing_chunks)} chunks remaining)")
                     else:
-                        print(f"⚠️  Gap detected: chunk {first_missing - 1} missing, starting from chunk {first_missing} without prior context")
+                        qprint(f"⚠️  Gap detected: chunk {first_missing - 1} missing, starting from chunk {first_missing} without prior context")
                 else:
-                    print(f"🔄 Starting from chunk 1/{num_chunks} (no previous chunks found)")
+                    qprint(f"🔄 Starting from chunk 1/{num_chunks} (no previous chunks found)")
             else:
                 # All chunks complete - update session record if not already done
-                print(f"✅ All {len(existing_chunks)} chunks already completed!")
+                qprint(f"✅ All {len(existing_chunks)} chunks already completed!")
                 cumulative_summary = existing_chunks[-1].cumulative_summary
 
                 # Update session record with final summary and keywords
                 if not session.summary_generated:
-                    print("  Extracting keywords from summary...")
+                    qprint("  Extracting keywords from summary...")
                     keywords = self.extract_keywords(cumulative_summary)
-                    print(f"  📌 Extracted {len(keywords)} keywords: {', '.join(keywords[:5])}...")
+                    qprint(f"  📌 Extracted {len(keywords)} keywords: {', '.join(keywords[:5])}...")
 
                     session.response_summary = cumulative_summary
                     session.keywords_list = keywords
                     session.summary_generated = True
                     db_session.commit()
-                    print(f"✓ Updated session record with final summary and keywords")
+                    qprint(f"✓ Updated session record with final summary and keywords")
 
                 return cumulative_summary
 
-        print()
+        qprint()
 
         # Complexity and chunk size already determined above
         # Now process chunks using the optimized settings
@@ -753,7 +760,7 @@ Summary:"""
             chunk_lines = lines[start_line:end_line]
             chunk_text = '\n'.join(chunk_lines)
 
-            print(f"Processing chunk {chunk_num + 1}/{num_chunks} (lines {start_line}-{end_line})...")
+            qprint(f"Processing chunk {chunk_num + 1}/{num_chunks} (lines {start_line}-{end_line})...")
 
             # Generate prompt based on whether this is the first chunk
             if chunk_num == 0:
@@ -871,18 +878,18 @@ Updated Summary:"""
                             else:
                                 delay = 15 * (attempt + 1)  # 15s, 30s, 45s
 
-                            print(f"  ⚠️  Rate limit hit on chunk {chunk_num + 1}, retrying in {delay:.1f}s (attempt {attempt + 1}/{max_retries})...")
+                            qprint(f"  ⚠️  Rate limit hit on chunk {chunk_num + 1}, retrying in {delay:.1f}s (attempt {attempt + 1}/{max_retries})...")
                         else:
                             # Other error - use exponential backoff
                             delay = 5 * (2 ** attempt)  # 5s, 10s, 20s
-                            print(f"  ⚠️  Error on chunk {chunk_num + 1}: {error_str[:100]}")
-                            print(f"  Retrying in {delay}s (attempt {attempt + 1}/{max_retries})...")
+                            qprint(f"  ⚠️  Error on chunk {chunk_num + 1}: {error_str[:100]}")
+                            qprint(f"  Retrying in {delay}s (attempt {attempt + 1}/{max_retries})...")
 
                         time.sleep(delay)
                     else:
                         # Final retry failed
                         error_msg = f"Error summarizing chunk {chunk_num + 1} after {max_retries} attempts: {error_str}"
-                        print(f"❌ {error_msg}")
+                        qprint(f"❌ {error_msg}")
                         # Save what we have so far
                         if cumulative_summary:
                             return cumulative_summary + f"\n\n[Error: Could not complete summarization at chunk {chunk_num + 1} after {max_retries} retries]"
@@ -918,8 +925,8 @@ Updated Summary:"""
             db_session.add(chunk_record)
             db_session.commit()
 
-            print(f"✓ Chunk {chunk_num + 1} summarized ({len(chunk_summary)} chars)")
-            print()
+            qprint(f"✓ Chunk {chunk_num + 1} summarized ({len(chunk_summary)} chars)")
+            qprint()
 
             # Adaptive delay between chunks to avoid rate limits
             if chunk_num < num_chunks - 1:
@@ -930,15 +937,15 @@ Updated Summary:"""
 
                 delay = self.calculate_adaptive_delay(next_chunk_text, cumulative_summary)
                 if delay > 0:
-                    print(f"⏱️  Waiting {delay:.1f}s before next chunk (adaptive rate limit)...")
+                    qprint(f"⏱️  Waiting {delay:.1f}s before next chunk (adaptive rate limit)...")
                     time.sleep(delay)
-                    print()
+                    qprint()
 
         # Extract keywords from final summary
-        print()
-        print("  Extracting keywords from summary...")
+        qprint()
+        qprint("  Extracting keywords from summary...")
         keywords = self.extract_keywords(cumulative_summary)
-        print(f"  📌 Extracted {len(keywords)} keywords: {', '.join(keywords[:5])}...")
+        qprint(f"  📌 Extracted {len(keywords)} keywords: {', '.join(keywords[:5])}...")
 
         # Save final summary and keywords to the session
         session.response_summary = cumulative_summary
@@ -946,9 +953,9 @@ Updated Summary:"""
         session.summary_generated = True
         db_session.commit()
 
-        print(f"✅ Session {session_id} fully summarized!")
-        print(f"Final summary: {len(cumulative_summary)} characters")
-        print(f"Keywords: {', '.join(keywords)}")
-        print(f"Saved {num_chunks} chunks to database")
+        qprint(f"✅ Session {session_id} fully summarized!")
+        qprint(f"Final summary: {len(cumulative_summary)} characters")
+        qprint(f"Keywords: {', '.join(keywords)}")
+        qprint(f"Saved {num_chunks} chunks to database")
 
         return cumulative_summary
