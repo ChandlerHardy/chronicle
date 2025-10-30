@@ -112,11 +112,54 @@ mcp__chronicle__search_sessions(query="relevant keywords", limit=10)
 
 **This is not optional. This is not a suggestion. Search first, ALWAYS.**
 
+### Trigger Phrases That REQUIRE Searching
+
+**If the user says ANY of these, STOP and search Chronicle immediately:**
+- "I can't believe..." → Search first!
+- "Why isn't..." → Search first!
+- "This should work..." → Search first!
+- "We need to add..." → Check if it already exists
+- "How do we..." → Search for past implementations
+- Before debugging → Check past sessions for similar issues
+- Before adding features → Check if already implemented
+
+**Example violation:**
+```
+User: "I can't believe there's no optimization here"
+❌ Without search: Spend 20 minutes implementing, discover it was done before
+✅ With search: Find past session in 1 second, understand why approach was chosen
+```
+
 ---
 
 ## Chronicle Development Memory
 
 **This project uses Chronicle to track development sessions and maintain institutional knowledge.**
+
+### 🚨 PRE-FLIGHT CHECKLIST (DO THIS FIRST!)
+
+**Before starting ANY development task, run this checklist:**
+
+1. **SEARCH CHRONICLE** (1 second, saves 10-20 minutes):
+   ```python
+   mcp__chronicle__search_sessions(query="<your task>", limit=10)
+   ```
+
+2. **CHECK ROADMAP** (avoid duplicate planning):
+   ```python
+   mcp__chronicle__get_roadmap(days=7)
+   mcp__chronicle__get_next_steps(completed=False)
+   ```
+
+3. **VERIFY SESSION TRACKING**:
+   ```python
+   mcp__chronicle__get_current_session()
+   # Returns: {"active": true, "session": {...}} or {"active": false}
+   ```
+
+**Violating this checklist wastes time and frustrates the user. Follow it religiously.**
+
+---
 
 ### Core Directives (MANDATORY)
 
@@ -126,7 +169,12 @@ mcp__chronicle__search_sessions(query="relevant keywords", limit=10)
    ```python
    mcp__chronicle__search_sessions(query="relevant keywords", limit=10)
    ```
-   **This is REQUIRED, not optional.** Past sessions contain solutions to current problems.
+
+   **Why this is mandatory:**
+   - ❌ Not searching → Reimplementing features, breaking working code, wasting 10-20 minutes
+   - ✅ Searching → Finding past solutions in <1 second, understanding WHY decisions were made
+
+   **Past sessions contain solutions to current problems.**
 
 2. **📊 CHECK SESSION STATUS (REQUIRED)** - Verify session tracking:
    ```python
@@ -173,6 +221,15 @@ mcp__chronicle__get_timeline(days=1)
 mcp__chronicle__get_commits(limit=20, days=7)
 ```
 
+### File Locations Reference
+
+All Chronicle data is stored locally in `~/.ai-session/`:
+
+- **Database**: `~/.ai-session/sessions.db` (SQLite)
+- **Session transcripts**: `~/.ai-session/sessions/session_N.log` (raw)
+- **Cleaned transcripts**: `~/.ai-session/sessions/session_N.cleaned` (processed)
+- **Configuration**: `~/.ai-session/config.yaml`
+
 **This is mandatory. Every single time. No exceptions.**
 
 ```
@@ -199,11 +256,54 @@ chronicle search "relevant keywords"
 
 **This is not optional. This is not a suggestion. Search first, ALWAYS.**
 
+### Trigger Phrases That REQUIRE Searching
+
+**If the user says ANY of these, STOP and search Chronicle immediately:**
+- "I can't believe..." → Search first!
+- "Why isn't..." → Search first!
+- "This should work..." → Search first!
+- "We need to add..." → Check if it already exists
+- "How do we..." → Search for past implementations
+- Before debugging → Check past sessions for similar issues
+- Before adding features → Check if already implemented
+
+**Example violation:**
+```
+User: "I can't believe there's no optimization here"
+❌ Without search: Spend 20 minutes implementing, discover it was done before
+✅ With search: Find past session in 1 second, understand why approach was chosen
+```
+
 ---
 
 ## Chronicle Development Memory
 
 **This project uses Chronicle to track development sessions and maintain institutional knowledge.**
+
+### 🚨 PRE-FLIGHT CHECKLIST (DO THIS FIRST!)
+
+**Before starting ANY development task, run this checklist:**
+
+1. **SEARCH CHRONICLE** (1 second, saves 10-20 minutes):
+   ```bash
+   chronicle search "<your task>"
+   ```
+
+2. **CHECK ROADMAP** (avoid duplicate planning):
+   ```bash
+   chronicle roadmap
+   chronicle next-steps --pending
+   ```
+
+3. **VERIFY SESSION TRACKING**:
+   ```bash
+   chronicle status
+   # Shows if current session is being tracked
+   ```
+
+**Violating this checklist wastes time and frustrates the user. Follow it religiously.**
+
+---
 
 ### Core Directives (MANDATORY)
 
@@ -213,7 +313,12 @@ chronicle search "relevant keywords"
    ```bash
    chronicle search "relevant keywords"
    ```
-   **This is REQUIRED, not optional.** Past sessions contain solutions to current problems.
+
+   **Why this is mandatory:**
+   - ❌ Not searching → Reimplementing features, breaking working code, wasting 10-20 minutes
+   - ✅ Searching → Finding past solutions in <1 second, understanding WHY decisions were made
+
+   **Past sessions contain solutions to current problems.**
 
 2. **📊 CHECK SESSION STATUS (REQUIRED)** - Verify session tracking:
    ```bash
@@ -261,6 +366,17 @@ chronicle timeline week                # Last 7 days
 chronicle show today                   # Today's commits
 chronicle ai today                     # Today's AI interactions
 ```
+
+### File Locations Reference
+
+All Chronicle data is stored locally in `~/.ai-session/`:
+
+- **Database**: `~/.ai-session/sessions.db` (SQLite)
+- **Session transcripts**: `~/.ai-session/sessions/session_N.log` (raw)
+- **Cleaned transcripts**: `~/.ai-session/sessions/session_N.cleaned` (processed)
+- **Configuration**: `~/.ai-session/config.yaml`
+
+**Direct database access** (see "File Locations & Database Access" section below for examples).
 
 **Note:** CLI output is human-readable text, not JSON. Parse carefully.
 
@@ -499,6 +615,72 @@ chronicle start claude
 **"Summaries not generating":**
 - Check Gemini API key: `chronicle config ai.gemini_api_key`
 - Or set environment variable: `export GEMINI_API_KEY=...`
+
+---
+
+## File Locations & Database Access
+
+All Chronicle data is stored locally in `~/.ai-session/`:
+
+**Primary Files:**
+- **Database**: `~/.ai-session/sessions.db` (SQLite)
+- **Session transcripts**: `~/.ai-session/sessions/session_N.log` (raw)
+- **Cleaned transcripts**: `~/.ai-session/sessions/session_N.cleaned` (processed)
+- **Configuration**: `~/.ai-session/config.yaml`
+
+**MCP Configuration** (if installed):
+- Global: `~/.mcp.json`
+- Project-local: `.mcp.json` (in project root)
+
+### Direct Database Access (Advanced)
+
+For environments without MCP or when you need direct database manipulation:
+
+**View all sessions:**
+```bash
+sqlite3 ~/.ai-session/sessions.db "SELECT id, timestamp, ai_tool, is_session FROM ai_interactions WHERE is_session = 1 ORDER BY id;"
+```
+
+**View specific session details:**
+```bash
+sqlite3 ~/.ai-session/sessions.db "SELECT * FROM ai_interactions WHERE id = 5;"
+```
+
+**Delete a session:**
+```bash
+# View first to confirm
+sqlite3 ~/.ai-session/sessions.db "SELECT id, timestamp, ai_tool FROM ai_interactions WHERE id = 3;"
+
+# Then delete
+sqlite3 ~/.ai-session/sessions.db "DELETE FROM ai_interactions WHERE id = 3;"
+
+# Also delete associated files
+rm -f ~/.ai-session/sessions/session_3.log
+rm -f ~/.ai-session/sessions/session_3.cleaned
+rm -f ~/.ai-session/sessions/session_3.meta
+```
+
+**Export session to JSON:**
+```bash
+sqlite3 ~/.ai-session/sessions.db ".mode json" "SELECT * FROM ai_interactions WHERE id = 5;"
+```
+
+**Search sessions (without AI tools):**
+```bash
+# Search in prompts and summaries
+sqlite3 ~/.ai-session/sessions.db "SELECT id, timestamp, prompt FROM ai_interactions WHERE prompt LIKE '%search term%' OR response_summary LIKE '%search term%';"
+```
+
+**View database schema:**
+```bash
+sqlite3 ~/.ai-session/sessions.db ".schema ai_interactions"
+```
+
+**⚠️ Safety Notes:**
+- Always back up before direct database modifications: `cp ~/.ai-session/sessions.db ~/.ai-session/sessions.db.backup`
+- Use `SELECT` queries first to verify what you're about to modify
+- The `chronicle` CLI handles database migrations automatically - direct edits may break future updates
+- Session transcripts (`.log`, `.cleaned` files) should be deleted manually when removing sessions
 
 ---
 

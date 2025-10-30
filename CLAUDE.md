@@ -155,6 +155,50 @@ mcp__chronicle__get_next_steps(completed=False)
 
 ---
 
+## 🎯 Chronicle Skills (Use These First!)
+
+**BEFORE manually calling MCP tools, check if a skill exists for the task:**
+
+| Task | Use This Skill | Instead of Manual |
+|------|----------------|-------------------|
+| 📝 Export session to Obsidian | `chronicle-session-documenter` | Manual `mcp__chronicle__get_session_summary()` + `mcp__obsidian__write_note()` calls |
+| 🔍 Search past sessions for context | `chronicle-context-retriever` | Manual search and analysis across multiple sessions |
+| 🔄 Complete Chronicle workflow guidance | `chronicle-workflow` | Ad-hoc workflow instructions |
+| 📊 Manage milestones and roadmap | `chronicle-project-tracker` | Manual milestone/next step operations |
+
+### How to Invoke Skills
+
+**Method 1: Let skill auto-activate (preferred)**
+```
+User: "Export session 75 to Obsidian"
+→ Skill should auto-activate based on description match
+→ Follow skill's guidance
+```
+
+**Method 2: Explicit invocation**
+```python
+Skill(command="chronicle-session-documenter")
+→ Skill loads and provides detailed instructions
+→ Follow the workflow it describes
+```
+
+### Why Use Skills Over Manual MCP Calls?
+
+- ✅ **Complete workflows** - Skills guide through entire process, not just one MCP call
+- ✅ **Best practices** - Skills encode correct patterns (formatting, error handling, etc.)
+- ✅ **Consistency** - Same structured output every time
+- ✅ **Examples** - Skills include usage examples and common patterns
+- ✅ **Maintenance** - Update skill once, all uses benefit
+
+### Skill Locations
+
+- **User skills:** `~/.claude/plugins/marketplaces/chronicle-skills/chronicle-skills/`
+- **Project skills:** `chronicle-skills/` (for plugin marketplace)
+
+**Available skills documented in:** `chronicle-skills/README.md`
+
+---
+
 ## 🏗️ Architecture
 
 ### Data Flow
