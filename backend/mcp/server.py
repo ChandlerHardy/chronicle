@@ -37,6 +37,24 @@ def get_db() -> Session:
     return _db_session
 
 
+def _get_current_repo_path() -> Optional[str]:
+    """Get the repo_path from the currently active session.
+
+    Returns:
+        The repo_path of the active session, or None if no active session exists.
+    """
+    from backend.services.ai_tracker import AITracker
+
+    db = get_db()
+    tracker = AITracker(db)
+    active_session = tracker.get_active_session()
+
+    if active_session and active_session.repo_path:
+        return active_session.repo_path
+
+    return None
+
+
 def format_session_dict(session: AIInteraction, include_summary: bool = True) -> Dict[str, Any]:
     """Convert AIInteraction to a clean dictionary for MCP responses.
 
@@ -97,7 +115,8 @@ def get_sessions(
     Args:
         limit: Maximum number of sessions to return (default: 10, max: 100)
         tool: Filter by AI tool (claude-code, gemini-cli, qwen-cli)
-        repo_path: Filter by repository path
+        repo_path: Filter by repository path. Defaults to current session's repo.
+                   Use "*" to search all repos. Use specific path for targeted search.
         days: Only show sessions from last N days
         include_summaries: Include full AI summaries (default: False, reduces response size)
 
@@ -105,6 +124,14 @@ def get_sessions(
         JSON string with list of sessions
     """
     db = get_db()
+
+    # Auto-detect repo_path from current session if not specified
+    if repo_path is None:
+        repo_path = _get_current_repo_path()
+    elif repo_path == "*":
+        # Explicit global search
+        repo_path = None
+
     query = db.query(AIInteraction).options(
         defer(AIInteraction.session_transcript)  # Don't load transcript (can be huge)
     ).filter(AIInteraction.is_session == 1)
@@ -124,7 +151,8 @@ def get_sessions(
 
     result = {
         "count": len(sessions),
-        "sessions": [format_session_dict(s, include_summary=include_summaries) for s in sessions]
+        "sessions": [format_session_dict(s, include_summary=include_summaries) for s in sessions],
+        "repo_filter": repo_path if repo_path else "all"
     }
 
     return json.dumps(result, indent=2)
@@ -168,6 +196,7 @@ def get_session_summary(session_id: int) -> str:
 def search_sessions(
     query: str,
     limit: int = 10,
+    repo_path: Optional[str] = None,
     search_summaries: bool = True,
     search_prompts: bool = True,
     search_keywords: bool = True,
@@ -177,6 +206,8 @@ def search_sessions(
     Args:
         query: Search query (searches summaries, prompts, and keywords)
         limit: Maximum number of results (default: 10, max: 50)
+        repo_path: Filter by repository path. Defaults to current session's repo.
+                   Use "*" to search all repos. Use specific path for targeted search.
         search_summaries: Search in AI-generated summaries (default: True)
         search_prompts: Search in session prompts/descriptions (default: True)
         search_keywords: Search in AI-extracted keywords (default: True)
@@ -185,6 +216,13 @@ def search_sessions(
         JSON string with matching sessions
     """
     db = get_db()
+
+    # Auto-detect repo_path from current session if not specified
+    if repo_path is None:
+        repo_path = _get_current_repo_path()
+    elif repo_path == "*":
+        # Explicit global search
+        repo_path = None
 
     filters = []
     if search_summaries:
@@ -199,19 +237,26 @@ def search_sessions(
         return json.dumps({"error": "Must search at least one field"})
 
     limit = min(limit, 50)
-    sessions = db.query(AIInteraction).options(
+    query_obj = db.query(AIInteraction).options(
         defer(AIInteraction.session_transcript)  # Don't load transcript
     ).filter(
         and_(
             AIInteraction.is_session == 1,
             or_(*filters)
         )
-    ).order_by(desc(AIInteraction.timestamp)).limit(limit).all()
+    )
+
+    # Add repo filtering if specified
+    if repo_path:
+        query_obj = query_obj.filter(AIInteraction.repo_path.like(f"%{repo_path}%"))
+
+    sessions = query_obj.order_by(desc(AIInteraction.timestamp)).limit(limit).all()
 
     result = {
         "query": query,
         "count": len(sessions),
-        "sessions": [format_session_dict(s) for s in sessions]
+        "sessions": [format_session_dict(s) for s in sessions],
+        "repo_filter": repo_path if repo_path else "all"
     }
 
     return json.dumps(result, indent=2)
@@ -267,7 +312,8 @@ def get_commits(
 
     Args:
         limit: Maximum number of commits (default: 20, max: 100)
-        repo_path: Filter by repository path
+        repo_path: Filter by repository path. Defaults to current session's repo.
+                   Use "*" to show all repos. Use specific path for targeted search.
         author: Filter by commit author
         days: Only show commits from last N days
 
@@ -275,6 +321,14 @@ def get_commits(
         JSON string with list of commits
     """
     db = get_db()
+
+    # Auto-detect repo_path from current session if not specified
+    if repo_path is None:
+        repo_path = _get_current_repo_path()
+    elif repo_path == "*":
+        # Explicit global search
+        repo_path = None
+
     query = db.query(Commit)
 
     if repo_path:
@@ -292,7 +346,8 @@ def get_commits(
 
     result = {
         "count": len(commits),
-        "commits": [format_commit_dict(c) for c in commits]
+        "commits": [format_commit_dict(c) for c in commits],
+        "repo_filter": repo_path if repo_path else "all"
     }
 
     return json.dumps(result, indent=2)
@@ -307,12 +362,21 @@ def get_timeline(
 
     Args:
         days: Number of days to show (default: 1 = today)
-        repo_path: Filter by repository path
+        repo_path: Filter by repository path. Defaults to current session's repo.
+                   Use "*" to show all repos. Use specific path for targeted search.
 
     Returns:
         JSON string with timeline of commits and sessions
     """
     db = get_db()
+
+    # Auto-detect repo_path from current session if not specified
+    if repo_path is None:
+        repo_path = _get_current_repo_path()
+    elif repo_path == "*":
+        # Explicit global search
+        repo_path = None
+
     cutoff = datetime.now() - timedelta(days=days)
 
     # Get commits

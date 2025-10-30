@@ -107,7 +107,7 @@ class AITracker:
 
         Args:
             ai_tool: Optional filter by AI tool
-            repo_path: Optional filter by repository path
+            repo_path: Optional filter by repository path (supports partial matching)
 
         Returns:
             List of AIInteraction objects from today
@@ -119,7 +119,7 @@ class AITracker:
             query = query.filter_by(ai_tool=ai_tool)
 
         if repo_path:
-            query = query.filter_by(repo_path=repo_path)
+            query = query.filter(AIInteraction.repo_path.like(f"%{repo_path}%"))
 
         return query.order_by(AIInteraction.timestamp.desc()).all()
 
@@ -136,7 +136,7 @@ class AITracker:
             start_date: Start of date range
             end_date: End of date range (defaults to now)
             ai_tool: Optional filter by AI tool
-            repo_path: Optional filter by repository path
+            repo_path: Optional filter by repository path (supports partial matching)
 
         Returns:
             List of AIInteraction objects
@@ -150,7 +150,7 @@ class AITracker:
             query = query.filter_by(ai_tool=ai_tool)
 
         if repo_path:
-            query = query.filter_by(repo_path=repo_path)
+            query = query.filter(AIInteraction.repo_path.like(f"%{repo_path}%"))
 
         return query.order_by(AIInteraction.timestamp.desc()).all()
 

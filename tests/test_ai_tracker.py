@@ -344,3 +344,81 @@ def test_get_active_session_ignores_non_sessions(temp_db):
     result = tracker.get_active_session()
 
     assert result is None  # Should not find the one-shot interaction
+
+
+def test_get_interactions_today_filters_by_repo(temp_db):
+    """Test that get_interactions_today filters by repository path."""
+    tracker = AITracker(temp_db)
+
+    # Create sessions in different repos
+    chronicle_session = AIInteraction(
+        ai_tool="claude-code",
+        timestamp=datetime.now(),
+        prompt="Chronicle work",
+        is_session=True,
+        repo_path="/Users/test/repos/chronicle"
+    )
+    portfolio_session = AIInteraction(
+        ai_tool="claude-code",
+        timestamp=datetime.now(),
+        prompt="Portfolio work",
+        is_session=True,
+        repo_path="/Users/test/repos/portfolio-website"
+    )
+    temp_db.add(chronicle_session)
+    temp_db.add(portfolio_session)
+    temp_db.commit()
+
+    # Get all sessions
+    all_sessions = tracker.get_interactions_today()
+    assert len(all_sessions) == 2
+
+    # Filter by chronicle repo
+    chronicle_sessions = tracker.get_interactions_today(repo_path="/Users/test/repos/chronicle")
+    assert len(chronicle_sessions) == 1
+    assert chronicle_sessions[0].prompt == "Chronicle work"
+
+    # Filter by portfolio repo (partial match)
+    portfolio_sessions = tracker.get_interactions_today(repo_path="portfolio")
+    assert len(portfolio_sessions) == 1
+    assert portfolio_sessions[0].prompt == "Portfolio work"
+
+
+def test_get_interactions_by_date_filters_by_repo(temp_db):
+    """Test that get_interactions_by_date filters by repository path."""
+    tracker = AITracker(temp_db)
+
+    yesterday = datetime.now() - timedelta(days=1)
+
+    # Create sessions in different repos
+    chronicle_session = AIInteraction(
+        ai_tool="claude-code",
+        timestamp=yesterday,
+        prompt="Chronicle work yesterday",
+        is_session=True,
+        repo_path="/Users/test/repos/chronicle"
+    )
+    portfolio_session = AIInteraction(
+        ai_tool="claude-code",
+        timestamp=yesterday,
+        prompt="Portfolio work yesterday",
+        is_session=True,
+        repo_path="/Users/test/repos/portfolio-website"
+    )
+    temp_db.add(chronicle_session)
+    temp_db.add(portfolio_session)
+    temp_db.commit()
+
+    # Get all sessions from yesterday
+    all_sessions = tracker.get_interactions_by_date(yesterday)
+    assert len(all_sessions) == 2
+
+    # Filter by chronicle repo
+    chronicle_sessions = tracker.get_interactions_by_date(yesterday, repo_path="chronicle")
+    assert len(chronicle_sessions) == 1
+    assert chronicle_sessions[0].prompt == "Chronicle work yesterday"
+
+    # Filter by portfolio repo
+    portfolio_sessions = tracker.get_interactions_by_date(yesterday, repo_path="portfolio")
+    assert len(portfolio_sessions) == 1
+    assert portfolio_sessions[0].prompt == "Portfolio work yesterday"

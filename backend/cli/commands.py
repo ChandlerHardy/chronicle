@@ -285,11 +285,24 @@ def add_repo(repo_path: str, limit: int):
 
 @cli.command()
 @click.argument('action', type=click.Choice(['today', 'yesterday', 'week']))
-@click.option('--repo', help='Filter by repository path')
-def show(action: str, repo: str = None):
-    """Show development activity."""
+@click.option('--repo', help='Filter by repository path (defaults to current directory)')
+@click.option('--all', 'show_all', is_flag=True, help='Show commits from all repositories')
+def show(action: str, repo: str = None, show_all: bool = False):
+    """Show development activity.
+
+    By default, shows commits from the current repository only.
+
+    Examples:
+        chronicle show today                # Current repo, today
+        chronicle show week --all           # All repos, last 7 days
+        chronicle show today --repo /path   # Specific repo
+    """
     db_session = get_session()
     monitor = GitMonitor(db_session)
+
+    # Auto-detect repo from current working directory
+    if repo is None and not show_all:
+        repo = os.getcwd()
 
     if action == 'today':
         commits = monitor.get_commits_today(repo_path=repo)
@@ -561,27 +574,40 @@ def summarize(action: str, repo: str = None):
 
 @cli.command()
 @click.argument('action', type=click.Choice(['today', 'yesterday', 'week']))
-@click.option('--repo', help='Filter by repository path')
-def timeline(action: str, repo: str = None):
-    """Show combined timeline of commits and AI interactions."""
+@click.option('--repo', help='Filter by repository path (defaults to current directory)')
+@click.option('--all', 'show_all', is_flag=True, help='Show timeline from all repositories')
+def timeline(action: str, repo: str = None, show_all: bool = False):
+    """Show combined timeline of commits and AI interactions.
+
+    By default, shows timeline from the current repository only.
+
+    Examples:
+        chronicle timeline today            # Current repo, today
+        chronicle timeline week --all       # All repos, last 7 days
+        chronicle timeline today --repo /path  # Specific repo
+    """
     db_session = get_session()
     monitor = GitMonitor(db_session)
     tracker = AITracker(db_session)
 
+    # Auto-detect repo from current working directory
+    if repo is None and not show_all:
+        repo = os.getcwd()
+
     if action == 'today':
         commits = monitor.get_commits_today(repo_path=repo)
-        interactions = tracker.get_interactions_today()
+        interactions = tracker.get_interactions_today(repo_path=repo)
 
     elif action == 'yesterday':
         yesterday_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=1)
         yesterday_end = yesterday_start + timedelta(days=1)
         commits = monitor.get_commits_by_date(yesterday_start, yesterday_end, repo_path=repo)
-        interactions = tracker.get_interactions_by_date(yesterday_start, yesterday_end)
+        interactions = tracker.get_interactions_by_date(yesterday_start, yesterday_end, repo_path=repo)
 
     elif action == 'week':
         week_start = datetime.now() - timedelta(days=7)
         commits = monitor.get_commits_by_date(week_start, repo_path=repo)
-        interactions = tracker.get_interactions_by_date(week_start)
+        interactions = tracker.get_interactions_by_date(week_start, repo_path=repo)
 
     format_combined_session(commits, interactions)
 
@@ -683,17 +709,25 @@ def start(tool: str, command: str = None):
 
 
 @cli.command()
-@click.option('--repo', help='Filter by repository path')
+@click.option('--repo', help='Filter by repository path (defaults to current directory)')
+@click.option('--all', 'show_all', is_flag=True, help='Show sessions from all repositories')
 @click.option('--limit', default=10, help='Number of sessions to show (default: 10)')
-def sessions(repo: str = None, limit: int = 10):
+def sessions(repo: str = None, show_all: bool = False, limit: int = 10):
     """List recent sessions.
 
+    By default, shows sessions from the current repository only.
+
     Examples:
-        chronicle sessions                          # Last 10 sessions
-        chronicle sessions --limit 20               # Last 20 sessions
-        chronicle sessions --repo /path/to/project  # Sessions for specific repo
+        chronicle sessions                          # Current repo sessions
+        chronicle sessions --all                    # All repos
+        chronicle sessions --limit 20               # Current repo, last 20
+        chronicle sessions --repo /path/to/project  # Specific repo
     """
     db_session = get_session()
+
+    # Auto-detect repo from current working directory
+    if repo is None and not show_all:
+        repo = os.getcwd()
 
     # Get recent sessions (last N)
     from backend.services.ai_tracker import AITracker
@@ -701,21 +735,31 @@ def sessions(repo: str = None, limit: int = 10):
 
     query = db_session.query(AIInteraction).filter_by(is_session=1)
 
-    # Filter by repo if specified
+    # Filter by repo if specified (use LIKE for partial matching)
     if repo:
-        query = query.filter(AIInteraction.repo_path == repo)
+        query = query.filter(AIInteraction.repo_path.like(f"%{repo}%"))
 
     interactions = query.order_by(
         AIInteraction.timestamp.desc()
     ).limit(limit).all()
     
     if not interactions:
-        console.print("[yellow]No sessions recorded yet.[/yellow]")
-        console.print("\nStart a session with: [cyan]chronicle start claude[/cyan]")
+        if repo and not show_all:
+            console.print(f"[yellow]No sessions found for repository: {repo}[/yellow]")
+            console.print("\nTip: Use [cyan]--all[/cyan] to see sessions from all repositories")
+        else:
+            console.print("[yellow]No sessions recorded yet.[/yellow]")
+            console.print("\nStart a session with: [cyan]chronicle start claude[/cyan]")
         db_session.close()
         return
-    
+
+    # Show which repo is being filtered
     console.print("\n[bold cyan]Recent Sessions[/bold cyan]")
+    if show_all:
+        console.print("[dim]Showing: All repositories[/dim]")
+    elif repo:
+        repo_name = Path(repo).name
+        console.print(f"[dim]Showing: {repo_name} ({repo})[/dim]")
     console.print("═" * 80)
     
     from rich.table import Table

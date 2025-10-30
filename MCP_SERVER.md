@@ -73,6 +73,31 @@ chronicle - Chronicle session recorder
 
 The Chronicle MCP server provides the following tools:
 
+### **Auto-Scoping to Current Repository**
+
+**By default, all query tools automatically scope results to your current repository** to avoid cross-contamination between projects. This behavior applies to:
+- `get_sessions` - Lists sessions from current repo
+- `search_sessions` - Searches only current repo sessions
+- `get_commits` - Shows commits from current repo
+- `get_timeline` - Timeline for current repo
+
+**How it works:**
+- When you call these tools **without** specifying `repo_path`, Chronicle auto-detects the repository from your active session
+- To search **all repositories**, explicitly pass `repo_path="*"`
+- To search a **specific repository**, pass `repo_path="/path/to/repo"`
+
+**Examples:**
+```python
+# Auto-scoped to current repo (default)
+mcp__chronicle__search_sessions(query="authentication")
+
+# Explicit global search across all repos
+mcp__chronicle__search_sessions(query="authentication", repo_path="*")
+
+# Specific repository
+mcp__chronicle__search_sessions(query="auth", repo_path="/Users/you/projects/webapp")
+```
+
 ### `get_sessions`
 
 Get recent Chronicle sessions with filtering options.
@@ -80,7 +105,7 @@ Get recent Chronicle sessions with filtering options.
 **Parameters:**
 - `limit` (int, optional): Maximum number of sessions (default: 10, max: 100)
 - `tool` (str, optional): Filter by AI tool (claude-code, gemini-cli, qwen-cli)
-- `repo_path` (str, optional): Filter by repository path
+- `repo_path` (str, optional): Filter by repository path. **Defaults to current session's repo.** Use `"*"` for all repos.
 - `days` (int, optional): Only show sessions from last N days
 - `include_summaries` (bool, optional): Include full AI summaries (default: false)
 
@@ -94,7 +119,7 @@ Get recent Chronicle sessions with filtering options.
 }
 ```
 
-**Returns:** JSON array of sessions with metadata and timestamps. Summaries are excluded by default to reduce response size (use `get_session_summary` or `get_sessions_summaries` for summaries).
+**Returns:** JSON array of sessions with metadata and timestamps. Includes `repo_filter` field showing which repo was queried. Summaries are excluded by default to reduce response size (use `get_session_summary` or `get_sessions_summaries` for summaries).
 
 ---
 
@@ -127,8 +152,10 @@ Search Chronicle sessions by keywords.
 **Parameters:**
 - `query` (str, required): Search query
 - `limit` (int, optional): Maximum results (default: 10, max: 50)
+- `repo_path` (str, optional): Filter by repository path. **Defaults to current session's repo.** Use `"*"` for all repos.
 - `search_summaries` (bool, optional): Search in AI summaries (default: true)
 - `search_prompts` (bool, optional): Search in session prompts (default: true)
+- `search_keywords` (bool, optional): Search in AI-extracted keywords (default: true)
 
 **Example:**
 ```json
@@ -138,7 +165,16 @@ Search Chronicle sessions by keywords.
 }
 ```
 
-**Returns:** Matching sessions with highlighted search context.
+**Example (search all repos):**
+```json
+{
+  "query": "authentication",
+  "limit": 10,
+  "repo_path": "*"
+}
+```
+
+**Returns:** Matching sessions with `repo_filter` field showing which repo was queried.
 
 ---
 
@@ -171,7 +207,7 @@ Get recent git commits tracked by Chronicle.
 
 **Parameters:**
 - `limit` (int, optional): Maximum commits (default: 20, max: 100)
-- `repo_path` (str, optional): Filter by repository
+- `repo_path` (str, optional): Filter by repository path. **Defaults to current session's repo.** Use `"*"` for all repos.
 - `author` (str, optional): Filter by commit author
 - `days` (int, optional): Only show commits from last N days
 
@@ -179,12 +215,20 @@ Get recent git commits tracked by Chronicle.
 ```json
 {
   "limit": 10,
-  "repo_path": "chronicle",
   "days": 7
 }
 ```
 
-**Returns:** JSON array of commits with SHA, message, files changed, and author.
+**Example (all repos):**
+```json
+{
+  "limit": 10,
+  "repo_path": "*",
+  "days": 7
+}
+```
+
+**Returns:** JSON array of commits with SHA, message, files changed, and author. Includes `repo_filter` field.
 
 ---
 
@@ -214,17 +258,24 @@ Get combined timeline of commits and sessions.
 
 **Parameters:**
 - `days` (int, optional): Number of days to show (default: 1)
-- `repo_path` (str, optional): Filter by repository
+- `repo_path` (str, optional): Filter by repository path. **Defaults to current session's repo.** Use `"*"` for all repos.
 
 **Example:**
 ```json
 {
-  "days": 7,
-  "repo_path": "my-app"
+  "days": 7
 }
 ```
 
-**Returns:** Unified timeline with both commits and sessions, sorted by timestamp.
+**Example (all repos):**
+```json
+{
+  "days": 7,
+  "repo_path": "*"
+}
+```
+
+**Returns:** Unified timeline with both commits and sessions, sorted by timestamp. Includes `repo_filter` field.
 
 ---
 
