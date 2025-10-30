@@ -1,11 +1,11 @@
 ---
 name: chronicle-workflow
-description: Complete workflow for tracking development work with Chronicle - session recording, git tracking, AI summarization, and Obsidian documentation. Use when starting a new development session, setting up project tracking, or when user wants comprehensive session management and knowledge base building.
+description: Complete workflow for tracking development work with Chronicle - session recording, git tracking, AI summarization, and Obsidian documentation. Works with CLI commands (portable) or MCP tools (faster). Use when starting a new development session, setting up project tracking, or when user wants comprehensive session management.
 ---
 
 # Chronicle Workflow
 
-This skill guides you through the complete Chronicle workflow for tracking and documenting development work.
+This skill guides you through the complete Chronicle workflow for tracking and documenting development work. Primarily uses CLI commands for portability, with optional MCP tools for faster programmatic access.
 
 ## When to Use This Skill
 
@@ -93,13 +93,23 @@ Use the `chronicle-context-retriever` skill:
 "Show me all work on the API refactor"
 ```
 
-**Browse Sessions:**
+**Browse Sessions (CLI):**
 ```bash
 # Filter by repo
 chronicle sessions --repo /path/to/project
 
 # View timeline
 chronicle timeline week
+
+# Search sessions
+chronicle search "authentication" --limit 5
+```
+
+**Browse Sessions (MCP - if available):**
+```python
+# Faster programmatic access
+sessions = mcp__chronicle__get_sessions(repo_path="/path/to/project", limit=20)
+results = mcp__chronicle__search_sessions(query="authentication", limit=5)
 ```
 
 ## Workflow Patterns

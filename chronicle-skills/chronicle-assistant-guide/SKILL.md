@@ -1,12 +1,12 @@
 ---
 name: chronicle-assistant-guide
-description: Project-agnostic guidance for AI assistants using Chronicle. Provides search-first directives, best practices, and workflow patterns across ALL Chronicle-tracked projects. Auto-loads when Chronicle MCP is configured.
+description: Project-agnostic guidance for AI assistants using Chronicle. Provides search-first directives, best practices, and workflow patterns across ALL Chronicle-tracked projects. Works with or without MCP server.
 ---
 
 # Chronicle Assistant Guide
 
 > **Purpose**: Universal directives for AI assistants using Chronicle
-> **Scope**: Works across ALL projects with Chronicle MCP configured
+> **Scope**: Works across ALL projects (with MCP server OR CLI-only)
 > **Priority**: Load this FIRST when Chronicle is available
 
 ---
@@ -15,7 +15,9 @@ description: Project-agnostic guidance for AI assistants using Chronicle. Provid
 
 **Before starting ANY Chronicle-related task, run through this checklist:**
 
-1. ✅ **SEARCH FIRST**: `mcp__chronicle__search_sessions(query="relevant keywords", limit=5)`
+1. ✅ **SEARCH FIRST**: Search Chronicle's history
+   - **With MCP**: `mcp__chronicle__search_sessions(query="relevant keywords", limit=5)`
+   - **Without MCP**: `chronicle search "relevant keywords" --limit 5`
    - Has this been done before?
    - What context exists about this feature/issue?
    - What approaches failed or succeeded?
@@ -26,12 +28,14 @@ description: Project-agnostic guidance for AI assistants using Chronicle. Provid
    - `chronicle-context-retriever` - Search past work
    - `chronicle-project-tracker` - Roadmap and milestones
 
-3. ✅ **Use MCP, not CLI**: Query database directly with MCP tools
-   - Fast (<10ms vs >100ms for CLI)
-   - Returns structured JSON
-   - No subprocess overhead
+3. ✅ **Prefer MCP over CLI**: Use best available tool
+   - **MCP available?** → Fast (<10ms), structured JSON, no subprocess overhead
+   - **CLI only?** → Still works, slightly slower (~100ms), parse formatted output
+   - Both provide the same data, choose based on environment
 
-4. ✅ **Check roadmap**: `mcp__chronicle__get_roadmap(days=7)`
+4. ✅ **Check roadmap**: View current milestones and next steps
+   - **With MCP**: `mcp__chronicle__get_roadmap(days=7)`
+   - **Without MCP**: `chronicle roadmap --days 7`
    - Is this already tracked as a milestone?
    - Are there related next steps?
 
@@ -43,7 +47,9 @@ description: Project-agnostic guidance for AI assistants using Chronicle. Provid
 
 ### 1. ALWAYS Search Chronicle Before Implementing
 
-**The Rule:**
+**The Rule (use whichever is available):**
+
+**Option 1: MCP (if available)**
 ```python
 # Before implementing ANY feature:
 mcp__chronicle__search_sessions(query="feature name", limit=5)
@@ -53,6 +59,18 @@ mcp__chronicle__search_sessions(query="error or symptom", limit=5)
 
 # When user questions something:
 mcp__chronicle__search_sessions(query="topic keywords", limit=5)
+```
+
+**Option 2: CLI (always works)**
+```bash
+# Before implementing ANY feature:
+chronicle search "feature name" --limit 5
+
+# Before debugging:
+chronicle search "error or symptom" --limit 5
+
+# When user questions something:
+chronicle search "topic keywords" --limit 5
 ```
 
 **Real examples from Chronicle's own history:**
@@ -99,42 +117,58 @@ Cost of skipping:      45 minutes / 1 second = 2,700x ROI on searching!
 
 ---
 
-### 2. ALWAYS Use MCP Tools (Never CLI)
+### 2. Prefer MCP Tools, Fall Back to CLI
 
 **Priority Order:**
 1. ✅ **Chronicle Skills** (best - handles complex workflows)
-2. ✅ **MCP tools** (fast, programmatic access)
-3. ❌ **CLI commands** (ONLY for user-facing operations - slow, not programmatic)
+2. ✅ **MCP tools** (fastest - if MCP server available)
+3. ✅ **CLI commands** (portable - works everywhere Chronicle is installed)
 
-**Why MCP over CLI:**
-- **Speed**: MCP queries database directly (<10ms), CLI spawns subprocess (>100ms)
+**Why MCP is preferred when available:**
+- **Speed**: MCP queries database directly (<10ms), CLI spawns subprocess (~100ms)
 - **Programmatic**: Returns structured JSON, not formatted text
 - **Reliable**: No parsing of human-readable output
 - **Efficient**: No terminal formatting overhead
 
+**When to use CLI:**
+- MCP server not configured (e.g., minimal installations, FreeBSD, remote systems)
+- User explicitly requests CLI output
+- Testing CLI functionality
+
 **Examples:**
+
+**With MCP Available:**
 ```python
-# ✅ CORRECT (MCP):
+# Fast, structured responses
 roadmap = mcp__chronicle__get_roadmap(days=7)
 sessions = mcp__chronicle__search_sessions(query="storage", limit=5)
 summary = mcp__chronicle__get_session_summary(session_id=16)
-
-# ❌ WRONG (CLI - slow, hard to parse):
-Bash("chronicle roadmap")
-Bash("chronicle search 'storage'")
-Bash("chronicle session 16")
 ```
 
-**CLI commands are ONLY for:**
-- User-facing operations (`chronicle start`, `chronicle config`)
-- When user explicitly requests CLI output
-- When testing CLI functionality
+**Without MCP (CLI Fallback):**
+```bash
+# Portable, works everywhere
+chronicle roadmap --days 7
+chronicle search "storage" --limit 5
+chronicle session 16
+```
+
+**Decision Pattern:**
+```
+Need Chronicle data
+├─ MCP available? → Use mcp__chronicle__<tool>()
+└─ MCP not available? → Use chronicle <command>
+```
 
 ---
 
-## 📚 Available MCP Tools
+## 📚 Available Tools (MCP + CLI)
+
+> **Note**: All operations below work with BOTH MCP tools and CLI commands. Use MCP for speed when available, CLI for portability.
 
 **Session & Commit Tracking:**
+
+**MCP Approach:**
 ```python
 # List sessions (summaries excluded by default for performance)
 mcp__chronicle__get_sessions(limit=10, tool="claude-code", repo_path="/path", days=7)
@@ -154,7 +188,26 @@ mcp__chronicle__get_timeline(days=1, repo_path="/path")
 mcp__chronicle__get_stats(days=7)
 ```
 
+**CLI Equivalents:**
+```bash
+# List and view sessions
+chronicle sessions --limit 10 --tool claude-code
+chronicle session 16  # Get details with summary
+
+# Search
+chronicle search "MCP server" --limit 10
+
+# Commits and timeline
+chronicle show today --limit 20
+chronicle timeline today
+
+# Statistics
+chronicle stats --days 7
+```
+
 **Project Tracking:**
+
+**MCP Approach:**
 ```python
 mcp__chronicle__get_milestones(status="in_progress", milestone_type="feature", limit=20)
 mcp__chronicle__get_milestone(milestone_id=1)
@@ -164,12 +217,28 @@ mcp__chronicle__update_milestone_status(milestone_id=1, new_status="completed")
 mcp__chronicle__complete_next_step(step_id=1)
 ```
 
+**CLI Equivalents:**
+```bash
+# Milestones
+chronicle milestones --status in_progress
+chronicle milestone 1
+
+# Roadmap and next steps
+chronicle roadmap --days 7
+chronicle next-steps --pending
+
+# Updates
+chronicle milestone-status 1 completed
+chronicle complete-step 1
+```
+
 ---
 
 ## 🔄 Typical Workflows
 
 ### Starting a New Task
 
+**With MCP:**
 ```python
 # 1. Search for related past work
 results = mcp__chronicle__search_sessions(query="authentication", limit=5)
@@ -184,8 +253,23 @@ if results:
 # 4. Now implement with full context
 ```
 
+**With CLI:**
+```bash
+# 1. Search for related past work
+chronicle search "authentication" --limit 5
+
+# 2. Check roadmap
+chronicle roadmap --days 7
+
+# 3. View specific session details
+chronicle session <id>
+
+# 4. Now implement with full context
+```
+
 ### Debugging an Issue
 
+**With MCP:**
 ```python
 # 1. Search for error message or symptom
 results = mcp__chronicle__search_sessions(query="hang freeze stuck", limit=5)
@@ -196,8 +280,19 @@ if results:
     # Read how it was solved before
 ```
 
+**With CLI:**
+```bash
+# 1. Search for error message or symptom
+chronicle search "hang freeze stuck" --limit 5
+
+# 2. View relevant session
+chronicle session <id>
+# Read how it was solved before
+```
+
 ### Understanding Project History
 
+**With MCP:**
 ```python
 # Get overview
 stats = mcp__chronicle__get_stats(days=30)
@@ -207,19 +302,29 @@ timeline = mcp__chronicle__get_timeline(days=7)
 sessions = mcp__chronicle__search_sessions(query="optimization", limit=10)
 ```
 
+**With CLI:**
+```bash
+# Get overview
+chronicle stats --days 30
+chronicle timeline week
+
+# Find specific work
+chronicle search "optimization" --limit 10
+```
+
 ---
 
 ## 🚫 Common Mistakes to Avoid
 
 **❌ DON'T:**
 - Jump straight to implementing without searching
-- Use CLI commands for querying data
+- Ignore the CLI when MCP isn't available
 - Forget to check the roadmap
 - Ignore related sessions in search results
 
 **✅ DO:**
-- Search first, implement second
-- Use MCP tools for all data queries
+- Search first, implement second (MCP or CLI)
+- Use best available tool (MCP preferred, CLI fallback)
 - Check roadmap before creating new milestones
 - Read summaries of related sessions for context
 

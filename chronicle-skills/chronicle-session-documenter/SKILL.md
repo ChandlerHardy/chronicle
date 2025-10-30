@@ -1,11 +1,11 @@
 ---
 name: chronicle-session-documenter
-description: Document AI-assisted development sessions to Obsidian vault using Chronicle's MCP integration. Use when completing a coding session, creating development logs, or maintaining a knowledge base of past work. Automatically creates structured notes with metadata, summaries, and wikilinks to related sessions and commits.
+description: Document AI-assisted development sessions to Obsidian vault using Chronicle data. Works with MCP (fastest) or CLI commands (portable). Use when completing a coding session, creating development logs, or maintaining a knowledge base of past work. Automatically creates structured notes with metadata, summaries, and wikilinks.
 ---
 
 # Chronicle Session Documenter
 
-This skill helps you document development sessions to your Obsidian vault using Chronicle's database and the Obsidian MCP server.
+This skill helps you document development sessions to your Obsidian vault using Chronicle's database. Works with both MCP server (fast, structured) or CLI commands (portable, everywhere).
 
 ## When to Use This Skill
 
@@ -18,11 +18,25 @@ Use this skill when:
 
 ## How It Works
 
-1. **Query Chronicle Database** - Use `mcp__chronicle__get_session_summary(session_id)` to get session details with AI summary
-2. **Retrieve Summary** - Summary is automatically generated in background when session ends (may still be processing for recent sessions)
-3. **Create Obsidian Note** - Use `mcp__obsidian__write_note(path, content, frontmatter)` to write to vault
-4. **Add Metadata** - Include frontmatter with tags, dates, duration, repo info extracted from session data
-5. **Link Related Work** - Create wikilinks to previous sessions, commits, repos using session relationships
+**Option 1: With MCP (Preferred)**
+1. **Query Chronicle** - `mcp__chronicle__get_session_summary(session_id)` → Get structured JSON with full summary
+2. **Create Note** - `mcp__obsidian__write_note(...)` → Write directly to Obsidian vault
+3. **Link Work** - Use session relationships from JSON to create wikilinks
+
+**Option 2: With CLI (Portable)**
+1. **Query Chronicle** - `chronicle session <id>` → Get formatted session details and summary
+2. **Parse Output** - Extract summary, files, duration from CLI output
+3. **Create Note** - `mcp__obsidian__write_note(...)` OR manually create note file
+4. **Link Work** - Use parsed data to create wikilinks
+
+**Decision Tree:**
+```
+Document session to Obsidian
+├─ MCP available? → Use mcp__chronicle__get_session_summary() + mcp__obsidian__write_note()
+└─ CLI only? → Use `chronicle session <id>`, parse output, write note
+```
+
+**Note**: Summaries are automatically generated in background when session ends (may still be processing for recent sessions)
 
 ## Note Structure
 
@@ -67,12 +81,14 @@ tags: ["chronicle-session", "{ai_tool}", "{topics}"]
 - Repository: [[{repo_name}]]
 ```
 
-## Workflow Example
+## Workflow Examples
+
+### Option 1: With MCP (Fast, Structured)
 
 **After completing a session:**
 
 ```python
-# Step 1: Get session data from Chronicle
+# Step 1: Get session data from Chronicle MCP
 session_data = mcp__chronicle__get_session_summary(session_id=10)
 
 # Step 2: Extract key information
@@ -120,7 +136,7 @@ frontmatter = {
     "tags": ["chronicle-session", tool, "feature-work"]
 }
 
-# Step 5: Write to Obsidian vault
+# Step 5: Write to Obsidian vault (if MCP available)
 mcp__obsidian__write_note(
     path="Chronicle/Sessions/Session-10.md",
     content=note_content,
@@ -129,33 +145,78 @@ mcp__obsidian__write_note(
 )
 ```
 
+### Option 2: With CLI (Portable, No MCP Required)
+
+**After completing a session:**
+
+```bash
+# Step 1: Get session data from Chronicle CLI
+chronicle session 10 > /tmp/session_10.txt
+
+# Step 2: Parse the output to extract:
+# - Session ID, timestamp, tool, duration
+# - Repository path
+# - AI-generated summary
+# - Files mentioned
+# - Keywords/tags
+
+# Step 3: Create note content using parsed data
+# (Similar structure to MCP approach above)
+
+# Step 4: If Obsidian MCP available, use it to write note:
+# mcp__obsidian__write_note(...)
+#
+# OR manually create file in Obsidian vault:
+# Write to ~/Documents/Obsidian/Chronicle/Sessions/Session-10.md
+```
+
+**Note**: CLI approach requires parsing Chronicle's formatted output, which is less elegant but fully portable to any system with Chronicle installed.
+
 ## Example Usage
 
 **User:** "Can you document session 10 to my Obsidian vault?"
 
-**Assistant:**
+**Assistant (with MCP):**
 1. Calls `mcp__chronicle__get_session_summary(session_id=10)`
-2. Parses summary to extract accomplishments, decisions, files, blockers
+2. Parses structured JSON to extract accomplishments, decisions, files, blockers
 3. Creates structured Markdown content with wikilinks
 4. Calls `mcp__obsidian__write_note(...)` to save to vault
 5. Confirms: "Documented Session 10 to Chronicle/Sessions/Session-10.md"
 
-## MCP Tools to Use
+**Assistant (without MCP):**
+1. Runs `chronicle session 10` to get formatted output
+2. Parses CLI output to extract summary and metadata
+3. Creates structured Markdown content with wikilinks
+4. Either uses `mcp__obsidian__write_note(...)` if available, or creates file manually
+5. Confirms: "Documented Session 10 to Chronicle/Sessions/Session-10.md"
 
-**Chronicle Database (Required)**
+## Tools to Use (MCP or CLI)
+
+### Chronicle Database Operations
+
+**MCP Approach (Preferred):**
 - `mcp__chronicle__get_session_summary(session_id)` - Get full session details with AI summary
 - `mcp__chronicle__get_sessions(limit, days, tool, repo_path)` - List recent sessions to find session ID
 - `mcp__chronicle__search_sessions(query, limit)` - Search for sessions by keyword
 - `mcp__chronicle__get_commits(repo_path, days, limit)` - Get related commits for linking
+- `mcp__chronicle__get_sessions_summaries(session_ids)` - Batch get summaries (up to 20 at once)
 
-**Obsidian Vault (Required)**
+**CLI Alternatives:**
+- `chronicle session <id>` - Get session details with summary
+- `chronicle sessions --limit 10` - List recent sessions
+- `chronicle search "keyword" --limit 10` - Search sessions
+- `chronicle show today` - Get commits for linking
+
+### Obsidian Vault Operations
+
+**MCP Approach (Preferred):**
 - `mcp__obsidian__write_note(path, content, frontmatter, mode)` - Write note to vault
 - `mcp__obsidian__read_note(path)` - Check if note already exists (optional)
 - `mcp__obsidian__list_directory(path)` - List existing session notes (optional)
 
-**Batch Operations (For multiple sessions)**
-- `mcp__chronicle__get_sessions_summaries(session_ids)` - Get summaries for up to 20 sessions at once
-- `mcp__obsidian__write_note(...)` - Call in loop for each session
+**Manual Alternative (No MCP):**
+- Create file directly: `~/Documents/Obsidian/<vault>/Chronicle/Sessions/Session-<id>.md`
+- Write YAML frontmatter + markdown content manually
 
 ## Tips
 
@@ -172,7 +233,9 @@ mcp__obsidian__write_note(
 
 ## Common Patterns
 
-**Document today's sessions:**
+### Document Today's Sessions
+
+**With MCP:**
 ```python
 # Get today's sessions
 sessions = mcp__chronicle__get_sessions(days=1, limit=20)
@@ -182,18 +245,50 @@ for session in sessions:
         document_to_vault(session["id"])
 ```
 
-**Document specific session by number:**
+**With CLI:**
+```bash
+# List today's sessions
+chronicle sessions --days 1 --limit 20
+
+# Manually document each one
+chronicle session 10  # View details
+# Parse and create Obsidian note
+```
+
+### Document Specific Session
+
+**With MCP:**
 ```python
 # Direct documentation
 session = mcp__chronicle__get_session_summary(session_id=10)
-# Create note...
+# Create note from structured data
 ```
 
-**Find and document sessions about a topic:**
+**With CLI:**
+```bash
+# Get session details
+chronicle session 10
+
+# Parse output and create note
+```
+
+### Find and Document Sessions About a Topic
+
+**With MCP:**
 ```python
 # Search first
 results = mcp__chronicle__search_sessions(query="authentication", limit=5)
 # Document each match
 for result in results:
     document_to_vault(result["id"])
+```
+
+**With CLI:**
+```bash
+# Search for sessions
+chronicle search "authentication" --limit 5
+
+# Document each match
+chronicle session <id>
+# Create note from parsed output
 ```

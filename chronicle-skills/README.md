@@ -31,7 +31,7 @@ Automatically creates structured Obsidian notes from Chronicle sessions, includi
 ### 🔍 chronicle-context-retriever
 **Purpose:** Search and retrieve context from past work
 
-Searches Chronicle's database (fast!) to find:
+Searches Chronicle's database to find:
 - Past approaches to similar problems
 - Previous decisions and rationale
 - Blockers encountered and solutions
@@ -39,7 +39,7 @@ Searches Chronicle's database (fast!) to find:
 
 **Use when:** Need context before starting work or want to recall past decisions.
 
-**Note:** Uses Chronicle MCP server for fast database queries, not Obsidian search.
+**Note:** Works with MCP (fast structured queries) or CLI commands (portable).
 
 ### 🔄 chronicle-workflow
 **Purpose:** Complete Chronicle workflow guidance
@@ -91,6 +91,21 @@ Then load specific skills as needed:
 /skill add /path/to/chronicle/chronicle-skills/chronicle-project-tracker
 ```
 
+## Portability
+
+**All Chronicle skills work with or without the MCP server!**
+
+- **With MCP (Preferred):** Fast, structured JSON queries directly from the database
+- **Without MCP (Portable):** CLI commands work everywhere Chronicle is installed
+
+This means Chronicle skills work on:
+- ✅ Claude Code with MCP configured (optimal performance)
+- ✅ Minimal Chronicle installations (CLI-only)
+- ✅ Remote systems (FreeBSD, minimal environments)
+- ✅ Any platform where Python runs
+
+Skills automatically adapt by showing both MCP and CLI approaches with decision trees for choosing the best available tool.
+
 ## Prerequisites
 
 ### Required
@@ -100,7 +115,14 @@ Then load specific skills as needed:
    pip install -e .  # From chronicle repo root
    ```
 
-2. **Chronicle MCP Server configured** (for context retrieval & project tracking):
+2. **Gemini API Key** (for AI summarization):
+   ```bash
+   chronicle config ai.gemini_api_key YOUR_KEY
+   ```
+
+### Optional (Recommended for Best Performance)
+
+3. **Chronicle MCP Server configured** (for faster context retrieval & project tracking):
    - Project-local config at `.mcp.json` in your repo:
    ```json
    {
@@ -114,11 +136,7 @@ Then load specific skills as needed:
    ```
    - Or global config at `~/.mcp.json` for all projects
    - Restart Claude Code after adding MCP config
-
-3. **Gemini API Key** (for AI summarization):
-   ```bash
-   chronicle config ai.gemini_api_key YOUR_KEY
-   ```
+   - **Note:** Skills work without MCP, just slower (~100ms vs ~10ms queries)
 
 ### Optional
 

@@ -1,11 +1,11 @@
 ---
 name: chronicle-project-tracker
-description: Manage Chronicle project development using database-tracked milestones, next steps, and roadmap visualization. Use when user wants to plan features, track progress, view roadmap, or link sessions to milestones. Eliminates need for manual DEVELOPMENT_HISTORY.md updates.
+description: Manage Chronicle project development using database-tracked milestones, next steps, and roadmap visualization. Works with MCP tools (fast, structured) or CLI commands (portable). Use when planning features, tracking progress, viewing roadmap, or linking sessions to milestones. Eliminates manual DEVELOPMENT_HISTORY.md updates.
 ---
 
 # Chronicle Project Tracker
 
-This skill helps you manage project development meta-state using Chronicle's built-in project tracking features.
+This skill helps you manage project development meta-state using Chronicle's built-in project tracking features. Use MCP tools for programmatic access or CLI commands for portability.
 
 ## When to Use This Skill
 
@@ -18,19 +18,29 @@ Use this skill when:
 - Answering "what should I work on next?"
 - Generating progress reports
 
-## Available MCP Tools
+## Available Tools (MCP + CLI)
 
-You have direct access to these Chronicle MCP tools:
+### MCP Tools (Programmatic Access)
 
-### Query Tools
+**Query Tools:**
 - `mcp__chronicle__get_milestones(status, milestone_type, limit)` - List milestones
 - `mcp__chronicle__get_milestone(milestone_id)` - Get milestone details
 - `mcp__chronicle__get_next_steps(completed, milestone_id, limit)` - List next steps
 - `mcp__chronicle__get_roadmap(days)` - View project roadmap
 
-### Update Tools
+**Update Tools:**
 - `mcp__chronicle__update_milestone_status(milestone_id, new_status)` - Update status
 - `mcp__chronicle__complete_next_step(step_id)` - Mark step complete
+
+### CLI Commands (Portable)
+
+**See "CLI Commands Reference" section below for full list.**
+
+Key commands:
+- `chronicle milestones` - List milestones
+- `chronicle roadmap` - View roadmap
+- `chronicle next-steps` - List next steps
+- `chronicle milestone-complete <id>` - Mark complete
 
 ## Workflow: Planning a New Feature
 
