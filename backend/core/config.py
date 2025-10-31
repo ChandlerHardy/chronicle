@@ -78,6 +78,14 @@ class Config:
                 "enabled": True,
                 "max_summary_length": 500,
             },
+            "remote_systems": {
+                # Example:
+                # "freebsd": {
+                #     "hostname": "freebsd.example.com",
+                #     "chronicle_path": "/usr/local/bin/chronicle",
+                #     "user": "admin"  # Optional: defaults to current user
+                # }
+            },
         }
 
         # Create config directory if it doesn't exist
@@ -251,6 +259,26 @@ class Config:
         if provider_name not in providers:
             raise ValueError(f"Unknown provider: {provider_name}")
         self.set("claude_code.current_provider", provider_name)
+
+    # Remote system management
+    def get_remote_system(self, system_name: str) -> Optional[dict]:
+        """Get remote system configuration.
+
+        Args:
+            system_name: Name of remote system (e.g., 'freebsd', 'linux')
+
+        Returns:
+            Remote system configuration dict or None
+        """
+        return self.get(f"remote_systems.{system_name}")
+
+    def list_remote_systems(self) -> dict:
+        """Get all configured remote systems.
+
+        Returns:
+            Dictionary of remote system configurations
+        """
+        return self.get("remote_systems", {})
 
 
 # Global config instance

@@ -66,6 +66,19 @@ Use Chronicle's built-in project tracking to:
 
 **Use when:** Planning features, tracking progress, viewing roadmap, or managing meta-development.
 
+### 🌐 chronicle-remote-summarizer
+**Purpose:** Automate cross-system summarization workflow
+
+Export sessions from remote systems (like FreeBSD dev machines) and import/summarize on your local machine with Gemini API. Supports:
+- One-line SSH pipe workflow for seamless summarization
+- Manual 3-step workflow for unreliable connections
+- Auto-cleanup of temporary sessions (no pollution)
+- Batch processing multiple sessions
+
+**Use when:** You have Chronicle sessions on a remote system without Gemini API access and need to summarize them locally.
+
+**Common scenario:** FreeBSD development server (no Gemini API) → macOS laptop (has API key)
+
 ## Installation
 
 ### Option 1: Local Directory (Recommended for Development)
@@ -89,6 +102,7 @@ Then load specific skills as needed:
 /skill add /path/to/chronicle/chronicle-skills/chronicle-context-retriever
 /skill add /path/to/chronicle/chronicle-skills/chronicle-workflow
 /skill add /path/to/chronicle/chronicle-skills/chronicle-project-tracker
+/skill add /path/to/chronicle/chronicle-skills/chronicle-remote-summarizer
 ```
 
 ## Portability
