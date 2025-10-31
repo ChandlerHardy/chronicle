@@ -2388,6 +2388,43 @@ def import_and_summarize(chunk_size: int, quiet: bool):
     """
     from backend.services.summarizer import Summarizer
 
+    # Prevent concurrent remote summarization operations (prevents data corruption)
+    import os
+    import time
+    import errno
+
+    lock_file = os.path.expanduser("~/.ai-session/.import_and_summarize.lock")
+    lock_dir = os.path.dirname(lock_file)
+    os.makedirs(lock_dir, exist_ok=True)
+
+    lock_fd = None
+    try:
+        # Try to acquire exclusive lock with timeout
+        lock_fd = os.open(lock_file, os.O_CREAT | os.O_WRONLY | os.O_TRUNC)
+        try:
+            # Try to acquire lock, wait up to 60 seconds
+            start_time = time.time()
+            while time.time() - start_time < 60:
+                try:
+                    fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    break
+                except (OSError, IOError) as e:
+                    if e.errno == errno.EWOULDBLOCK:
+                        time.sleep(1)
+                    else:
+                        raise
+            else:
+                if not quiet:
+                    console.print("[red]✗[/red] Another import-and-summarize operation is in progress. Please wait.", )
+                sys.exit(1)
+        except NameError:
+            # fcntl not available (Windows), just continue without locking
+            pass
+    except OSError as e:
+        if not quiet:
+            console.print(f"[red]✗[/red] Cannot create lock file: {e}", )
+        sys.exit(1)
+
     db_path = os.getenv('CHRONICLE_DB')  # For testing
     db_session = get_session(db_path)
 
@@ -2410,10 +2447,18 @@ def import_and_summarize(chunk_size: int, quiet: bool):
             files_mentioned = json.dumps(files_mentioned)
 
         # Create temporary session with negative ID for cross-system summarization
-        # Find the lowest negative ID that doesn't exist
-        temp_id = -1
-        while db_session.query(AIInteraction).filter_by(id=temp_id).first():
-            temp_id -= 1
+        # Use atomic query to prevent race conditions in concurrent operations
+        try:
+            # Atomic operation: find the lowest negative ID in a single query
+            result = db_session.execute(
+                "SELECT COALESCE(MIN(id), 0) - 1 FROM ai_interactions WHERE id < 0 FOR UPDATE"
+            )
+            temp_id = result.scalar() or -1
+        except Exception:
+            # Fallback to sequential search (less safe but compatible)
+            temp_id = -1
+            while db_session.query(AIInteraction).filter_by(id=temp_id).first():
+                temp_id -= 1
 
         temp_session = AIInteraction(
             id=temp_id,  # Explicit negative ID for temporary session
@@ -2440,13 +2485,32 @@ def import_and_summarize(chunk_size: int, quiet: bool):
         transcript_content = session_data.get("session_transcript")
         cleaned_path = None
         if transcript_content:
+            import uuid
+            import fcntl
             from pathlib import Path
             sessions_dir = Path.home() / ".ai-session" / "sessions"
             sessions_dir.mkdir(parents=True, exist_ok=True)
 
-            # Create .cleaned file (primary location for v6+ sessions)
-            cleaned_path = sessions_dir / f"session_{temp_session.id}.cleaned"
-            cleaned_path.write_text(transcript_content, encoding='utf-8')
+            # Create unique filename to prevent collisions in concurrent operations
+            unique_id = f"{temp_session.id}_{uuid.uuid4().hex[:8]}"
+            cleaned_path = sessions_dir / f"session_{unique_id}.cleaned"
+
+            # Use file locking to prevent concurrent writes
+            try:
+                with open(cleaned_path, 'w', encoding='utf-8') as f:
+                    # Apply exclusive lock for write safety
+                    fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+                    f.write(transcript_content)
+                # Lock is automatically released when file is closed
+            except ImportError:
+                # Windows or systems without fcntl
+                cleaned_path.write_text(transcript_content, encoding='utf-8')
+            except OSError:
+                # Fallback if file locking fails
+                cleaned_path.write_text(transcript_content, encoding='utf-8')
+
+            # Store the unique filename reference for cleanup
+            temp_session.session_transcript = str(cleaned_path.name)
 
             if not quiet:
                 console.print(f"[dim]✓ Transcript saved to {cleaned_path.name}[/dim]", )
@@ -2525,6 +2589,18 @@ def import_and_summarize(chunk_size: int, quiet: bool):
         traceback.print_exc()
         sys.exit(1)
     finally:
+        # Clean up lock file
+        if 'lock_fd' in locals() and lock_fd is not None:
+            try:
+                fcntl.flock(lock_fd, fcntl.LOCK_UN)  # Release lock
+                os.close(lock_fd)
+                try:
+                    os.unlink(lock_file)  # Remove lock file
+                except OSError:
+                    pass  # Lock file might not exist
+            except (NameError, OSError):
+                pass  # fcntl not available or other error
+
         db_session.close()
 
 
@@ -2561,6 +2637,34 @@ def import_summary():
         if not session:
             console.print(f"[red]✗[/red] Session {original_id} not found", )
             sys.exit(1)
+
+        # Data integrity checks
+        if summary and len(summary) > 50:
+            # Check if session already has a summary
+            if session.response_summary and session.summary_generated:
+                console.print(f"[yellow]⚠️[/yellow] Session {original_id} already has a summary. Overwriting...", )
+
+                # Warn if summaries are very different (possible corruption)
+                existing_summary = session.response_summary
+                if len(existing_summary) > 50:
+                    # Simple similarity check
+                    summary_words = set(summary.lower().split())
+                    existing_words = set(existing_summary.lower().split())
+
+                    if summary_words and existing_words:
+                        common_words = summary_words.intersection(existing_words)
+                        similarity = len(common_words) / min(len(summary_words), len(existing_words))
+
+                        if similarity < 0.3:  # Less than 30% similar
+                            console.print(f"[red]⚠️[/red] WARNING: New summary is very different from existing one!")
+                            console.print(f"[red]⚠️[/red] Existing: {existing_summary[:100]}...")
+                            console.print(f"[red]⚠️[/red] New: {summary[:100]}...")
+                            console.print(f"[red]⚠️[/red] This may indicate data corruption or wrong session ID.")
+
+                            response = input("Continue anyway? (y/N): ").strip().lower()
+                            if response != 'y':
+                                console.print("Import cancelled.")
+                                sys.exit(1)
 
         # Update with summary
         session.response_summary = summary
