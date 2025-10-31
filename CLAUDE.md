@@ -1,37 +1,11 @@
-# Chronicle - AI Assistant Guide
+# Chronicle - Project-Specific Development Guide
 
-> **📌 Load the Chronicle Advocate Agent First!**
+> **📌 Universal Directives**: See `~/.claude/CLAUDE.md` for mandatory workflows
 >
-> The Chronicle Advocate agent enforces best practices:
-> - ⚡ Pre-flight checklist (search first, use MCP, check roadmap)
-> - 🎯 Core directives with examples
-> - 📚 Complete MCP tools reference
-> - 🔄 Typical workflows
+> **📌 Load the Chronicle Advocate Agent** for project-specific enforcement:
+> - See [AGENTS.md](./AGENTS.md) for agent prompts and setup
 >
-> **Setup:** See [AGENTS.md](./AGENTS.md) for agent prompts and cross-platform setup.
->
-> **This file:** Project-specific technical context for developing Chronicle itself.
-
----
-
-## 🚨 CRITICAL: SEARCH FIRST (MANDATORY)
-
-**BEFORE IMPLEMENTING ANYTHING, YOU MUST SEARCH CHRONICLE:**
-
-```python
-# Basic search (multiple words = OR, any order - broader results)
-mcp__chronicle__search_sessions(query="relevant keywords", limit=10)
-
-# Use AND for precise searches, NOT to exclude, quotes for exact phrases
-mcp__chronicle__search_sessions(query="authentication AND authorization", limit=10)
-```
-
-**WHY THIS IS MANDATORY:**
-- Searching: **1 second**
-- Reinventing: **10-20 minutes**
-- **ROI: 2,700x** (proven from Sessions 21, 30, 31 - 45+ minutes wasted)
-
-**This is not optional. This is not a suggestion. Search first, ALWAYS.**
+> **This file**: Chronicle-specific architecture, implementation details, and workflows
 
 ---
 
@@ -44,154 +18,6 @@ mcp__chronicle__search_sessions(query="authentication AND authorization", limit=
 2. **Search first:** Past sessions contain solutions to problems you might encounter
 3. **MCP server restart required:** After changing `backend/mcp/server.py`, restart Claude Code
 4. **Test with Chronicle:** Use `chronicle start claude` to track your development work
-
-### Core Directives (MANDATORY - Apply Even With Chronicle Advocate Available)
-
-**YOU MUST FOLLOW THESE DIRECTIVES FOR EVERY INTERACTION:**
-
-#### 1. 🔍 SEARCH FIRST (MANDATORY)
-
-**ALWAYS search Chronicle before implementing or modifying anything:**
-
-```python
-# Basic multi-word search (finds sessions with ANY word, broader results)
-mcp__chronicle__search_sessions(query="gemini model fallback", limit=10)
-
-# Search for sessions with BOTH words (precise search)
-mcp__chronicle__search_sessions(query="authentication AND authorization", limit=10)
-
-# Exclude certain topics
-mcp__chronicle__search_sessions(query="testing NOT deprecated", limit=10)
-
-# Exact phrase search (use quotes)
-mcp__chronicle__search_sessions(query='"data corruption"', limit=10)
-```
-
-**FTS5 Search Tips (use boolean operators!):**
-- **Multiple words** = implicit OR (finds sessions with ANY word, broader results)
-- **AND operator** = require all words ("gemini AND model", "bug AND issue")
-- **OR operator** = find either topic ("gemini OR claude", "bug OR issue")
-- **NOT operator** = exclude terms ("testing NOT deprecated", "api NOT legacy")
-- **Quotes** = exact phrase match ('"data corruption"' vs 'data corruption')
-- **Combine** = "(gemini OR claude) AND testing"
-
-**When to use which pattern:**
-```python
-# User asks about a specific feature/bug → Use AND for precision
-mcp__chronicle__search_sessions(query="authentication AND session")
-
-# User asks "did we work on X or Y?" → Use OR for breadth
-mcp__chronicle__search_sessions(query="authentication OR authorization")
-
-# User asks "X but not Y" → Use NOT
-mcp__chronicle__search_sessions(query="api NOT deprecated")
-
-# User mentions exact error message → Use quotes
-mcp__chronicle__search_sessions(query='"OperationalError: database is locked"')
-
-# User asks broad question → Cast wide net with OR
-mcp__chronicle__search_sessions(query="bug OR issue OR error OR problem")
-```
-
-**Why this is mandatory:**
-- ❌ Not searching → Reimplementing features, breaking working code, wasting 10-20 minutes
-- ✅ Searching → Finding past solutions in <1 second, understanding WHY decisions were made
-- **Proven ROI: 2,700x** (Sessions 21, 30, 31 - 45+ minutes wasted by not searching)
-
-**Trigger phrases that REQUIRE searching:**
-- User says "I can't believe..." → Search first!
-- User says "why isn't..." → Search first!
-- User says "this should work..." → Search first!
-- Before adding any feature → Check if it exists
-- When debugging → Check past sessions for similar issues
-
-**Real example from Session 21:**
-```
-User: "I can't believe there's no cleaning to be done on session 21"
-❌ Without search: Spent 15+ minutes debugging, confused why 0% reduction
-✅ With search: Would have found Session 13 implemented transcript cleaning
-  → Result: Immediately understood cleaning happens at storage time
-```
-
-#### 2. ✍️ WRITE TESTS FIRST (MANDATORY - TDD)
-
-**NEVER write implementation code without tests:**
-
-```python
-# ❌ WRONG: Writing implementation first
-def export_session(session_id):
-    # ... implementation ...
-
-# ✅ CORRECT: Writing test first (red-green-refactor)
-def test_export_session_with_file_fallback():
-    # ... test that fails ...
-    # THEN write implementation to make it pass
-```
-
-**When you MUST write tests:**
-- Before implementing new features
-- Before fixing bugs (write failing test that reproduces bug)
-- Before refactoring (ensure tests pass before AND after)
-- When user asks "why don't you write tests??" (you violated this!)
-
-**Real violations from this project:**
-- Session 52: Created 4 CLI commands WITHOUT tests → User called out violation
-- Session 52: Implemented file fallback WITHOUT tests → User called out violation again
-- **Never repeat these mistakes**
-
-#### 3. 📊 CHECK SESSION STATUS (REQUIRED)
-
-**Verify if current session is being tracked:**
-```python
-# Check if conversation is being tracked
-status = mcp__chronicle__get_current_session()
-# Returns: {"active": true, "session": {...}} or {"active": false}
-```
-
-**If not tracking:**
-- Current session NOT tracked unless started with `chronicle start claude`
-- **YOU MUST suggest exit and restart if meaningful work is happening**
-- User can verify with: `chronicle status` command
-
-#### 4. ⚡ USE MCP OVER CLI (MANDATORY)
-
-**Always prefer MCP tools, NEVER use CLI for programmatic access:**
-
-```python
-# ✅ CORRECT (MCP - fast, structured JSON):
-sessions = mcp__chronicle__search_sessions(query="storage", limit=5)
-roadmap = mcp__chronicle__get_roadmap(days=7)
-
-# ❌ WRONG (CLI - slow, hard to parse):
-Bash("chronicle search 'storage'")
-Bash("chronicle roadmap")
-```
-
-**Why MCP over CLI:**
-- **Speed**: MCP queries DB directly (<10ms), CLI spawns subprocess (>100ms)
-- **Programmatic**: Returns structured JSON, not formatted text
-- **Reliable**: No parsing of human-readable output
-
-#### 5. 🗺️ CHECK ROADMAP BEFORE PLANNING (REQUIRED)
-
-**Avoid duplicate work:**
-```python
-mcp__chronicle__get_roadmap(days=7)
-mcp__chronicle__get_next_steps(completed=False)
-```
-
-**Failure to check roadmap can result in duplicating already-planned work**
-
-#### 6. 🏷️ SUGGEST SESSION ORGANIZATION (REQUIRED)
-
-**After significant work:**
-- YOU MUST propose descriptive title
-- YOU MUST suggest relevant tags (technologies, features, bugs)
-- YOU MUST link to related sessions
-
----
-
-**For deep analysis and enforcement:** Launch the Chronicle Advocate agent (see [AGENTS.md](./AGENTS.md))
 
 ---
 
@@ -206,36 +32,24 @@ mcp__chronicle__get_next_steps(completed=False)
 | 🔄 Complete Chronicle workflow guidance | `chronicle-workflow` | Ad-hoc workflow instructions |
 | 📊 Manage milestones and roadmap | `chronicle-project-tracker` | Manual milestone/next step operations |
 
-### How to Invoke Skills
-
-**Method 1: Let skill auto-activate (preferred)**
-```
-User: "Export session 75 to Obsidian"
-→ Skill should auto-activate based on description match
-→ Follow skill's guidance
-```
-
-**Method 2: Explicit invocation**
-```python
-Skill(command="chronicle-session-documenter")
-→ Skill loads and provides detailed instructions
-→ Follow the workflow it describes
-```
-
-### Why Use Skills Over Manual MCP Calls?
-
-- ✅ **Complete workflows** - Skills guide through entire process, not just one MCP call
-- ✅ **Best practices** - Skills encode correct patterns (formatting, error handling, etc.)
-- ✅ **Consistency** - Same structured output every time
-- ✅ **Examples** - Skills include usage examples and common patterns
-- ✅ **Maintenance** - Update skill once, all uses benefit
-
 ### Skill Locations
 
 - **User skills:** `~/.claude/plugins/marketplaces/chronicle-skills/chronicle-skills/`
 - **Project skills:** `chronicle-skills/` (for plugin marketplace)
 
 **Available skills documented in:** `chronicle-skills/README.md`
+
+---
+
+## 🔧 Working on Chronicle (The Meta Project)
+
+**Chronicle is meta:** It tracks its own development.
+
+**Key differences when working on Chronicle vs using Chronicle:**
+1. **Dogfooding:** Every session you run is tracked, every mistake is in the database
+2. **Search first:** Past sessions contain solutions to problems you might encounter
+3. **MCP server restart required:** After changing `backend/mcp/server.py`, restart Claude Code
+4. **Test with Chronicle:** Use `chronicle start claude` to track your development work
 
 ---
 
@@ -407,27 +221,13 @@ chronicle config ai.gemini_api_key YOUR_KEY
 
 ## 🛠️ Development Tasks
 
-### 🚨 PRE-FLIGHT CHECKLIST (DO THIS FIRST!)
+### 🚨 Chronicle Development Checklist
 
-**Before starting ANY development task, run this checklist:**
+**Before starting Chronicle-specific work:**
 
-1. **SEARCH CHRONICLE** (1 second, saves 10-20 minutes):
-   ```python
-   mcp__chronicle__search_sessions(query="<your task>", limit=10)
-   ```
-
-2. **CHECK ROADMAP** (avoid duplicate planning):
-   ```python
-   mcp__chronicle__get_roadmap(days=7)
-   mcp__chronicle__get_next_steps(completed=False)
-   ```
-
-3. **WRITE TESTS FIRST** (TDD red-green-refactor):
-   - Write failing test
-   - Implement feature to make test pass
-   - Refactor
-
-**Violating this checklist wastes time and frustrates the user. Follow it religiously.**
+1. **Universal directives already covered in** `~/.claude/CLAUDE.md`
+2. **MCP server restart required** after changing `backend/mcp/server.py`
+3. **Dogfooding enabled** - your work is tracked by Chronicle itself
 
 ---
 
@@ -535,77 +335,12 @@ def my_tool(param: str) -> str:
 
 ---
 
-## ⚠️ Common Mistakes to Avoid
+## 🎯 Chronicle-Specific Reminders
 
-**Learn from real violations in this project:**
+**When working on Chronicle:**
 
-### Mistake #1: Not Searching Chronicle First
-
-**Real example from Session 52:**
-```
-User: "oh right! we stopped storing transcripts in the db a while back.
-       why didn't you check chronicle??"
-
-❌ What I did: Implemented file fallback without searching
-✅ What I should have done:
-   mcp__chronicle__search_sessions(query="transcript storage", limit=10)
-   → Would have found Milestone #2 documenting the change
-```
-
-**Impact**: Wasted 20+ minutes debugging, user had to remind me
-
-### Mistake #2: Writing Code Without Tests
-
-**Real example from Session 52:**
-```
-User: "what does the tdd advocate say about it all? it seems you haven't
-       been checking CLAUDE.md or chronicle, why is that?"
-
-❌ What I did: Created 4 CLI commands (export/import) without any tests
-✅ What I should have done: Write tests FIRST for each command
-   → TDD advocate had to be launched to fix the violation
-```
-
-**Impact**: Had to write 17 tests retroactively, added extra work
-
-### Mistake #3: Using CLI Instead of MCP
-
-**Real pattern to avoid:**
-```python
-# ❌ WRONG (slow, hard to parse):
-output = Bash("chronicle sessions")
-sessions = parse_table_output(output)  # Fragile!
-
-# ✅ CORRECT (fast, structured):
-sessions = mcp__chronicle__get_sessions(limit=10)
-# Returns clean JSON, 10x faster
-```
-
-### Mistake #4: Not Checking Roadmap
-
-**Pattern to avoid:**
-```
-User: "I want to add export functionality"
-❌ Start implementing immediately
-✅ Check roadmap first: mcp__chronicle__get_roadmap(days=7)
-   → Might already be planned or partially implemented
-```
-
----
-
-## 🎯 Final Reminder
-
-**Before you finish reading this file and start working:**
-
-1. **SEARCH CHRONICLE FIRST** - `mcp__chronicle__search_sessions(query="...", limit=10)`
-2. **CHECK ROADMAP** - `mcp__chronicle__get_roadmap(days=7)`
-3. **WRITE TESTS FIRST** - TDD red-green-refactor cycle
-4. **VERIFY SESSION TRACKING** - `mcp__chronicle__get_current_session()` to check if active
-
-**This is mandatory. Every single time. No exceptions.**
-
-**If you hear trigger phrases ("I can't believe...", "why isn't..."), STOP and search Chronicle.**
-
----
+1. **MCP server restart required** after changing `backend/mcp/server.py`
+2. **Dogfooding enabled** - your development is tracked by Chronicle itself
+3. **Universal directives apply** - see `~/.claude/CLAUDE.md` for mandatory workflows
 
 **For universal Chronicle directives and workflows, see the Chronicle Advocate agent in [AGENTS.md](./AGENTS.md).**

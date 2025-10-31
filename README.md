@@ -145,6 +145,49 @@ chronicle search "your query"
 
 **Note:** Without MCP support, AI assistants cannot query Chronicle directly. All features work via CLI.
 
+#### Ubuntu/Debian Troubleshooting
+
+On Ubuntu/Debian systems, you may encounter these issues:
+
+**Issue 1: "externally-managed-environment" error**
+
+```bash
+# Solution: Use --break-system-packages or create virtual environment
+python3 -m pip install -e ".[mcp]" --break-system-packages
+
+# Or create virtual environment (recommended)
+python3 -m venv chronicle-venv
+source chronicle-venv/bin/activate
+python3 -m pip install -e ".[mcp]"
+```
+
+**Issue 2: "Command 'chronicle' not found" after installation**
+
+This happens because pip installs scripts in `~/.local/bin` which isn't in PATH:
+
+```bash
+# Add local bin to PATH (temporary)
+export PATH="$HOME/.local/bin:$PATH"
+
+# Add permanently to shell profile
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+
+# Verify correct chronicle is installed
+which chronicle  # Should show /home/user/.local/bin/chronicle
+```
+
+**Issue 3: Installing wrong "chronicle" package**
+
+Ubuntu has an unrelated package called `chronicle` (a blog generator). If you accidentally install it:
+
+```bash
+# Remove the wrong package
+sudo apt remove chronicle
+
+# Then use the PATH fix above to access the correct one
+```
+
 ### Basic Usage
 
 ```bash
