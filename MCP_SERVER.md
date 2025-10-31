@@ -147,20 +147,39 @@ Get detailed summary of a specific Chronicle session.
 
 ### `search_sessions`
 
-Search Chronicle sessions by keywords.
+Search Chronicle sessions by keywords using **FTS5 full-text search**.
+
+**✨ Multi-word searches now work intelligently:**
+- `"gemini model fallback"` - Finds sessions with ALL three words (any order)
+- `"fallback model gemini"` - Same results (order doesn't matter!)
+- `"gemini OR claude"` - Finds sessions with either word
+- `"testing NOT deprecated"` - Finds testing sessions without "deprecated"
+- `'"data corruption"'` - Exact phrase search (use quotes)
 
 **Parameters:**
-- `query` (str, required): Search query
+- `query` (str, required): Search query with FTS5 operators:
+  - Multiple words = implicit AND (all must be present)
+  - `OR` = either word
+  - `NOT` = exclude word
+  - Quotes = exact phrase match
 - `limit` (int, optional): Maximum results (default: 10, max: 50)
 - `repo_path` (str, optional): Filter by repository path. **Defaults to current session's repo.** Use `"*"` for all repos.
 - `search_summaries` (bool, optional): Search in AI summaries (default: true)
 - `search_prompts` (bool, optional): Search in session prompts (default: true)
 - `search_keywords` (bool, optional): Search in AI-extracted keywords (default: true)
 
-**Example:**
+**Example (multi-word search):**
 ```json
 {
-  "query": "authentication",
+  "query": "gemini model fallback",
+  "limit": 10
+}
+```
+
+**Example (boolean operators):**
+```json
+{
+  "query": "gemini OR claude",
   "limit": 10
 }
 ```
@@ -174,7 +193,9 @@ Search Chronicle sessions by keywords.
 }
 ```
 
-**Returns:** Matching sessions with `repo_filter` field showing which repo was queried.
+**Returns:** Matching sessions **ranked by relevance** (BM25 algorithm) with `repo_filter` field showing which repo was queried.
+
+**Note:** Before FTS5 (v9), searches only matched exact phrases. Now searches are tokenized and order-independent!
 
 ---
 

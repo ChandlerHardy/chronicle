@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 
 from fastmcp import FastMCP
-from sqlalchemy import desc, or_, and_
+from sqlalchemy import desc, or_, and_, text
 from sqlalchemy.orm import Session, defer
 
 from backend.database.models import (
@@ -201,10 +201,21 @@ def search_sessions(
     search_prompts: bool = True,
     search_keywords: bool = True,
 ) -> str:
-    """Search Chronicle sessions by keywords.
+    """Search Chronicle sessions by keywords using FTS5 full-text search.
+
+    Multi-word searches now work intelligently:
+    - "gemini model fallback" finds sessions with ANY of the three words (implicit OR)
+    - "fallback OR testing" finds sessions with either word (explicit OR)
+    - "gemini AND model" finds sessions with BOTH words (explicit AND)
+    - "gemini AND NOT deprecated" finds gemini sessions without deprecated
 
     Args:
-        query: Search query (searches summaries, prompts, and keywords)
+        query: Search query with FTS5 operators:
+               - Multiple words = OR (any word present, broader results)
+               - AND = all words must be present ("gemini AND model")
+               - OR = either word ("gemini OR claude")
+               - NOT = exclude ("testing NOT deprecated")
+               - Quotes = exact phrase ('"data corruption"')
         limit: Maximum number of results (default: 10, max: 50)
         repo_path: Filter by repository path. Defaults to current session's repo.
                    Use "*" to search all repos. Use specific path for targeted search.
@@ -213,7 +224,7 @@ def search_sessions(
         search_keywords: Search in AI-extracted keywords (default: True)
 
     Returns:
-        JSON string with matching sessions
+        JSON string with matching sessions ranked by relevance
     """
     db = get_db()
 
@@ -224,33 +235,94 @@ def search_sessions(
         # Explicit global search
         repo_path = None
 
-    filters = []
+    # Build FTS5 column filter
+    # FTS5 syntax: {column_name}: query restricts search to specific column
+    # We search across multiple columns by building OR queries
+    fts_columns = []
     if search_summaries:
-        filters.append(AIInteraction.response_summary.like(f"%{query}%"))
+        fts_columns.append("response_summary")
     if search_prompts:
-        filters.append(AIInteraction.prompt.like(f"%{query}%"))
+        fts_columns.append("prompt")
     if search_keywords:
-        # Search keywords (stored as JSON array, so use LIKE on the JSON text)
-        filters.append(AIInteraction.keywords.like(f"%{query}%"))
+        fts_columns.append("keywords")
 
-    if not filters:
+    if not fts_columns:
         return json.dumps({"error": "Must search at least one field"})
 
+    # Build FTS5 query with OR by default (more user-friendly, broader results)
+    # Users can use explicit AND or quotes for precise matching
+
+    # Split query into tokens and OR them (unless already using operators)
+    if " OR " in query or " AND " in query or " NOT " in query or '"' in query:
+        # User is using explicit operators - pass through as-is
+        base_query = query
+    else:
+        # Split on whitespace and OR the tokens for broader results
+        tokens = query.split()
+        if len(tokens) > 1:
+            base_query = " OR ".join(tokens)
+        else:
+            base_query = query
+
+    if len(fts_columns) == 3:
+        # All columns enabled - search across all columns
+        fts_query = base_query
+    elif len(fts_columns) == 1:
+        # Single column - use column prefix
+        fts_query = f"{{{fts_columns[0]}}}: {base_query}"
+    else:
+        # Multiple columns - OR them together
+        fts_query = " OR ".join(f"{{{col}}}: {base_query}" for col in fts_columns)
+
     limit = min(limit, 50)
-    query_obj = db.query(AIInteraction).options(
-        defer(AIInteraction.session_transcript)  # Don't load transcript
-    ).filter(
-        and_(
-            AIInteraction.is_session == 1,
-            or_(*filters)
+
+    try:
+        # Use FTS5 MATCH query with JOIN to get full session data
+        # BM25 ranking (lower = more relevant, so we negate for DESC order)
+        sessions = db.query(AIInteraction).options(
+            defer(AIInteraction.session_transcript)  # Don't load transcript
+        ).join(
+            # Join with FTS5 virtual table
+            text("sessions_fts ON sessions_fts.rowid = ai_interactions.id")
+        ).filter(
+            text(f"sessions_fts MATCH :fts_query")
+        ).params(
+            fts_query=fts_query
+        ).order_by(
+            # Order by FTS5 relevance score (bm25)
+            text("bm25(sessions_fts) ASC")  # Lower score = more relevant
         )
-    )
 
-    # Add repo filtering if specified
-    if repo_path:
-        query_obj = query_obj.filter(AIInteraction.repo_path.like(f"%{repo_path}%"))
+        # Add repo filtering if specified
+        if repo_path:
+            sessions = sessions.filter(AIInteraction.repo_path.like(f"%{repo_path}%"))
 
-    sessions = query_obj.order_by(desc(AIInteraction.timestamp)).limit(limit).all()
+        sessions = sessions.limit(limit).all()
+
+    except Exception as e:
+        # Fall back to old LIKE-based search if FTS5 query fails
+        # (e.g., sessions_fts table doesn't exist yet)
+        filters = []
+        if search_summaries:
+            filters.append(AIInteraction.response_summary.like(f"%{query}%"))
+        if search_prompts:
+            filters.append(AIInteraction.prompt.like(f"%{query}%"))
+        if search_keywords:
+            filters.append(AIInteraction.keywords.like(f"%{query}%"))
+
+        query_obj = db.query(AIInteraction).options(
+            defer(AIInteraction.session_transcript)
+        ).filter(
+            and_(
+                AIInteraction.is_session == 1,
+                or_(*filters)
+            )
+        )
+
+        if repo_path:
+            query_obj = query_obj.filter(AIInteraction.repo_path.like(f"%{repo_path}%"))
+
+        sessions = query_obj.order_by(desc(AIInteraction.timestamp)).limit(limit).all()
 
     result = {
         "query": query,

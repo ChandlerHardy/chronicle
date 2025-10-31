@@ -161,6 +161,13 @@ chronicle sessions
 chronicle sessions --limit 20                   # Show more sessions
 chronicle sessions --repo /path/to/project      # Filter by repository
 
+# Search sessions with FTS5 full-text search (supports boolean operators!)
+chronicle search-sessions "gemini model"              # Any word (broader results, implicit OR)
+chronicle search-sessions "gemini AND model"          # Both words required (explicit AND)
+chronicle search-sessions "gemini OR claude" --all    # Either word (explicit OR)
+chronicle search-sessions "testing NOT deprecated"    # Exclude deprecated
+chronicle search-sessions '"data corruption"'         # Exact phrase only
+
 # View a session with AI-generated summary
 chronicle session 5
 

@@ -806,6 +806,233 @@ def sessions(repo: str = None, show_all: bool = False, limit: int = 10):
     db_session.close()
 
 
+@cli.command(name='search-sessions')
+@click.argument('query')
+@click.option('--repo', help='Filter by repository path (defaults to current directory)')
+@click.option('--all', 'show_all', is_flag=True, help='Search sessions from all repositories')
+@click.option('--limit', default=10, help='Number of results to show (default: 10, max: 50)')
+@click.option('--summaries-only', is_flag=True, help='Search only in AI-generated summaries')
+@click.option('--prompts-only', is_flag=True, help='Search only in session prompts')
+@click.option('--keywords-only', is_flag=True, help='Search only in AI-extracted keywords')
+def search_sessions(query: str, repo: str = None, show_all: bool = False, limit: int = 10,
+                    summaries_only: bool = False, prompts_only: bool = False, keywords_only: bool = False):
+    """Search Chronicle sessions using FTS5 full-text search.
+
+    Multi-word searches work intelligently with boolean operators:
+
+    \b
+    Basic searches:
+        chronicle search-sessions "gemini model fallback"    # Any word (broader results)
+        chronicle search-sessions "authentication"           # Single word
+
+    \b
+    Boolean operators:
+        chronicle search-sessions "gemini AND model"         # Both words required
+        chronicle search-sessions "gemini OR claude"         # Either word
+        chronicle search-sessions "testing NOT deprecated"   # Exclude word
+        chronicle search-sessions '"data corruption"'        # Exact phrase (use quotes)
+
+    \b
+    Examples:
+        chronicle search-sessions "authentication"               # Current repo
+        chronicle search-sessions "authentication" --all         # All repos
+        chronicle search-sessions "gemini OR claude" --limit 20  # More results
+        chronicle search-sessions "api" --summaries-only         # Search summaries only
+    """
+    from sqlalchemy import text
+    from sqlalchemy.orm import defer
+
+    limit = min(limit, 50)  # Cap at 50
+
+    db_session = get_session()
+
+    # Auto-detect repo from current working directory
+    if repo is None and not show_all:
+        repo = os.getcwd()
+
+    # Build FTS5 column list based on flags
+    fts_columns = []
+    if summaries_only:
+        fts_columns = ['response_summary']
+    elif prompts_only:
+        fts_columns = ['prompt']
+    elif keywords_only:
+        fts_columns = ['keywords']
+    else:
+        # Default: search all fields
+        fts_columns = ['response_summary', 'prompt', 'keywords']
+
+    # Build FTS5 query with OR by default (more user-friendly, broader results)
+    # Users can use explicit AND or quotes for precise matching
+
+    # Split query into tokens and OR them (unless already using operators)
+    if " OR " in query or " AND " in query or " NOT " in query or '"' in query:
+        # User is using explicit operators - pass through as-is
+        base_query = query
+    else:
+        # Split on whitespace and OR the tokens for broader results
+        tokens = query.split()
+        if len(tokens) > 1:
+            base_query = " OR ".join(tokens)
+        else:
+            base_query = query
+
+    if len(fts_columns) == 3:
+        # All columns - search across all columns
+        fts_query = base_query
+    elif len(fts_columns) == 1:
+        # Single column
+        fts_query = f"{{{fts_columns[0]}}}: {base_query}"
+    else:
+        # Multiple columns
+        fts_query = " OR ".join(f"{{{col}}}: {base_query}" for col in fts_columns)
+
+    try:
+        # Use FTS5 MATCH query with raw SQL
+        # SQLAlchemy doesn't have great FTS5 support, so we execute raw SQL
+        sql = text("""
+            SELECT ai_interactions.*
+            FROM ai_interactions
+            JOIN sessions_fts ON sessions_fts.rowid = ai_interactions.id
+            WHERE sessions_fts MATCH :fts_query
+        """)
+
+        if repo:
+            sql = text("""
+                SELECT ai_interactions.*
+                FROM ai_interactions
+                JOIN sessions_fts ON sessions_fts.rowid = ai_interactions.id
+                WHERE sessions_fts MATCH :fts_query
+                  AND ai_interactions.repo_path LIKE :repo_filter
+                ORDER BY bm25(sessions_fts) ASC
+                LIMIT :limit_val
+            """)
+            result = db_session.execute(
+                sql,
+                {"fts_query": fts_query, "repo_filter": f"%{repo}%", "limit_val": limit}
+            )
+        else:
+            sql = text("""
+                SELECT ai_interactions.*
+                FROM ai_interactions
+                JOIN sessions_fts ON sessions_fts.rowid = ai_interactions.id
+                WHERE sessions_fts MATCH :fts_query
+                ORDER BY bm25(sessions_fts) ASC
+                LIMIT :limit_val
+            """)
+            result = db_session.execute(
+                sql,
+                {"fts_query": fts_query, "limit_val": limit}
+            )
+
+        # Fetch all session IDs from FTS results
+        session_ids = [row[0] for row in result.fetchall()]
+
+        # Load full session objects
+        if session_ids:
+            sessions = db_session.query(AIInteraction).filter(
+                AIInteraction.id.in_(session_ids)
+            ).all()
+            # Sort by original FTS ranking order
+            id_order = {id: i for i, id in enumerate(session_ids)}
+            sessions = sorted(sessions, key=lambda s: id_order.get(s.id, 999))
+        else:
+            sessions = []
+
+    except Exception as e:
+        # Fallback to old LIKE-based search if FTS5 fails
+        console.print(f"[yellow]FTS5 search unavailable, using basic search[/yellow]")
+        console.print(f"[dim]Error: {e}[/dim]\n")
+
+        from sqlalchemy import or_
+
+        filters = []
+        if 'response_summary' in fts_columns:
+            filters.append(AIInteraction.response_summary.like(f"%{query}%"))
+        if 'prompt' in fts_columns:
+            filters.append(AIInteraction.prompt.like(f"%{query}%"))
+        if 'keywords' in fts_columns:
+            filters.append(AIInteraction.keywords.like(f"%{query}%"))
+
+        sessions_query = db_session.query(AIInteraction).options(
+            defer(AIInteraction.session_transcript)
+        ).filter(
+            AIInteraction.is_session == 1,
+            or_(*filters)
+        )
+
+        if repo:
+            sessions_query = sessions_query.filter(AIInteraction.repo_path.like(f"%{repo}%"))
+
+        sessions = sessions_query.order_by(AIInteraction.timestamp.desc()).limit(limit).all()
+
+    if not sessions:
+        console.print(f"[yellow]No sessions found matching: {query}[/yellow]\n")
+        if not show_all:
+            console.print("Tip: Use [cyan]--all[/cyan] to search all repositories")
+        console.print("\nTry:")
+        console.print("  • Using different keywords")
+        console.print("  • Using OR operator: [cyan]chronicle search-sessions \"gemini OR claude\"[/cyan]")
+        console.print("  • Excluding terms: [cyan]chronicle search-sessions \"testing NOT deprecated\"[/cyan]")
+        db_session.close()
+        return
+
+    # Show search info
+    console.print(f"\n[bold cyan]Search Results: '{query}'[/bold cyan]")
+    if show_all:
+        console.print("[dim]Searching: All repositories[/dim]")
+    elif repo:
+        repo_name = Path(repo).name
+        console.print(f"[dim]Searching: {repo_name} ({repo})[/dim]")
+    console.print(f"[dim]Found: {len(sessions)} session(s)[/dim]")
+    console.print("═" * 80)
+
+    # Display results in table
+    from rich.table import Table
+    table = Table(show_header=True, header_style="bold cyan", show_lines=False)
+    table.add_column("ID", width=6)
+    table.add_column("Title / Tool", width=35)
+    table.add_column("Started", width=16)
+    table.add_column("Duration", width=10)
+    table.add_column("Tags", width=20)
+
+    for session in sessions:
+        session_id = str(session.id)
+        tool = session.ai_tool.replace("-session", "").title()
+        timestamp = session.timestamp.strftime("%b %d, %I:%M %p")
+
+        # Title (or fallback to tool)
+        if session.title:
+            title_display = f"[bold]{session.title}[/bold]\n[dim]{tool}[/dim]"
+        else:
+            title_display = f"[dim]Session {session.id}[/dim]\n{tool}"
+
+        # Duration
+        if session.duration_ms:
+            duration_min = session.duration_ms / 1000 / 60
+            duration = f"{duration_min:.1f}m"
+        else:
+            duration = "Active"
+
+        # Tags
+        tags_list = session.tags_list if session.tags else []
+        if tags_list:
+            # Show first 3 tags
+            tags_display = ", ".join(tags_list[:3])
+            if len(tags_list) > 3:
+                tags_display += f" +{len(tags_list)-3}"
+        else:
+            tags_display = "[dim]-[/dim]"
+
+        table.add_row(session_id, title_display, timestamp, duration, tags_display)
+
+    console.print(table)
+    console.print(f"\n[dim]Use 'chronicle session <id>' to view full details[/dim]")
+    console.print(f"[dim]Results ranked by relevance (BM25 algorithm)[/dim]")
+
+    db_session.close()
+
+
 @cli.command()
 def status():
     """Check if Chronicle is currently tracking an active session.

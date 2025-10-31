@@ -19,7 +19,11 @@
 **BEFORE IMPLEMENTING ANYTHING, YOU MUST SEARCH CHRONICLE:**
 
 ```python
+# Basic search (multiple words = OR, any order - broader results)
 mcp__chronicle__search_sessions(query="relevant keywords", limit=10)
+
+# Use AND for precise searches, NOT to exclude, quotes for exact phrases
+mcp__chronicle__search_sessions(query="authentication AND authorization", limit=10)
 ```
 
 **WHY THIS IS MANDATORY:**
@@ -50,7 +54,43 @@ mcp__chronicle__search_sessions(query="relevant keywords", limit=10)
 **ALWAYS search Chronicle before implementing or modifying anything:**
 
 ```python
-mcp__chronicle__search_sessions(query="relevant keywords", limit=10)
+# Basic multi-word search (finds sessions with ANY word, broader results)
+mcp__chronicle__search_sessions(query="gemini model fallback", limit=10)
+
+# Search for sessions with BOTH words (precise search)
+mcp__chronicle__search_sessions(query="authentication AND authorization", limit=10)
+
+# Exclude certain topics
+mcp__chronicle__search_sessions(query="testing NOT deprecated", limit=10)
+
+# Exact phrase search (use quotes)
+mcp__chronicle__search_sessions(query='"data corruption"', limit=10)
+```
+
+**FTS5 Search Tips (use boolean operators!):**
+- **Multiple words** = implicit OR (finds sessions with ANY word, broader results)
+- **AND operator** = require all words ("gemini AND model", "bug AND issue")
+- **OR operator** = find either topic ("gemini OR claude", "bug OR issue")
+- **NOT operator** = exclude terms ("testing NOT deprecated", "api NOT legacy")
+- **Quotes** = exact phrase match ('"data corruption"' vs 'data corruption')
+- **Combine** = "(gemini OR claude) AND testing"
+
+**When to use which pattern:**
+```python
+# User asks about a specific feature/bug → Use AND for precision
+mcp__chronicle__search_sessions(query="authentication AND session")
+
+# User asks "did we work on X or Y?" → Use OR for breadth
+mcp__chronicle__search_sessions(query="authentication OR authorization")
+
+# User asks "X but not Y" → Use NOT
+mcp__chronicle__search_sessions(query="api NOT deprecated")
+
+# User mentions exact error message → Use quotes
+mcp__chronicle__search_sessions(query='"OperationalError: database is locked"')
+
+# User asks broad question → Cast wide net with OR
+mcp__chronicle__search_sessions(query="bug OR issue OR error OR problem")
 ```
 
 **Why this is mandatory:**

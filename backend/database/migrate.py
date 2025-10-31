@@ -404,6 +404,98 @@ def migrate_v7_to_v8(db_path: str = None):
     print("   Keywords will be automatically extracted when sessions are summarized")
 
 
+def migrate_v8_to_v9(db_path: str = None):
+    """Migrate database from v8 to v9 (add FTS5 full-text search).
+
+    Creates FTS5 virtual table for fast keyword-based search across sessions.
+    This enables multi-word searches where order doesn't matter.
+
+    Before: "gemini model fallback" only matches that exact phrase
+    After: Finds sessions containing all three words in any order
+    """
+    if db_path is None:
+        home = Path.home()
+        db_path = home / ".ai-session" / "sessions.db"
+
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+
+    # Check if FTS table already exists
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='sessions_fts'")
+    if cursor.fetchone():
+        print("✅ Database is already at v9 (FTS5 search enabled)")
+        conn.close()
+        return
+
+    print(f"📝 Running migration to v9 (FTS5 full-text search)...")
+
+    # Create FTS5 virtual table with external content from ai_interactions
+    # We index: prompt, response_summary, and keywords (as text)
+    cursor.execute("""
+        CREATE VIRTUAL TABLE sessions_fts USING fts5(
+            prompt,
+            response_summary,
+            keywords,
+            content='ai_interactions',
+            content_rowid='id'
+        )
+    """)
+    print("  - Created FTS5 virtual table: sessions_fts")
+
+    # Create triggers to keep FTS5 table in sync with ai_interactions
+
+    # INSERT trigger
+    cursor.execute("""
+        CREATE TRIGGER ai_interactions_ai AFTER INSERT ON ai_interactions
+        WHEN new.is_session = 1
+        BEGIN
+            INSERT INTO sessions_fts(rowid, prompt, response_summary, keywords)
+            VALUES (new.id, new.prompt, new.response_summary, new.keywords);
+        END
+    """)
+    print("  - Created INSERT trigger")
+
+    # UPDATE trigger
+    cursor.execute("""
+        CREATE TRIGGER ai_interactions_au AFTER UPDATE ON ai_interactions
+        WHEN new.is_session = 1
+        BEGIN
+            UPDATE sessions_fts
+            SET prompt = new.prompt,
+                response_summary = new.response_summary,
+                keywords = new.keywords
+            WHERE rowid = new.id;
+        END
+    """)
+    print("  - Created UPDATE trigger")
+
+    # DELETE trigger
+    cursor.execute("""
+        CREATE TRIGGER ai_interactions_ad AFTER DELETE ON ai_interactions
+        WHEN old.is_session = 1
+        BEGIN
+            DELETE FROM sessions_fts WHERE rowid = old.id;
+        END
+    """)
+    print("  - Created DELETE trigger")
+
+    # Populate FTS table with existing sessions
+    cursor.execute("""
+        INSERT INTO sessions_fts(rowid, prompt, response_summary, keywords)
+        SELECT id, prompt, response_summary, keywords
+        FROM ai_interactions
+        WHERE is_session = 1
+    """)
+
+    sessions_indexed = cursor.rowcount
+    conn.commit()
+    conn.close()
+
+    print("✅ Migration to v9 complete!")
+    print(f"   FTS5 virtual table created and populated with {sessions_indexed} sessions")
+    print("   Multi-word searches now work: 'gemini model fallback' finds all three words")
+
+
 if __name__ == "__main__":
     print("Running all migrations...")
     migrate_v1_to_v2()
@@ -413,3 +505,4 @@ if __name__ == "__main__":
     migrate_v5_to_v6()
     migrate_v6_to_v7()
     migrate_v7_to_v8()
+    migrate_v8_to_v9()

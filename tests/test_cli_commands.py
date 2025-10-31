@@ -52,7 +52,7 @@ class TestShowCommand:
             message="Add feature X",
             branch="main",
             author="Test User",
-            repo_path="/test/repo",
+            repo_path="/Users/chandlerhardy/repos/chronicle",  # Match current working directory
             files_changed=json.dumps(["file1.py", "file2.py"])
         )
         session.add(commit)
@@ -88,7 +88,7 @@ class TestShowCommand:
             message="Fix bug Y",
             branch="main",
             author="Test User",
-            repo_path="/test/repo"
+            repo_path="/Users/chandlerhardy/repos/chronicle"  # Match current working directory
         )
         session.add(commit)
         session.commit()
@@ -111,7 +111,7 @@ class TestShowCommand:
                 message=f"Commit {i}",
                 branch="main",
                 author="Test User",
-                repo_path="/test/repo"
+                repo_path="/Users/chandlerhardy/repos/chronicle"  # Match current working directory
             )
             session.add(commit)
         session.commit()
@@ -140,7 +140,8 @@ class TestSessionsCommand:
                 prompt=f"Session {i}",
                 is_session=True,
                 duration_ms=60000 * (i + 1),
-                title=f"Test Session {i}"
+                title=f"Test Session {i}",
+                repo_path="/Users/chandlerhardy/repos/chronicle"  # Match current working directory
             )
             session.add(ai_session)
         session.commit()
@@ -172,7 +173,8 @@ class TestSessionsCommand:
             ai_tool="claude-session",
             prompt="Long session",
             is_session=True,
-            duration_ms=3600000  # 60 minutes
+            duration_ms=3600000,  # 60 minutes
+            repo_path="/Users/chandlerhardy/repos/chronicle"  # Match current working directory
         )
         session.add(ai_session)
         session.commit()
@@ -249,7 +251,7 @@ class TestTimelineCommand:
             message="Add feature",
             branch="main",
             author="Test User",
-            repo_path="/test/repo"
+            repo_path="/Users/chandlerhardy/repos/chronicle"  # Match current working directory
         )
         session.add(commit)
 
@@ -259,7 +261,8 @@ class TestTimelineCommand:
             ai_tool="claude-session",
             prompt="Code session",
             is_session=True,
-            title="Coding Session"
+            title="Coding Session",
+            repo_path="/Users/chandlerhardy/repos/chronicle"  # Match current working directory
         )
         session.add(ai_session)
         session.commit()
