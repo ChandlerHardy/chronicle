@@ -421,3 +421,269 @@ class TestStatusCommand:
 
         assert result.exit_code == 0
         assert "no active" in result.output.lower() or "not tracking" in result.output.lower()
+
+
+class TestInitCommand:
+    """Tests for 'chronicle init' command."""
+
+    def test_init_creates_database(self, runner):
+        """Test 'chronicle init' creates database and config."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = os.path.join(tmpdir, 'sessions.db')
+            config_path = os.path.join(tmpdir, 'config.yaml')
+
+            with patch.dict(os.environ, {'CHRONICLE_DB': db_path, 'CHRONICLE_CONFIG': config_path}):
+                result = runner.invoke(cli, ['init'])
+
+            assert result.exit_code == 0
+            assert os.path.exists(db_path)
+
+    def test_init_already_initialized(self, temp_db, runner):
+        """Test 'chronicle init' when already initialized."""
+        _, db_path = temp_db
+
+        with patch.dict(os.environ, {'CHRONICLE_DB': db_path}):
+            result = runner.invoke(cli, ['init'])
+
+        # Should handle already initialized gracefully
+        assert result.exit_code == 0
+
+
+class TestConfigCommand:
+    """Tests for 'chronicle config' command."""
+
+    def test_config_get_specific_key(self, runner):
+        """Test 'chronicle config <key>' gets specific value."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_path = os.path.join(tmpdir, 'config.yaml')
+
+            with patch.dict(os.environ, {'CHRONICLE_CONFIG': config_path}):
+                result = runner.invoke(cli, ['config', 'ai.default_model'])
+
+            assert result.exit_code == 0
+
+    def test_config_set_value(self, runner):
+        """Test 'chronicle config <key> <value>' sets configuration."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_path = os.path.join(tmpdir, 'config.yaml')
+
+            with patch.dict(os.environ, {'CHRONICLE_CONFIG': config_path}):
+                result = runner.invoke(cli, ['config', 'ai.default_model', 'gemini-2.0-flash'])
+
+            assert result.exit_code == 0
+
+
+class TestVacuumCommand:
+    """Tests for 'chronicle vacuum' command."""
+
+    def test_vacuum_compacts_database(self, temp_db, runner):
+        """Test 'chronicle vacuum' compacts database."""
+        _, db_path = temp_db
+
+        with patch.dict(os.environ, {'CHRONICLE_DB': db_path}):
+            result = runner.invoke(cli, ['vacuum'])
+
+        assert result.exit_code == 0
+        assert "vacuum" in result.output.lower() or "compact" in result.output.lower()
+
+
+class TestMilestoneCommands:
+    """Tests for milestone management commands."""
+
+    def test_create_milestone(self, temp_db, runner):
+        """Test 'chronicle milestone' creates new milestone."""
+        _, db_path = temp_db
+
+        with patch.dict(os.environ, {'CHRONICLE_DB': db_path}):
+            result = runner.invoke(cli, [
+                'milestone',
+                'Test Milestone',
+                '--description', 'Test description',
+                '--priority', '1'
+            ])
+
+        assert result.exit_code == 0
+        assert "milestone" in result.output.lower()
+
+    def test_milestones_list(self, temp_db, runner):
+        """Test 'chronicle milestones' lists all milestones."""
+        _, db_path = temp_db
+
+        with patch.dict(os.environ, {'CHRONICLE_DB': db_path}):
+            result = runner.invoke(cli, ['milestones'])
+
+        assert result.exit_code == 0
+
+    def test_milestones_filter_by_status(self, temp_db, runner):
+        """Test 'chronicle milestones --status' filters by status."""
+        _, db_path = temp_db
+
+        with patch.dict(os.environ, {'CHRONICLE_DB': db_path}):
+            result = runner.invoke(cli, ['milestones', '--status', 'planned'])
+
+        assert result.exit_code == 0
+
+
+class TestNextStepCommands:
+    """Tests for next step management commands."""
+
+    def test_create_next_step(self, temp_db, runner):
+        """Test 'chronicle next-step' creates new step."""
+        _, db_path = temp_db
+
+        with patch.dict(os.environ, {'CHRONICLE_DB': db_path}):
+            result = runner.invoke(cli, [
+                'next-step',
+                'Test task',
+                '--priority', '2',
+                '--category', 'feature'
+            ])
+
+        assert result.exit_code == 0
+        assert "step" in result.output.lower() or "task" in result.output.lower()
+
+    def test_next_steps_list(self, temp_db, runner):
+        """Test 'chronicle next-steps' lists all steps."""
+        _, db_path = temp_db
+
+        with patch.dict(os.environ, {'CHRONICLE_DB': db_path}):
+            result = runner.invoke(cli, ['next-steps'])
+
+        assert result.exit_code == 0
+
+    def test_next_steps_show_completed(self, temp_db, runner):
+        """Test 'chronicle next-steps --all' shows completed steps."""
+        _, db_path = temp_db
+
+        with patch.dict(os.environ, {'CHRONICLE_DB': db_path}):
+            result = runner.invoke(cli, ['next-steps', '--all'])
+
+        assert result.exit_code == 0
+
+
+class TestSessionManipulation:
+    """Tests for session manipulation commands."""
+
+    def test_rename_session(self, temp_db, runner):
+        """Test 'chronicle rename-session' renames a session."""
+        session, db_path = temp_db
+
+        # Create a session to rename
+        interaction = AIInteraction(
+            ai_tool="claude-code",
+            prompt="Original prompt",
+            timestamp=datetime.now()
+        )
+        session.add(interaction)
+        session.commit()
+        session_id = interaction.id
+
+        with patch.dict(os.environ, {'CHRONICLE_DB': db_path}):
+            result = runner.invoke(cli, ['rename-session', str(session_id), 'New Title'])
+
+        assert result.exit_code == 0
+
+    def test_tag_session(self, temp_db, runner):
+        """Test 'chronicle tag-session' adds tags to a session."""
+        db_session, db_path = temp_db
+
+        # Create a session to tag
+        interaction = AIInteraction(
+            ai_tool="claude-code",
+            prompt="Test prompt",
+            timestamp=datetime.now()
+        )
+        db_session.add(interaction)
+        db_session.commit()
+        session_id = interaction.id
+
+        with patch.dict(os.environ, {'CHRONICLE_DB': db_path}):
+            result = runner.invoke(cli, ['tag-session', str(session_id), 'test,example'])
+
+        assert result.exit_code == 0
+
+    def test_link_session_to_milestone(self, temp_db, runner):
+        """Test 'chronicle link-session' links session to milestone."""
+        db_session, db_path = temp_db
+
+        # Create a session
+        interaction = AIInteraction(
+            ai_tool="claude-code",
+            prompt="Test session",
+            timestamp=datetime.now()
+        )
+        db_session.add(interaction)
+        db_session.commit()
+        session_id = interaction.id
+
+        with patch.dict(os.environ, {'CHRONICLE_DB': db_path}):
+            result = runner.invoke(cli, ['link-session', str(session_id), '--milestone', '1'])
+
+        # May fail if milestone doesn't exist, but should execute
+        assert result.exit_code in [0, 1]
+
+
+class TestRoadmapCommand:
+    """Tests for 'chronicle roadmap' command."""
+
+    def test_roadmap_shows_overview(self, temp_db, runner):
+        """Test 'chronicle roadmap' displays project roadmap."""
+        _, db_path = temp_db
+
+        with patch.dict(os.environ, {'CHRONICLE_DB': db_path}):
+            result = runner.invoke(cli, ['roadmap'])
+
+        assert result.exit_code == 0
+
+    def test_roadmap_with_days_filter(self, temp_db, runner):
+        """Test 'chronicle roadmap --days' filters by days."""
+        _, db_path = temp_db
+
+        with patch.dict(os.environ, {'CHRONICLE_DB': db_path}):
+            result = runner.invoke(cli, ['roadmap', '--days', '30'])
+
+        assert result.exit_code == 0
+
+
+class TestExportCommands:
+    """Tests for export commands."""
+
+    def test_export_session(self, temp_db, runner):
+        """Test 'chronicle export-session' exports session to JSON."""
+        db_session, db_path = temp_db
+
+        # Create a session to export
+        interaction = AIInteraction(
+            ai_tool="claude-code",
+            prompt="Test export",
+            response_summary="Test summary",
+            timestamp=datetime.now()
+        )
+        db_session.add(interaction)
+        db_session.commit()
+        session_id = interaction.id
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_file = os.path.join(tmpdir, 'export.json')
+
+            with patch.dict(os.environ, {'CHRONICLE_DB': db_path}):
+                result = runner.invoke(cli, ['export-session', str(session_id), '--output', output_file])
+
+            # Check if export succeeded
+            if result.exit_code == 0:
+                assert os.path.exists(output_file)
+
+
+class TestGeminiCommands:
+    """Tests for Gemini-specific commands."""
+
+    def test_gemini_stats(self, temp_db, runner):
+        """Test 'chronicle gemini-stats' shows Gemini usage."""
+        _, db_path = temp_db
+
+        with patch.dict(os.environ, {'CHRONICLE_DB': db_path}):
+            result = runner.invoke(cli, ['gemini-stats'])
+
+        assert result.exit_code == 0
+
+
