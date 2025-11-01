@@ -154,25 +154,12 @@ chronicle session 16
 
 Chronicle automatically selects the best available Gemini model based on **session size** and **quota usage**:
 
-**Small/Medium Sessions (<50K lines):**
-1. **gemini-2.5-flash** - 250K TPM, 250 RPD - Latest stable features (preferred)
-2. **gemini-2.5-flash-preview-09-2025** - 250K TPM, 250 RPD - Preview features
-3. **gemini-2.0-flash** - 1M TPM, 200 RPD - Fallback (overkill for small sessions)
-4. **gemini-2.0-flash-lite** - 1M TPM, 200 RPD - Additional fallback
-5. **gemini-2.5-flash-lite** - 250K TPM, 1000 RPD - High volume fallback
+- **Small/Medium Sessions (<50K)**: Prefers gemini-2.5-flash (latest features)
+- **Large Sessions (>50K)**: Prefers gemini-2.0-flash (1M TPM for 10K chunks)
+- **Automatic chunk adjustment**: 10K lines for 1M TPM models, 5K lines for 250K TPM models
+- **Smart failover**: Tracks quota usage and falls back automatically
 
-**Large Sessions (>50K lines):**
-1. **gemini-2.0-flash** - 1M TPM, 200 RPD - Primary (handles 10K line chunks)
-2. **gemini-2.0-flash-lite** - 1M TPM, 200 RPD - First fallback (same capacity)
-3. **gemini-2.5-flash** - 250K TPM, 250 RPD - **Reduces chunks to 5K lines** for 250K TPM
-4. **gemini-2.5-flash-preview-09-2025** - 250K TPM, 250 RPD
-5. **gemini-2.5-flash-lite** - 250K TPM, 1000 RPD
-
-**Why Vary by Size:**
-- **Small/medium**: 2.5 models have latest features, 250K TPM is sufficient for 3-5K line chunks
-- **Large**: 2.0 models have 1M TPM (4x more), enabling 10K line chunks for faster processing
-- **Automatic chunk size adjustment**: When large sessions fall back to 2.5 models, chunk size reduces from 10K→5K to fit within 250K TPM
-- **Smart failover**: Tracks usage per model in database for intelligent selection
+**See [docs/GEMINI_MODELS.md](docs/GEMINI_MODELS.md) for complete model selection logic and configuration.**
 
 ### Retry Logic
 
@@ -323,6 +310,10 @@ def my_tool(param: str) -> str:
 - `README.md` - User-facing documentation
 - `DEVELOPMENT_HISTORY.md` - Project history
 - `chronicle-skills/` - Claude Skills definitions
+- `docs/HOOKS.md` - Token-efficient hooks system (replaces Chronicle Advocate)
+- `docs/GEMINI_MODELS.md` - Model selection and fallback strategy
+- `REMOTE_SUMMARIZE_WORKFLOW.md` - Remote summarization guide (FreeBSD ↔ Mac)
+- `PROVIDER_SWITCHING.md` - Switch between Anthropic and Z.AI providers
 
 ---
 
