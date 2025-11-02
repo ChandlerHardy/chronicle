@@ -7,6 +7,15 @@ description: Manage Chronicle project development using database-tracked milesto
 
 This skill helps you manage project development meta-state using Chronicle's built-in project tracking features. Use MCP tools for programmatic access or CLI commands for portability.
 
+## Auto-Activation
+
+> **This skill auto-activates!** (Milestone #13)
+>
+> Prompts like "what's next?" or "show roadmap" automatically trigger this skill. No manual loading needed!
+>
+> **Trigger patterns:** what's next, show roadmap, create milestone, track progress
+> **See:** `docs/HOOKS.md` for full details
+
 ## When to Use This Skill
 
 Use this skill when:

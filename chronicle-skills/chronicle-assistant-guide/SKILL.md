@@ -11,6 +11,17 @@ description: Project-agnostic guidance for AI assistants using Chronicle. Provid
 
 ---
 
+## Auto-Activation
+
+> **This skill auto-activates!** (Milestone #13)
+>
+> Prompts like "how do I use chronicle?" automatically trigger this skill. Lower priority than other skills.
+>
+> **Trigger patterns:** how to use chronicle, chronicle help, chronicle guide
+> **See:** `docs/HOOKS.md` for full details
+
+---
+
 ## ⚡ CRITICAL: Pre-Flight Checklist
 
 **Before starting ANY Chronicle-related task, run through this checklist:**

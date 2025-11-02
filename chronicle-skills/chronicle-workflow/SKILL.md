@@ -7,6 +7,15 @@ description: Complete workflow for tracking development work with Chronicle - se
 
 This skill guides you through the complete Chronicle workflow for tracking and documenting development work. Primarily uses CLI commands for portability, with optional MCP tools for faster programmatic access.
 
+## Auto-Activation
+
+> **This skill auto-activates!** (Milestone #13)
+>
+> Prompts like "start a new session" or "is this tracked?" automatically trigger this skill. No manual loading needed!
+>
+> **Trigger patterns:** start session, is this tracked, chronicle workflow, setup
+> **See:** `docs/HOOKS.md` for full details
+
 ## When to Use This Skill
 
 Use this skill when:

@@ -7,6 +7,15 @@ description: Document AI-assisted development sessions to Obsidian vault using C
 
 This skill helps you document development sessions to your Obsidian vault using Chronicle's database. Works with both MCP server (fast, structured) or CLI commands (portable, everywhere).
 
+## Auto-Activation
+
+> **This skill auto-activates!** (Milestone #13)
+>
+> Prompts like "document session 75" or "export to Obsidian" automatically trigger a recommendation to use this skill. No need to manually load it!
+>
+> **Trigger patterns:** document session, export to obsidian, save to vault
+> **See:** `docs/HOOKS.md` for full details
+
 ## When to Use This Skill
 
 Use this skill when:

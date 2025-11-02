@@ -7,6 +7,15 @@ description: Automate cross-system summarization workflow for Chronicle sessions
 
 This skill automates the workflow for summarizing Chronicle sessions across different systems (e.g., FreeBSD dev machine → Mac with Gemini API).
 
+## Auto-Activation
+
+> **This skill auto-activates!** (Milestone #13)
+>
+> Prompts like "summarize session on remote" or "import session from FreeBSD" automatically trigger this skill!
+>
+> **Trigger patterns:** remote, freebsd, import session, summarize on remote
+> **See:** `docs/HOOKS.md` for full details
+
 ## When to Use This Skill
 
 Use this skill when:

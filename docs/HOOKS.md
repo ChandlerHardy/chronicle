@@ -58,6 +58,108 @@ Claude reads user prompt + reminder
 Claude searches Chronicle before implementing
 ```
 
+#### Skill Auto-Activation (Milestone #13)
+
+**Added:** v6.1 (Milestone #13)
+
+The UserPromptSubmit hook also detects when user prompts match Chronicle skill triggers and automatically recommends relevant skills.
+
+**Supported Skills:**
+- 🎯 **chronicle-session-documenter** (Priority 90) - Document sessions to Obsidian
+- 🔍 **chronicle-context-retriever** (Priority 90) - Search past work
+- 📊 **chronicle-project-tracker** (Priority 80) - Manage milestones and roadmap
+- 🔄 **chronicle-workflow** (Priority 70) - Session workflow guidance
+- 🌐 **chronicle-remote-summarizer** (Priority 60) - Remote session workflows
+- 📚 **chronicle-assistant-guide** (Priority 50) - General Chronicle guidance
+
+**How It Works:**
+
+```
+User: "document session 75 to Obsidian"
+↓
+Hook detects skill trigger:
+  - Keyword: "document"
+  - Phrase match: "document session"
+↓
+Injects skill recommendation:
+🎯 SKILL DETECTED: chronicle-session-documenter
+
+Your prompt matches documenting sessions to Obsidian vault.
+
+This skill automates:
+- Fetching session summary from Chronicle
+- Creating structured Obsidian notes
+- Adding metadata, wikilinks, and tags
+
+Load with: Skill(command="chronicle-session-documenter")
+↓
+Claude sees recommendation and loads skill automatically
+```
+
+**Priority System:**
+
+When multiple skills match the same prompt, the highest priority skill is recommended:
+
+```
+User: "how did I implement authentication?"
+↓
+Matches BOTH:
+  - Chronicle Advocate (implement keyword)
+  - chronicle-context-retriever (how did I pattern)
+↓
+Shows BOTH messages (combined with separator)
+```
+
+**Trigger Configuration:**
+
+Each skill in `.claude/config/skill-rules.json` has:
+- **keywords**: List of words that trigger the skill
+- **phrases**: Regex patterns for specific phrases
+- **excludes**: Patterns that prevent triggering (false positive prevention)
+- **priority**: Number (higher = recommended first when multiple match)
+
+**Example Configuration:**
+
+```json
+{
+  "skillActivation": {
+    "chronicle-session-documenter": {
+      "priority": 90,
+      "skillCommand": "chronicle-session-documenter",
+      "triggers": {
+        "keywords": [],
+        "phrases": [
+          "(?i)document session",
+          "(?i)export.*to obsidian",
+          "(?i)save.*to (vault|obsidian)"
+        ],
+        "excludes": ["document.*code", "documentation.*for"]
+      },
+      "message": "🎯 SKILL DETECTED: chronicle-session-documenter\n\n..."
+    }
+  }
+}
+```
+
+**Benefits:**
+
+- ✅ **Automatic discovery** - Skills activate when needed, no manual loading
+- ✅ **Consistency** - Guaranteed use of best practices from skills
+- ✅ **Token efficiency** - 50-100 tokens for recommendation vs 500-1000 for full skill
+- ✅ **False positive prevention** - Exclusion patterns avoid irrelevant triggers
+- ✅ **Priority system** - Highest priority skill wins when multiple match
+
+**Testing:**
+
+Comprehensive tests in `tests/test_hooks.py` cover:
+- All 6 skill trigger patterns (27+ test cases)
+- Exclusion patterns (false positive prevention)
+- Priority system (multiple matches)
+- Chronicle Advocate + skill combination
+- Edge cases and JSON validation
+
+See `tests/test_hooks.py` for examples.
+
 ### Stop Hook
 
 **File:** `.claude/hooks/stop.sh`

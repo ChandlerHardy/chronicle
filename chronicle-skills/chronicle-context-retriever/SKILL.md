@@ -7,6 +7,15 @@ description: Search and retrieve context from past development sessions using Ch
 
 This skill helps you search and retrieve context from past development sessions using Chronicle's database. Works with both MCP server (fast, structured JSON) or CLI commands (portable, everywhere).
 
+## Auto-Activation
+
+> **This skill auto-activates!** (Milestone #13)
+>
+> Prompts like "how did I implement auth?" or "what did I do yesterday?" automatically trigger this skill. No manual loading needed!
+>
+> **Trigger patterns:** how did I, what did I do, find sessions about, search past work
+> **See:** `docs/HOOKS.md` for full details
+
 ## When to Use This Skill
 
 Use this skill when:
