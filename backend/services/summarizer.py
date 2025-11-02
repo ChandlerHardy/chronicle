@@ -413,30 +413,39 @@ Keywords (JSON array only):"""
 
         prompt = f"""You are an expert development session analyzer for Chronicle, a tool that tracks AI-assisted coding sessions.
 
-TASK: Analyze this terminal session transcript and create a concise, actionable summary.
+TASK: Analyze this terminal session transcript and create a narrative summary that tells the story of what was built.
 
-REQUIREMENTS:
-- Focus on WHAT was built/fixed, not how the conversation went
-- Extract key technical decisions and their rationale
-- Identify specific files, functions, or components mentioned
-- Note any blockers, bugs, or issues encountered
-- Keep summary under {max_length} characters
-- Use bullet points for clarity
-- Be technical and specific (e.g., "Added PostgreSQL support" not "worked on database")
+**SUMMARY STRUCTURE (required format):**
 
-FORMAT:
-## What Was Built
-- [Main accomplishment 1]
-- [Main accomplishment 2]
+1. **Opening (1-2 sentences):** What was accomplished? Start with the main feature/milestone/fix.
+   Example: "Implemented Milestone #13: Skill Auto-Activation System. The UserPromptSubmit hook now automatically detects and recommends relevant skills based on prompt analysis."
 
-## Key Decisions
-- [Decision and why]
+2. **Implementation Details (bullet points):** List specific files, tests, and code changes.
+   - Created/modified files (be specific: "Created skill-rules.json with trigger patterns for 6 skills")
+   - Tests written (count them: "27 test cases in test_hooks.py, all passing")
+   - Bugs fixed (what and how)
+   - Git commit info if visible
 
-## Files/Components Modified
-- [Specific files or modules]
+3. **Key Decisions (optional, if significant):** Why certain approaches were taken.
+   Example: "Gitignored .claude/ directory to keep user configs private."
 
-## Issues/Blockers (if any)
-- [Any problems encountered]
+4. **Future Work (optional, brief):** Only if relevant planning occurred.
+   Example: "Created Milestone #22 for Phase 2 enhancements."
+
+**WHAT TO EXTRACT:**
+- ✅ Git commit messages (best signal - use verbatim if found)
+- ✅ What feature/milestone was completed
+- ✅ Specific files created/modified
+- ✅ Test counts and results
+- ✅ Bug fixes with context
+- ⚠️ Skip background discussions unless they led to implementation
+- ❌ Ignore repeated content (LangChain explanation repeated 20x → mention once or skip)
+
+**TONE:**
+- Tell a story, not a file list
+- "Built X" not "Modified Y"
+- "Fixed false positive in trigger detection" not "Modified .claude/config/file.json"
+- Technical but readable
 
 SESSION TRANSCRIPT:
 {transcript}
@@ -765,14 +774,21 @@ Summary:"""
             # Generate prompt based on whether this is the first chunk
             if chunk_num == 0:
                 # First chunk - just summarize it
-                prompt = f"""Summarize this development session transcript chunk. Focus on:
-- What was accomplished
-- Technical decisions made
-- Files created or modified
-- Any issues or blockers
-- Key discussion points
+                prompt = f"""Summarize this development session transcript chunk. Tell the story of what was built.
 
-Keep the summary concise but informative (2-3 paragraphs).
+FOCUS ON (in priority order):
+1. What was accomplished (features, milestones, fixes)
+2. Specific files created/modified (with details)
+3. Tests written (count them!)
+4. Git commits (extract verbatim if found)
+5. Technical decisions and why
+
+IGNORE:
+- Repeated conversations (if same explanation appears 20x, mention once)
+- Background Q&A that didn't lead to implementation
+- UI chrome and decorations
+
+Keep the summary narrative and technical (2-3 paragraphs).
 
 Transcript chunk:
 {chunk_text}
@@ -780,7 +796,7 @@ Transcript chunk:
 Summary:"""
             else:
                 # Subsequent chunks - update the cumulative summary
-                prompt = f"""You are maintaining a running summary of a development session.
+                prompt = f"""You are maintaining a running summary of a development session. Integrate new activity into the existing narrative.
 
 PREVIOUS SUMMARY (everything up to line {start_line}):
 {cumulative_summary}
@@ -788,8 +804,12 @@ PREVIOUS SUMMARY (everything up to line {start_line}):
 NEW ACTIVITY (lines {start_line}-{end_line}):
 {chunk_text}
 
-Update the summary to incorporate this new activity. Keep it cohesive and well-organized.
-Focus on the overall narrative and progress. Avoid just appending - integrate the new information.
+INSTRUCTIONS:
+- Tell the story - integrate new info into narrative, don't just append
+- Prioritize implementation work (code, tests, commits) over discussion
+- Skip repeated conversations (if LangChain explained 10x, you already summarized it once)
+- Extract git commits verbatim (they're the best signal)
+- Keep it cohesive and well-organized
 
 Updated Summary:"""
 

@@ -5,6 +5,8 @@ control characters, and deduplicating repeated lines (like spinner redraws).
 """
 
 import re
+import hashlib
+from typing import Dict
 
 
 def clean_transcript(transcript: str) -> str:
@@ -517,6 +519,113 @@ def clean_transcript(transcript: str) -> str:
 
     cleaned = '\n'.join(global_deduplicated)
 
+    # 6.7. Large conversation block deduplication (Session 95 fix)
+    # Detect and remove repeated conversation blocks (10-50 lines)
+    # This handles cases where entire conversations repeat 20+ times
+    detection = detect_duplicate_conversation_blocks(cleaned)
+
+    if detection['max_repetitions'] >= 5:
+        # High repetition detected - deduplicate large blocks
+        print(f"  ⚠️  Detected {detection['duplicate_blocks_found']} heavily repeated conversation blocks")
+        print(f"  📊 Max repetitions: {detection['max_repetitions']}x")
+
+        lines = cleaned.split('\n')
+        large_block_deduplicated = []
+        seen_hashes = {}  # hash -> first_occurrence_index
+        skip_until = -1
+
+        # Try larger block sizes for conversation deduplication
+        for block_size in [30, 20, 15, 10, 8]:
+            if len(lines) < block_size * 2:
+                continue
+
+            i = 0
+            while i < len(lines):
+                if i < skip_until:
+                    i += 1
+                    continue
+
+                if i + block_size > len(lines):
+                    # Not enough lines left for a full block
+                    if i < skip_until:
+                        i += 1
+                        continue
+                    # Add remaining lines if not skipped
+                    if i >= len(large_block_deduplicated):
+                        large_block_deduplicated.append(lines[i])
+                    i += 1
+                    continue
+
+                block = lines[i:i+block_size]
+                non_blank = [line for line in block if line.strip()]
+
+                # Skip if block is mostly blank
+                if len(non_blank) < block_size // 2:
+                    if i >= len(large_block_deduplicated):
+                        large_block_deduplicated.append(lines[i])
+                    i += 1
+                    continue
+
+                # Hash the block
+                block_text = '\n'.join(block)
+                block_hash = hashlib.md5(block_text.encode()).hexdigest()[:16]
+
+                if block_hash in seen_hashes:
+                    # Duplicate block - skip it
+                    occurrence_num = seen_hashes[block_hash] + 1
+                    seen_hashes[block_hash] = occurrence_num
+
+                    # Add marker on first duplicate
+                    if occurrence_num == 2:
+                        large_block_deduplicated.append(f"[... duplicate conversation, already shown (occurrence #{occurrence_num}) ...]")
+
+                    # Skip this entire block
+                    skip_until = i + block_size
+                    i += block_size
+                else:
+                    # First time seeing this block
+                    seen_hashes[block_hash] = 1
+                    # Don't add yet - will be added by normal flow
+                    i += 1
+
+            # If we made progress, use this result
+            if len(seen_hashes) > 0 and any(count > 1 for count in seen_hashes.values()):
+                # Rebuild from lines, skipping duplicates
+                large_block_deduplicated = []
+                seen_hashes_final = {}
+                i = 0
+
+                while i < len(lines):
+                    if i + block_size <= len(lines):
+                        block = lines[i:i+block_size]
+                        non_blank = [line for line in block if line.strip()]
+
+                        if len(non_blank) >= block_size // 2:
+                            block_text = '\n'.join(block)
+                            block_hash = hashlib.md5(block_text.encode()).hexdigest()[:16]
+
+                            if block_hash in seen_hashes_final:
+                                # Skip duplicate
+                                seen_hashes_final[block_hash] += 1
+                                if seen_hashes_final[block_hash] == 2:
+                                    # First duplicate - add marker
+                                    large_block_deduplicated.append(f"[... repeated conversation block (occurrence #{seen_hashes_final[block_hash]}) ...]")
+                                i += block_size
+                                continue
+                            else:
+                                seen_hashes_final[block_hash] = 1
+
+                    # Keep this line
+                    large_block_deduplicated.append(lines[i])
+                    i += 1
+
+                break  # Found and processed duplicates
+
+        # If deduplication was effective, use the result
+        if len(large_block_deduplicated) > 0 and len(large_block_deduplicated) < len(lines) * 0.9:
+            cleaned = '\n'.join(large_block_deduplicated)
+            print(f"  ✓ Large block deduplication: {len(lines):,} → {len(large_block_deduplicated):,} lines ({(1 - len(large_block_deduplicated)/len(lines))*100:.1f}% reduction)")
+
     # 7. Final pass: Remove keystroke-by-keystroke typing that survived earlier steps
     # After removing all decorations, keystrokes end up consecutive
     # Pattern: "> w" followed by "> wh" followed by "> why" etc.
@@ -590,3 +699,137 @@ def clean_transcript(transcript: str) -> str:
                 final_lines.append(line)
 
     return '\n'.join(final_lines)
+
+
+def analyze_transcript_quality(transcript: str) -> Dict:
+    """Analyze transcript quality and detect duplication issues.
+
+    Args:
+        transcript: Raw or cleaned transcript text
+
+    Returns:
+        Dictionary with quality metrics:
+        - total_lines: Total number of lines
+        - unique_lines: Number of unique lines
+        - duplicate_ratio: Ratio of duplicated content (0.0-1.0)
+        - recommendation: 'ok' or 'deduplicate_before_summarizing'
+    """
+    if not transcript:
+        return {
+            'total_lines': 0,
+            'unique_lines': 0,
+            'duplicate_ratio': 0.0,
+            'recommendation': 'ok'
+        }
+
+    lines = transcript.split('\n')
+    total_lines = len(lines)
+
+    # Count unique non-blank lines
+    unique_lines = set()
+    for line in lines:
+        stripped = line.strip()
+        if stripped:  # Skip blank lines
+            unique_lines.add(stripped)
+
+    unique_count = len(unique_lines)
+
+    # Calculate duplication ratio
+    # If we have 100 total lines but only 20 unique = 80% duplication
+    if total_lines > 0:
+        duplicate_ratio = 1.0 - (unique_count / total_lines)
+    else:
+        duplicate_ratio = 0.0
+
+    # Determine recommendation
+    if duplicate_ratio > 0.75:
+        recommendation = 'deduplicate_before_summarizing'
+    else:
+        recommendation = 'ok'
+
+    return {
+        'total_lines': total_lines,
+        'unique_lines': unique_count,
+        'duplicate_ratio': duplicate_ratio,
+        'recommendation': recommendation
+    }
+
+
+def detect_duplicate_conversation_blocks(transcript: str) -> Dict:
+    """Detect repeated conversation blocks in transcript.
+
+    Looks for patterns like:
+    - Same Q&A repeated multiple times
+    - Same tool calls repeated
+    - Same explanations repeated
+
+    Args:
+        transcript: Transcript text to analyze
+
+    Returns:
+        Dictionary with detection results:
+        - duplicate_blocks_found: Number of duplicate block patterns found
+        - max_repetitions: Highest number of repetitions for any block
+        - blocks_info: List of {block_hash, repetitions, preview}
+    """
+    if not transcript:
+        return {
+            'duplicate_blocks_found': 0,
+            'max_repetitions': 0,
+            'blocks_info': []
+        }
+
+    lines = transcript.split('\n')
+
+    # Track blocks by hash
+    block_counts = {}  # hash -> (content_preview, count, positions)
+    max_reps = 0
+    blocks_info = []
+
+    # Try different block sizes (5-30 lines for conversation blocks)
+    for block_size in [5, 8, 10, 15, 20, 30]:
+        if len(lines) < block_size * 2:
+            continue  # Need at least 2 blocks to compare
+
+        for i in range(0, len(lines) - block_size + 1):
+            block = lines[i:i+block_size]
+
+            # Skip blocks that are mostly blank
+            non_blank = [line for line in block if line.strip()]
+            if len(non_blank) < block_size // 2:
+                continue
+
+            # Hash the block
+            block_text = '\n'.join(block)
+            block_hash = hashlib.md5(block_text.encode()).hexdigest()[:16]
+
+            # Track this block
+            if block_hash not in block_counts:
+                preview = block_text[:100].replace('\n', ' ')
+                block_counts[block_hash] = {
+                    'preview': preview,
+                    'count': 1,
+                    'positions': [i]
+                }
+            else:
+                # Check if this is a new occurrence (not overlapping)
+                prev_positions = block_counts[block_hash]['positions']
+                if all(abs(pos - i) >= block_size for pos in prev_positions):
+                    block_counts[block_hash]['count'] += 1
+                    block_counts[block_hash]['positions'].append(i)
+
+    # Analyze results
+    for block_hash, info in block_counts.items():
+        if info['count'] >= 3:  # Block repeats 3+ times
+            blocks_info.append({
+                'block_hash': block_hash,
+                'repetitions': info['count'],
+                'preview': info['preview']
+            })
+            max_reps = max(max_reps, info['count'])
+
+    return {
+        'duplicate_blocks_found': len(blocks_info),
+        'max_repetitions': max_reps,
+        'blocks_info': blocks_info
+    }
