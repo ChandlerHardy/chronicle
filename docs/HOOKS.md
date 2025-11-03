@@ -329,7 +329,7 @@ Hooks receive JSON via stdin:
   "cwd": "/Users/user/project",
   "permission_mode": "default",
   "hook_event_name": "UserPromptSubmit",
-  "user_prompt": "I want to add a feature"  // UserPromptSubmit only
+  "prompt": "I want to add a feature"  // UserPromptSubmit only
 }
 ```
 
@@ -387,7 +387,7 @@ claude --debug
    - Check hook logic for slow operations
 
 3. **JSON parsing errors:**
-   - Test hook manually: `echo '{"user_prompt":"test"}' | .claude/hooks/user-prompt-submit.sh`
+   - Test hook manually: `echo '{"prompt":"test"}' | .claude/hooks/user-prompt-submit.sh`
    - Validate JSON output with `jq`
 
 ## Future Enhancements
