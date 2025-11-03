@@ -16,6 +16,19 @@ def migrate_v1_to_v2(db_path: str = None):
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
 
+    # Check if ai_interactions table exists
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='ai_interactions'")
+    if not cursor.fetchone():
+        # Create basic table if it doesn't exist
+        cursor.execute("""
+            CREATE TABLE ai_interactions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp DATETIME,
+                prompt TEXT,
+                response_summary TEXT
+            )
+        """)
+
     # Check if columns already exist
     cursor.execute("PRAGMA table_info(ai_interactions)")
     columns = [row[1] for row in cursor.fetchall()]

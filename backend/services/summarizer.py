@@ -545,6 +545,57 @@ Summary:"""
         except Exception as e:
             return f"Error generating summary: {str(e)}"
 
+    def chunk_transcript(self, transcript: str, ideal_chunk_length: int = 10000) -> list:
+        """Split a transcript into chunks for processing.
+
+        Args:
+            transcript: The full transcript text
+            ideal_chunk_length: Target length for each chunk in characters
+
+        Returns:
+            List of transcript chunks
+        """
+        if not transcript or not transcript.strip():
+            return [""]
+
+        lines = transcript.split('\n')
+        chunks = []
+        current_chunk = []
+        current_length = 0
+
+        for line in lines:
+            line_length = len(line) + 1  # +1 for newline
+
+            # Handle single very long lines by splitting them
+            if len(line) > ideal_chunk_length:
+                # Finish current chunk if it has content
+                if current_chunk:
+                    chunks.append('\n'.join(current_chunk))
+                    current_chunk = []
+                    current_length = 0
+
+                # Split the long line into multiple chunks
+                for i in range(0, len(line), ideal_chunk_length):
+                    long_chunk = line[i:i + ideal_chunk_length]
+                    if i + ideal_chunk_length < len(line):
+                        long_chunk += '\n'  # Add newline back if not last chunk
+                    chunks.append(long_chunk)
+            else:
+                # If adding this line would exceed ideal length and we have content, start new chunk
+                if current_length + line_length > ideal_chunk_length and current_chunk:
+                    chunks.append('\n'.join(current_chunk))
+                    current_chunk = [line]
+                    current_length = line_length
+                else:
+                    current_chunk.append(line)
+                    current_length += line_length
+
+        # Add the last chunk if it has content
+        if current_chunk:
+            chunks.append('\n'.join(current_chunk))
+
+        return chunks
+
     def calculate_adaptive_delay(self, chunk_text: str, cumulative_summary: str) -> float:
         """Calculate delay needed to stay under Gemini rate limits (1M tokens/min).
 
