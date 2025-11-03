@@ -65,6 +65,7 @@ Claude searches Chronicle before implementing
 The UserPromptSubmit hook also detects when user prompts match Chronicle skill triggers and automatically recommends relevant skills.
 
 **Supported Skills:**
+- 🧪 **test-driven-development** (Priority 95) - TDD enforcement (superpowers skill)
 - 🎯 **chronicle-session-documenter** (Priority 90) - Document sessions to Obsidian
 - 🔍 **chronicle-context-retriever** (Priority 90) - Search past work
 - 📊 **chronicle-project-tracker** (Priority 80) - Manage milestones and roadmap
@@ -152,13 +153,63 @@ Each skill in `.claude/config/skill-rules.json` has:
 **Testing:**
 
 Comprehensive tests in `tests/test_hooks.py` cover:
-- All 6 skill trigger patterns (27+ test cases)
+- All 7 skill trigger patterns (37+ test cases)
 - Exclusion patterns (false positive prevention)
 - Priority system (multiple matches)
 - Chronicle Advocate + skill combination
 - Edge cases and JSON validation
 
 See `tests/test_hooks.py` for examples.
+
+#### TDD Skill Auto-Activation (Next Step #93)
+
+**Added:** Session 99 (addresses Next Step #93)
+
+The **test-driven-development** skill from superpowers marketplace now auto-activates when you start implementing code.
+
+**Why TDD Skill over TDD Advocate Agent:**
+- **15x cheaper**: 1,000 tokens/session (loaded once) vs 15,000 tokens/session (300 per message)
+- **More comprehensive**: 365 lines of guidance vs 35 lines in agent
+- **Better enforcement**: "Iron Law", red flags, rationalization counters
+- **Smarter activation**: Only when implementing, not on every message
+
+**Triggers:**
+- "let's implement/add/build/write/create X"
+- "yeah let's implement/add/build/write/create X"
+- "I want/we should/can you (to) implement/add/build/write/create X"
+- "write/add/create a function/class/method/feature/code"
+
+**Exclusions:**
+- Already writing tests ("write a test", "TDD", "red-green-refactor")
+- Asking questions ("what does", "how does", "explain", "show me")
+
+**Example:**
+```
+User: "let's implement the export feature"
+↓
+Hook injects:
+🧪 TDD ENFORCER ACTIVATED
+
+Before writing implementation code, we MUST:
+
+1. Write a failing test FIRST
+2. Watch it fail (RED)
+3. Write minimal code to pass (GREEN)
+4. Refactor if needed
+
+No exceptions. The test-driven-development skill has comprehensive guidance.
+
+Load with: Skill(command="test-driven-development")
+```
+
+**Benefits:**
+- ✅ Catches TDD violations **before** code is written
+- ✅ Loads comprehensive 365-line guidance (not just reminder)
+- ✅ Has "delete and start over" enforcement
+- ✅ Counters common rationalizations ("I'll test after", "too simple to test", etc.)
+- ✅ 15x cheaper than always-active agent
+
+**Note:** CLAUDE.md still has TDD directives as baseline, but the skill provides comprehensive enforcement when implementing.
 
 ### Stop Hook
 

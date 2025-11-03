@@ -202,6 +202,89 @@ class TestUserPromptSubmitHook:
         context = result["hookSpecificOutput"]["additionalContext"]
         assert "chronicle-remote-summarizer" in context
 
+    # ===== Test-Driven Development Skill Tests =====
+
+    def test_tdd_lets_implement(self, hook_path, hook_env):
+        """Test that 'let's implement' triggers TDD skill."""
+        result = run_hook("let's implement the authentication feature", str(hook_path), hook_env)
+
+        assert "hookSpecificOutput" in result
+        context = result["hookSpecificOutput"]["additionalContext"]
+        assert "test-driven-development" in context
+        assert "TDD ENFORCER" in context
+
+    def test_tdd_lets_add(self, hook_path, hook_env):
+        """Test that 'let's add' triggers TDD skill."""
+        result = run_hook("let's add a new function for validation", str(hook_path), hook_env)
+
+        assert "hookSpecificOutput" in result
+        context = result["hookSpecificOutput"]["additionalContext"]
+        assert "test-driven-development" in context
+
+    def test_tdd_yeah_lets_build(self, hook_path, hook_env):
+        """Test that 'yeah let's build' triggers TDD skill."""
+        result = run_hook("yeah let's build that feature", str(hook_path), hook_env)
+
+        assert "hookSpecificOutput" in result
+        context = result["hookSpecificOutput"]["additionalContext"]
+        assert "test-driven-development" in context
+
+    def test_tdd_i_want_to_create(self, hook_path, hook_env):
+        """Test that 'I want to create' triggers TDD skill."""
+        result = run_hook("I want to create a new class for handling exports", str(hook_path), hook_env)
+
+        assert "hookSpecificOutput" in result
+        context = result["hookSpecificOutput"]["additionalContext"]
+        assert "test-driven-development" in context
+
+    def test_tdd_write_function(self, hook_path, hook_env):
+        """Test that 'write a function' triggers TDD skill."""
+        result = run_hook("write a function that calculates totals", str(hook_path), hook_env)
+
+        assert "hookSpecificOutput" in result
+        context = result["hookSpecificOutput"]["additionalContext"]
+        assert "test-driven-development" in context
+
+    def test_tdd_exclusion_write_test(self, hook_path, hook_env):
+        """Test that 'write a test' does NOT trigger TDD (exclusion)."""
+        result = run_hook("let's write a test for the authentication", str(hook_path), hook_env)
+
+        # Should not trigger TDD skill since we're already writing tests
+        context = result.get("hookSpecificOutput", {}).get("additionalContext", "")
+        assert "test-driven-development" not in context
+
+    def test_tdd_exclusion_what_does(self, hook_path, hook_env):
+        """Test that 'what does' does NOT trigger TDD (question)."""
+        result = run_hook("what does this function do?", str(hook_path), hook_env)
+
+        # Should not trigger TDD skill (asking about existing code)
+        context = result.get("hookSpecificOutput", {}).get("additionalContext", "")
+        assert "test-driven-development" not in context
+
+    def test_tdd_exclusion_how_does(self, hook_path, hook_env):
+        """Test that 'how does' does NOT trigger TDD (question)."""
+        result = run_hook("how does the export feature work?", str(hook_path), hook_env)
+
+        # Should not trigger TDD skill
+        context = result.get("hookSpecificOutput", {}).get("additionalContext", "")
+        assert "test-driven-development" not in context
+
+    def test_tdd_exclusion_explain(self, hook_path, hook_env):
+        """Test that 'explain' does NOT trigger TDD (exclusion)."""
+        result = run_hook("explain this code to me", str(hook_path), hook_env)
+
+        # Should not trigger TDD skill
+        context = result.get("hookSpecificOutput", {}).get("additionalContext", "")
+        assert "test-driven-development" not in context
+
+    def test_tdd_exclusion_show_me(self, hook_path, hook_env):
+        """Test that 'show me' does NOT trigger TDD (exclusion)."""
+        result = run_hook("show me the implementation", str(hook_path), hook_env)
+
+        # Should not trigger TDD skill
+        context = result.get("hookSpecificOutput", {}).get("additionalContext", "")
+        assert "test-driven-development" not in context
+
     # ===== Chronicle Assistant Guide Tests =====
 
     def test_guide_how_to_use(self, hook_path, hook_env):
