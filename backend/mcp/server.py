@@ -200,6 +200,7 @@ def search_sessions(
     search_summaries: bool = True,
     search_prompts: bool = True,
     search_keywords: bool = True,
+    include_summaries: bool = False,
 ) -> str:
     """Search Chronicle sessions by keywords using FTS5 full-text search.
 
@@ -222,6 +223,7 @@ def search_sessions(
         search_summaries: Search in AI-generated summaries (default: True)
         search_prompts: Search in session prompts/descriptions (default: True)
         search_keywords: Search in AI-extracted keywords (default: True)
+        include_summaries: Include full summaries in results (default: False to reduce token usage)
 
     Returns:
         JSON string with matching sessions ranked by relevance
@@ -340,7 +342,7 @@ def search_sessions(
     result = {
         "query": query,
         "count": len(sessions),
-        "sessions": [format_session_dict(s) for s in sessions],
+        "sessions": [format_session_dict(s, include_summary=include_summaries) for s in sessions],
         "repo_filter": repo_path if repo_path else "all"
     }
 

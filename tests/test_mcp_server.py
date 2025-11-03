@@ -420,6 +420,75 @@ def test_search_sessions_hyphenated_in_multi_term(temp_db):
     assert result["sessions"][0]["id"] == session.id
 
 
+def test_search_sessions_excludes_summaries_by_default(temp_db):
+    """Test search_sessions excludes summaries by default to reduce token usage."""
+    # Create session with a long summary
+    session = AIInteraction(
+        ai_tool="claude-code",
+        prompt="Test session",
+        response_summary="This is a very long summary that would consume many tokens. " * 100,
+        is_session=True,
+        timestamp=datetime.now(),
+        keywords=json.dumps(["testing"])
+    )
+    temp_db.add(session)
+    temp_db.commit()
+
+    # Default search should NOT include summary
+    result_json = server.search_sessions.fn(query="testing")
+    result = json.loads(result_json)
+
+    assert result["count"] == 1
+    assert "summary" not in result["sessions"][0], "Summary should not be included by default"
+    assert "id" in result["sessions"][0]
+    assert "keywords" in result["sessions"][0]
+
+
+def test_search_sessions_includes_summaries_when_requested(temp_db):
+    """Test search_sessions includes summaries when include_summaries=True."""
+    # Create session with summary
+    session = AIInteraction(
+        ai_tool="claude-code",
+        prompt="Test session",
+        response_summary="Important summary content",
+        is_session=True,
+        timestamp=datetime.now(),
+        keywords=json.dumps(["testing"])
+    )
+    temp_db.add(session)
+    temp_db.commit()
+
+    # Explicitly request summaries
+    result_json = server.search_sessions.fn(query="testing", include_summaries=True)
+    result = json.loads(result_json)
+
+    assert result["count"] == 1
+    assert "summary" in result["sessions"][0], "Summary should be included when requested"
+    assert result["sessions"][0]["summary"] == "Important summary content"
+
+
+def test_search_sessions_respects_explicit_false(temp_db):
+    """Test search_sessions respects include_summaries=False."""
+    # Create session with summary
+    session = AIInteraction(
+        ai_tool="claude-code",
+        prompt="Test session",
+        response_summary="Summary content",
+        is_session=True,
+        timestamp=datetime.now(),
+        keywords=json.dumps(["testing"])
+    )
+    temp_db.add(session)
+    temp_db.commit()
+
+    # Explicitly exclude summaries
+    result_json = server.search_sessions.fn(query="testing", include_summaries=False)
+    result = json.loads(result_json)
+
+    assert result["count"] == 1
+    assert "summary" not in result["sessions"][0], "Summary should not be included when include_summaries=False"
+
+
 def test_get_sessions_summaries_returns_multiple(temp_db):
     """Test get_sessions_summaries retrieves multiple sessions."""
     # Create 3 sessions
