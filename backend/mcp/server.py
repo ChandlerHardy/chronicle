@@ -192,6 +192,63 @@ def get_session_summary(session_id: int) -> str:
     return json.dumps(result, indent=2)
 
 
+def calculate_relevance(session: AIInteraction, query: str) -> tuple[list[str], float]:
+    """Calculate which fields matched and compute relevance score.
+
+    Returns:
+        tuple: (match_fields, relevance_score)
+        - match_fields: List of field names that matched the query
+        - relevance_score: Weighted score (keywords=3, title/tags=2, summary/prompt=1)
+    """
+    # Tokenize query (handle operators and hyphens like in search_sessions)
+    if " OR " in query or " AND " in query or " NOT " in query or '"' in query:
+        # Complex query - just extract words
+        import re
+        tokens = re.findall(r'\w+(?:-\w+)*', query.lower())
+    else:
+        tokens = query.lower().split()
+
+    match_fields = []
+    relevance_score = 0.0
+
+    # Check keywords (weight: 3.0)
+    if session.keywords:
+        keywords_lower = [k.lower() for k in session.keywords_list]
+        if any(token in ' '.join(keywords_lower) for token in tokens):
+            match_fields.append("keywords")
+            relevance_score += 3.0
+
+    # Check title (weight: 2.0)
+    if session.title:
+        title_lower = session.title.lower()
+        if any(token in title_lower for token in tokens):
+            match_fields.append("title")
+            relevance_score += 2.0
+
+    # Check tags (weight: 2.0)
+    if session.tags:
+        tags_lower = [t.lower() for t in session.tags_list]
+        if any(token in ' '.join(tags_lower) for token in tokens):
+            match_fields.append("tags")
+            relevance_score += 2.0
+
+    # Check prompt (weight: 1.0)
+    if session.prompt:
+        prompt_lower = session.prompt.lower()
+        if any(token in prompt_lower for token in tokens):
+            match_fields.append("prompt")
+            relevance_score += 1.0
+
+    # Check summary (weight: 1.0)
+    if session.response_summary:
+        summary_lower = session.response_summary.lower()
+        if any(token in summary_lower for token in tokens):
+            match_fields.append("summary")
+            relevance_score += 1.0
+
+    return (match_fields, relevance_score)
+
+
 @mcp.tool()
 def search_sessions(
     query: str,
@@ -339,10 +396,22 @@ def search_sessions(
 
         sessions = query_obj.order_by(desc(AIInteraction.timestamp)).limit(limit).all()
 
+    # Add relevance scoring and match fields to each session
+    session_results = []
+    for session in sessions:
+        match_fields, relevance_score = calculate_relevance(session, query)
+        session_dict = format_session_dict(session, include_summary=include_summaries)
+        session_dict["match_fields"] = match_fields
+        session_dict["relevance_score"] = relevance_score
+        session_results.append(session_dict)
+
+    # Sort by relevance score (highest first)
+    session_results.sort(key=lambda x: x["relevance_score"], reverse=True)
+
     result = {
         "query": query,
-        "count": len(sessions),
-        "sessions": [format_session_dict(s, include_summary=include_summaries) for s in sessions],
+        "count": len(session_results),
+        "sessions": session_results,
         "repo_filter": repo_path if repo_path else "all"
     }
 

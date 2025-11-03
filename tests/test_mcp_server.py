@@ -489,6 +489,151 @@ def test_search_sessions_respects_explicit_false(temp_db):
     assert "summary" not in result["sessions"][0], "Summary should not be included when include_summaries=False"
 
 
+def test_search_sessions_includes_match_fields(temp_db):
+    """Test search_sessions includes which fields matched the query."""
+    # Create session with keyword match
+    session = AIInteraction(
+        ai_tool="claude-code",
+        prompt="Regular prompt",
+        response_summary="Regular summary",
+        title="Test Session",
+        is_session=True,
+        timestamp=datetime.now(),
+        keywords=json.dumps(["testing", "pytest"])
+    )
+    temp_db.add(session)
+    temp_db.commit()
+
+    # Search for keyword
+    result_json = server.search_sessions.fn(query="pytest")
+    result = json.loads(result_json)
+
+    assert result["count"] == 1
+    assert "match_fields" in result["sessions"][0], "match_fields should be included"
+    assert "keywords" in result["sessions"][0]["match_fields"], "Should show keyword match"
+
+
+def test_search_sessions_match_fields_multiple(temp_db):
+    """Test search_sessions shows all matched fields."""
+    # Create session that matches in multiple fields
+    session = AIInteraction(
+        ai_tool="claude-code",
+        prompt="Testing the system",
+        response_summary="We tested multiple features",
+        title="Testing Session",
+        is_session=True,
+        timestamp=datetime.now(),
+        keywords=json.dumps(["testing", "qa"])
+    )
+    temp_db.add(session)
+    temp_db.commit()
+
+    # Search for "testing" - should match keywords, title, prompt, and summary
+    result_json = server.search_sessions.fn(query="testing")
+    result = json.loads(result_json)
+
+    assert result["count"] == 1
+    match_fields = result["sessions"][0]["match_fields"]
+    assert "keywords" in match_fields, "Should match in keywords"
+    assert "title" in match_fields, "Should match in title"
+    # Note: prompt and summary matches depend on search_prompts/search_summaries parameters
+
+
+def test_search_sessions_includes_relevance_score(temp_db):
+    """Test search_sessions includes relevance score."""
+    # Create session
+    session = AIInteraction(
+        ai_tool="claude-code",
+        prompt="Test prompt",
+        response_summary="Test summary",
+        is_session=True,
+        timestamp=datetime.now(),
+        keywords=json.dumps(["testing"])
+    )
+    temp_db.add(session)
+    temp_db.commit()
+
+    # Search
+    result_json = server.search_sessions.fn(query="testing")
+    result = json.loads(result_json)
+
+    assert result["count"] == 1
+    assert "relevance_score" in result["sessions"][0], "relevance_score should be included"
+    assert result["sessions"][0]["relevance_score"] > 0, "Score should be positive"
+
+
+def test_search_sessions_relevance_score_weighting(temp_db):
+    """Test that keyword matches score higher than summary matches."""
+    # Session with keyword match (weight 3x)
+    session1 = AIInteraction(
+        ai_tool="claude-code",
+        prompt="Other topic",
+        response_summary="Other topic",
+        is_session=True,
+        timestamp=datetime.now(),
+        keywords=json.dumps(["bug-fix", "critical"])
+    )
+    # Session with only summary match (weight 1x)
+    session2 = AIInteraction(
+        ai_tool="claude-code",
+        prompt="Different topic",
+        response_summary="Found a critical bug-fix needed",
+        is_session=True,
+        timestamp=datetime.now(),
+        keywords=json.dumps(["other", "stuff"])
+    )
+    temp_db.add_all([session1, session2])
+    temp_db.commit()
+
+    # Search for "bug-fix"
+    result_json = server.search_sessions.fn(query="bug-fix")
+    result = json.loads(result_json)
+
+    assert result["count"] == 2
+    # First result should be session1 (keyword match, higher score)
+    assert result["sessions"][0]["id"] == session1.id, "Keyword match should rank higher"
+    assert result["sessions"][0]["relevance_score"] > result["sessions"][1]["relevance_score"], \
+        "Keyword match should have higher score than summary match"
+
+
+def test_search_sessions_sorts_by_relevance(temp_db):
+    """Test search_sessions sorts results by relevance score (highest first)."""
+    # Create 2 sessions with different relevance scores
+    # Session with keyword + title match (high score: 3.0 + 2.0 = 5.0)
+    high_score_session = AIInteraction(
+        ai_tool="claude-code",
+        prompt="Other",
+        response_summary="Other",
+        title="TDD session",  # Title match: +2.0
+        is_session=True,
+        timestamp=datetime.now(),
+        keywords=json.dumps(["tdd", "testing"])  # Keyword match: +3.0
+    )
+    # Session with only keyword match (lower score: 3.0)
+    low_score_session = AIInteraction(
+        ai_tool="claude-code",
+        prompt="Other work",
+        response_summary="Other content",
+        title="Other Session",
+        is_session=True,
+        timestamp=datetime.now(),
+        keywords=json.dumps(["tdd", "docs"])  # Keyword match only: 3.0
+    )
+    temp_db.add_all([low_score_session, high_score_session])  # Add in reverse order
+    temp_db.commit()
+
+    # Search for "TDD"
+    result_json = server.search_sessions.fn(query="TDD")
+    result = json.loads(result_json)
+
+    assert result["count"] == 2
+    # Should be sorted by relevance: high_score (5.0) > low_score (3.0)
+    assert result["sessions"][0]["id"] == high_score_session.id, "Higher score should rank first"
+    assert result["sessions"][1]["id"] == low_score_session.id, "Lower score should rank second"
+    assert result["sessions"][0]["relevance_score"] > result["sessions"][1]["relevance_score"], \
+        "First result should have higher score"
+
+
 def test_get_sessions_summaries_returns_multiple(temp_db):
     """Test get_sessions_summaries retrieves multiple sessions."""
     # Create 3 sessions
