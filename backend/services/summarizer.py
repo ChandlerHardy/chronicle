@@ -762,6 +762,15 @@ Summary:"""
 
         qprint(f"📦 Chunk size: {chunk_size_lines:,} lines (optimized for {complexity} session)")
 
+        # Adaptive summary length targets based on session complexity
+        target_summary_lengths = {
+            "small": 2500,   # Good detail for quick sessions
+            "medium": 4000,  # Balanced detail with more narrative depth
+            "large": 5500    # Comprehensive for complex sessions
+        }
+        target_length = target_summary_lengths[complexity]
+        qprint(f"📏 Target summary length: {target_length:,} characters")
+
         num_chunks = (total_lines + chunk_size_lines - 1) // chunk_size_lines  # Ceiling division
         qprint(f"🔢 Total chunks: {num_chunks}")
 
@@ -825,21 +834,23 @@ Summary:"""
             # Generate prompt based on whether this is the first chunk
             if chunk_num == 0:
                 # First chunk - just summarize it
-                prompt = f"""Summarize this development session transcript chunk. Tell the story of what was built.
+                prompt = f"""Summarize this development session transcript chunk in approximately {target_length} characters. Tell the story of what was built - what problems were encountered, how they were solved, what was implemented, and what decisions were made.
+
+TARGET LENGTH: {target_length} characters (provide comprehensive detail while staying within bounds)
 
 FOCUS ON (in priority order):
-1. What was accomplished (features, milestones, fixes)
-2. Specific files created/modified (with details)
-3. Tests written (count them!)
-4. Git commits (extract verbatim if found)
-5. Technical decisions and why
+1. **Implementation work**: What code/features were actually built
+2. **Specific files created/modified** (with details)
+3. **Tests written** (count them!)
+4. **Git commits** (extract verbatim if found)
+5. **Technical decisions and why**
 
 IGNORE:
 - Repeated conversations (if same explanation appears 20x, mention once)
 - Background Q&A that didn't lead to implementation
 - UI chrome and decorations
 
-Keep the summary narrative and technical (2-3 paragraphs).
+Keep the summary narrative and technical while respecting the target length.
 
 Transcript chunk:
 {chunk_text}
@@ -847,7 +858,13 @@ Transcript chunk:
 Summary:"""
             else:
                 # Subsequent chunks - update the cumulative summary
-                prompt = f"""You are maintaining a running summary of a development session. Integrate new activity into the existing narrative.
+                prompt = f"""You are maintaining a running summary of a development session. Your task is to integrate new activity into the existing narrative while keeping the TOTAL updated summary under {target_length} characters.
+
+IMPORTANT LENGTH CONSTRAINT:
+- Current summary length: {len(cumulative_summary)} characters
+- Target total length: {target_length} characters
+- Use the full target length - integrate new information comprehensively
+- If near the limit, condense previous details when adding new information
 
 PREVIOUS SUMMARY (everything up to line {start_line}):
 {cumulative_summary}
@@ -861,6 +878,7 @@ INSTRUCTIONS:
 - Skip repeated conversations (if LangChain explained 10x, you already summarized it once)
 - Extract git commits verbatim (they're the best signal)
 - Keep it cohesive and well-organized
+- **RESPECT THE LENGTH CONSTRAINT** - this is critical
 
 Updated Summary:"""
 
@@ -1011,6 +1029,13 @@ Updated Summary:"""
                     qprint(f"⏱️  Waiting {delay:.1f}s before next chunk (adaptive rate limit)...")
                     time.sleep(delay)
                     qprint()
+
+        # Check if summary exceeded target length
+        final_length = len(cumulative_summary)
+        if final_length > target_length * 1.2:  # 20% buffer
+            qprint(f"⚠️  Summary length ({final_length} chars) exceeds target ({target_length} chars) by {((final_length/target_length - 1) * 100):.1f}%")
+        else:
+            qprint(f"✅ Summary length: {final_length} chars (target: {target_length})")
 
         # Extract keywords from final summary
         qprint()

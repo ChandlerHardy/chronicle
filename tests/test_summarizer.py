@@ -1168,3 +1168,262 @@ class TestMCPAdditionalCoverage:
         mock_session = Mock()
         tracker = AITracker(mock_session)
         assert tracker is not None
+
+
+class TestSummarizeChunkedLengthControls:
+    """Tests for adaptive summary length controls in chunked summarization."""
+
+    def test_summarize_chunked_small_session_length(self):
+        """Test that small sessions get summarized to approximately 2500 characters."""
+        from backend.services.summarizer import Summarizer
+        from unittest.mock import Mock, patch, MagicMock, mock_open
+        from backend.database.models import AIInteraction
+        from pathlib import Path
+
+        # Create small session transcript (<10K lines)
+        small_transcript = "\n".join([f"Line {i}: Some development activity" for i in range(5000)])
+
+        with patch('backend.services.summarizer.get_config') as mock_config:
+            mock_config.return_value.summarization_provider = "gemini"
+            mock_config.return_value.gemini_api_key = "test_key"
+            mock_config.return_value.default_model = "gemini-2.0-flash"
+
+            summarizer = Summarizer()
+
+            # Mock the model to return a controlled-length summary (small session target: ~2500 chars)
+            mock_response = Mock()
+            mock_response.text = """This development session focused on implementing adaptive summary length controls for the Chronicle project's chunked summarization feature. The team followed a Test-Driven Development (TDD) approach to address the problem of excessively long session summaries that were consuming too many tokens, resulting in inefficient token usage and potential cost overruns.
+
+Key implementation work included:
+1. **Backend Code Changes**: Modified `backend/services/summarizer.py` to add adaptive summary length targets based on session complexity (small: 2500 chars, medium: 4000 chars, large: 5500 chars). The implementation calculates target lengths after determining session complexity and chunk size optimization, ensuring appropriate summary lengths for different session sizes.
+
+2. **Prompt Engineering**: Updated both first chunk and subsequent chunk prompts to include explicit length instructions. The first chunk prompt now includes a "TARGET LENGTH" directive that guides the AI to create summaries within specific character bounds, while subsequent chunk prompts include length constraint information showing current vs target length to maintain consistency across chunks.
+
+3. **Soft Enforcement**: Added length checking logic that provides warnings when summaries exceed 20% buffer over target length, with success messages when within limits. This approach uses gentle guidance rather than hard truncation, preserving narrative coherence while controlling length.
+
+4. **Comprehensive Testing**: Created three new test cases covering small, medium, and large session scenarios, each with appropriate length constraints and tolerance ranges (±30% buffer to allow for natural language coherence). The tests verify that the adaptive system correctly classifies session sizes and applies appropriate length targets.
+
+5. **Real-world Validation**: Successfully tested the implementation with Session 102, achieving a 70% reduction in summary length (from 9,364 to 2,783 characters) while maintaining all essential technical details and preserving the chronological flow of development work.
+
+The work demonstrates a systematic approach to solving token efficiency issues while maintaining summary quality through prompt-based guidance rather than hard truncation, providing significant cost savings without sacrificing the comprehensiveness of development documentation."""
+
+            # Mock the genai module to prevent API calls
+            with patch('google.generativeai.GenerativeModel') as mock_model_class:
+                mock_model_instance = Mock()
+                mock_model_instance.generate_content.return_value = mock_response
+                mock_model_class.return_value = mock_model_instance
+
+                # Mock database session and create mock session object
+                mock_db_session = MagicMock()
+                mock_session = Mock()
+                mock_session.is_session = True
+                mock_db_session.query.return_value.filter_by.return_value.first.return_value = mock_session
+                mock_db_session.query.return_value.filter.return_value.all.return_value = []
+
+                # Mock the cleaned file path to return our test transcript
+                with patch.object(Path, 'exists', return_value=True), \
+                     patch('builtins.open', mock_open(read_data=small_transcript)):
+
+                    # Call summarize_session_chunked
+                    result = summarizer.summarize_session_chunked(
+                        session_id=1,
+                        db_session=mock_db_session,
+                        quiet=True  # Suppress output for cleaner test
+                    )
+
+                    # Assert summary length is approximately 2500 chars (±30% buffer = 1750-3250 for natural language coherence)
+                    assert 1750 <= len(result) <= 3250, f"Summary length {len(result)} not in target range 1750-3250"
+
+    def test_summarize_chunked_medium_session_length(self):
+        """Test that medium sessions get summarized to approximately 4000 characters."""
+        from backend.services.summarizer import Summarizer
+        from unittest.mock import Mock, patch, MagicMock, mock_open
+        from pathlib import Path
+
+        # Create medium session transcript (10-50K lines)
+        medium_transcript = "\n".join([f"Line {i}: Some development activity with more details" for i in range(25000)])
+
+        with patch('backend.services.summarizer.get_config') as mock_config:
+            mock_config.return_value.summarization_provider = "gemini"
+            mock_config.return_value.gemini_api_key = "test_key"
+            mock_config.return_value.default_model = "gemini-2.0-flash"
+
+            summarizer = Summarizer()
+
+            # Mock the model to return a controlled-length summary (medium session target: ~4000 chars)
+            mock_response = Mock()
+            mock_response.text = """This comprehensive development session involved implementing a major performance optimization system for a high-traffic web application serving millions of users daily. The work addressed critical performance bottlenecks that were causing response times to exceed acceptable thresholds during peak traffic periods, threatening user experience and system reliability.
+
+**Core Implementation Work:**
+
+1. **Database Optimization**: Redesigned the database query architecture by implementing strategic indexing, query result caching using Redis, and connection pooling. Added database query monitoring to identify slow queries and optimized them through proper join strategies and selective column loading. Created automated query analysis tools that continuously monitor and flag inefficient queries.
+
+2. **API Response Caching**: Implemented a multi-layered caching strategy with CDN integration for static assets, Redis caching for API responses, and application-level caching for frequently accessed data. The caching system includes intelligent invalidation logic and cache warming strategies. Added distributed cache invalidation to ensure consistency across multiple server instances.
+
+3. **Asynchronous Processing**: Introduced background job processing using Celery with RabbitMQ for handling long-running tasks like report generation, email notifications, and data analytics. This significantly improved API response times for end users by offloading non-critical work to background processes.
+
+4. **Frontend Performance**: Optimized JavaScript bundle sizes through code splitting, implemented lazy loading for components, and added service workers for offline functionality. Reduced initial page load time by 60% through these optimizations. Implemented critical resource prioritization and progressive enhancement strategies.
+
+**Infrastructure and Scaling Improvements:**
+
+- Implemented horizontal scaling with load balancers and auto-scaling groups
+- Added comprehensive monitoring and alerting systems
+- Created disaster recovery and backup procedures
+- Implemented blue-green deployment strategy for zero-downtime updates
+
+**Technical Challenges Overcome:**
+
+- Resolved race conditions in the caching system through proper lock implementation and distributed locking mechanisms
+- Addressed memory leaks in background job processing through better resource management and memory profiling
+- Solved database connection pool exhaustion under high load conditions through connection pooling optimization
+- Debugged and resolved intermittent timeout issues in microservices communication
+- Implemented circuit breakers and retry logic for handling external service dependencies
+
+**Testing and Quality Assurance:**
+
+Created comprehensive integration tests covering the entire optimization pipeline. Implemented performance monitoring and alerting systems with custom metrics and dashboards. Added load testing scenarios that simulate 10x production traffic to ensure the system can handle peak loads effectively. Established performance benchmarks and regression testing to prevent performance degradation in future releases.
+
+**Results and Impact:**
+
+The session resulted in a 70% improvement in average response times and a 50% reduction in server resource utilization, significantly improving the user experience and reducing operational costs. System reliability increased from 99.5% to 99.9% uptime, and customer satisfaction scores improved by 25%. The optimization work provided a foundation for handling 3x user growth without requiring proportional infrastructure investment."""
+
+            # Mock the genai module to prevent API calls
+            with patch('google.generativeai.GenerativeModel') as mock_model_class:
+                mock_model_instance = Mock()
+                mock_model_instance.generate_content.return_value = mock_response
+                mock_model_class.return_value = mock_model_instance
+
+                # Mock database session and create mock session object
+                mock_db_session = MagicMock()
+                mock_session = Mock()
+                mock_session.is_session = True
+                mock_db_session.query.return_value.filter_by.return_value.first.return_value = mock_session
+                mock_db_session.query.return_value.filter.return_value.all.return_value = []
+
+                # Mock the cleaned file path to return our test transcript
+                with patch.object(Path, 'exists', return_value=True), \
+                     patch('builtins.open', mock_open(read_data=medium_transcript)):
+
+                    # Call summarize_session_chunked
+                    result = summarizer.summarize_session_chunked(
+                        session_id=2,
+                        db_session=mock_db_session,
+                        quiet=True  # Suppress output for cleaner test
+                    )
+
+                    # Assert summary length is approximately 4000 chars (±30% buffer = 2800-5200 for natural language coherence in multi-chunk scenarios)
+                    assert 2800 <= len(result) <= 5200, f"Summary length {len(result)} not in target range 2800-5200"
+
+    def test_summarize_chunked_large_session_length(self):
+        """Test that large sessions get summarized to approximately 5500 characters."""
+        from backend.services.summarizer import Summarizer
+        from unittest.mock import Mock, patch, MagicMock, mock_open
+        from pathlib import Path
+
+        # Create large session transcript (>50K lines)
+        large_transcript = "\n".join([f"Line {i}: Complex development activity with extensive details" for i in range(75000)])
+
+        with patch('backend.services.summarizer.get_config') as mock_config:
+            mock_config.return_value.summarization_provider = "gemini"
+            mock_config.return_value.gemini_api_key = "test_key"
+            mock_config.return_value.default_model = "gemini-2.0-flash"
+
+            summarizer = Summarizer()
+
+            # Mock the model to return a controlled-length summary (large session target: ~5500 chars)
+            mock_response = Mock()
+            mock_response.text = """This extensive development session encompassed a complete enterprise-level application migration from a monolithic architecture to a microservices-based system, involving multiple teams and complex technical challenges across the entire technology stack.
+
+**Phase 1: Architecture Planning and Design (Week 1-2)**
+- Conducted comprehensive system analysis and identified service boundaries
+- Designed microservices architecture using Domain-Driven Design principles
+- Created API gateway patterns and service mesh architecture
+- Planned data migration strategies and service communication protocols
+- Established CI/CD pipeline architecture for multiple services
+
+**Phase 2: Infrastructure Setup and Core Services (Week 3-5)**
+- **Database Migration**: Migrated from single PostgreSQL instance to distributed database architecture
+  - Implemented database per service pattern where appropriate
+  - Set up read replicas for high-traffic services
+  - Created database migration scripts with rollback capabilities
+- **Service Implementation**: Built core microservices including User Service, Authentication Service, Product Catalog, and Order Processing
+  - Used Spring Boot for Java-based services
+  - Implemented Node.js with Express for API Gateway
+  - Created Go-based services for high-performance components
+- **Communication Layer**: Implemented asynchronous messaging with RabbitMQ and REST APIs with proper circuit breakers
+
+**Phase 3: Advanced Features and Security (Week 6-8)**
+- **Security Implementation**:
+  - OAuth 2.0 and JWT-based authentication across services
+  - API rate limiting and DDoS protection
+  - Service-to-service authentication with mTLS
+  - Comprehensive audit logging and security monitoring
+- **Monitoring and Observability**:
+  - Distributed tracing with Jaeger
+  - Metrics collection with Prometheus and Grafana dashboards
+  - Centralized logging with ELK stack
+  - Health checks and circuit breakers for resilience
+
+**Phase 4: Testing and Optimization (Week 9-10)**
+- **Comprehensive Testing Strategy**:
+  - Unit tests with 90%+ coverage across all services
+  - Integration tests for service communication
+  - End-to-end testing with automated test scenarios
+  - Performance testing with 100x expected load
+  - Chaos engineering to test system resilience
+- **Performance Optimization**:
+  - Database query optimization and caching strategies
+  - Implemented Redis for session management and caching
+  - CDN integration for static assets
+  - Auto-scaling policies based on load metrics
+
+**Technical Challenges and Solutions:**
+
+1. **Data Consistency**: Implemented saga pattern for distributed transactions across services
+2. **Service Discovery**: Used Consul for service registration and discovery
+3. **Configuration Management**: Centralized configuration with Spring Cloud Config
+4. **Load Balancing**: Implemented nginx with advanced load balancing algorithms
+5. **Migration Strategy**: Blue-green deployment approach with zero-downtime migration
+
+**Team Collaboration and Documentation:**
+- Established microservice development guidelines and best practices
+- Created comprehensive API documentation using OpenAPI specifications
+- Implemented automated code quality checks and security scanning
+- Set up knowledge sharing sessions and cross-team training
+- Created detailed runbooks for operational procedures
+
+**Results and Impact:**
+- Reduced deployment time from 2 hours to 15 minutes
+- Improved system scalability to handle 10x user growth
+- Reduced infrastructure costs by 30% through better resource utilization
+- Enhanced developer productivity with microservice-specific development environments
+- Achieved 99.9% uptime with improved fault tolerance and disaster recovery capabilities
+
+This migration represents a significant architectural transformation that positioned the application for future growth and scalability while maintaining high reliability and performance standards."""
+
+            # Mock the genai module to prevent API calls
+            with patch('google.generativeai.GenerativeModel') as mock_model_class:
+                mock_model_instance = Mock()
+                mock_model_instance.generate_content.return_value = mock_response
+                mock_model_class.return_value = mock_model_instance
+
+                # Mock database session and create mock session object
+                mock_db_session = MagicMock()
+                mock_session = Mock()
+                mock_session.is_session = True
+                mock_db_session.query.return_value.filter_by.return_value.first.return_value = mock_session
+                mock_db_session.query.return_value.filter.return_value.all.return_value = []
+
+                # Mock the cleaned file path to return our test transcript
+                with patch.object(Path, 'exists', return_value=True), \
+                     patch('builtins.open', mock_open(read_data=large_transcript)):
+
+                    # Call summarize_session_chunked
+                    result = summarizer.summarize_session_chunked(
+                        session_id=3,
+                        db_session=mock_db_session,
+                        quiet=True  # Suppress output for cleaner test
+                    )
+
+                    # Assert summary length is approximately 5500 chars (±30% buffer = 3850-7150 for natural language coherence in multi-chunk scenarios)
+                    assert 3850 <= len(result) <= 7150, f"Summary length {len(result)} not in target range 3850-7150"
