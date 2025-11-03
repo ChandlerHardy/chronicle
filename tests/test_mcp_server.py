@@ -308,6 +308,118 @@ def test_search_sessions_limits_results(temp_db):
     assert result["count"] == 3
 
 
+def test_search_sessions_hyphenated_keywords(temp_db):
+    """Test search_sessions handles hyphenated keywords like 'test-driven-development'."""
+    # Create session with hyphenated keyword
+    session = AIInteraction(
+        ai_tool="claude-code",
+        prompt="Implementing TDD workflow",
+        response_summary="Working on test-driven development practices",
+        is_session=True,
+        timestamp=datetime.now(),
+        keywords=json.dumps(["test-driven-development", "tdd", "pytest"])
+    )
+    temp_db.add(session)
+    temp_db.commit()
+
+    # Search for hyphenated term - should find the session
+    result_json = server.search_sessions.fn(query="test-driven-development")
+    result = json.loads(result_json)
+
+    assert result["count"] == 1, f"Expected 1 result for 'test-driven-development', got {result['count']}"
+    assert result["sessions"][0]["id"] == session.id
+
+
+def test_search_sessions_multi_term_query(temp_db):
+    """Test search_sessions with multi-term query (implicit OR)."""
+    # Create sessions with different keywords
+    session1 = AIInteraction(
+        ai_tool="claude-code",
+        prompt="TDD session",
+        response_summary="Working on TDD",
+        is_session=True,
+        timestamp=datetime.now(),
+        keywords=json.dumps(["tdd", "testing"])
+    )
+    session2 = AIInteraction(
+        ai_tool="claude-code",
+        prompt="Coverage session",
+        response_summary="Improving test coverage",
+        is_session=True,
+        timestamp=datetime.now(),
+        keywords=json.dumps(["coverage", "pytest"])
+    )
+    session3 = AIInteraction(
+        ai_tool="claude-code",
+        prompt="Milestone session",
+        response_summary="Working on milestone",
+        is_session=True,
+        timestamp=datetime.now(),
+        keywords=json.dumps(["milestone", "roadmap"])
+    )
+    temp_db.add_all([session1, session2, session3])
+    temp_db.commit()
+
+    # Multi-term query should match any session containing ANY of the terms
+    result_json = server.search_sessions.fn(query="tdd coverage milestone")
+    result = json.loads(result_json)
+
+    assert result["count"] >= 3, f"Expected at least 3 results for multi-term query, got {result['count']}"
+    session_ids = {s["id"] for s in result["sessions"]}
+    assert session1.id in session_ids, "Session with 'tdd' not found"
+    assert session2.id in session_ids, "Session with 'coverage' not found"
+    assert session3.id in session_ids, "Session with 'milestone' not found"
+
+
+def test_search_sessions_explicit_or_operator(temp_db):
+    """Test search_sessions with explicit OR operator."""
+    # Create sessions with different keywords
+    session1 = AIInteraction(
+        ai_tool="claude-code",
+        prompt="TDD session",
+        is_session=True,
+        timestamp=datetime.now(),
+        keywords=json.dumps(["tdd"])
+    )
+    session2 = AIInteraction(
+        ai_tool="claude-code",
+        prompt="Coverage session",
+        is_session=True,
+        timestamp=datetime.now(),
+        keywords=json.dumps(["coverage"])
+    )
+    temp_db.add_all([session1, session2])
+    temp_db.commit()
+
+    # Explicit OR should work
+    result_json = server.search_sessions.fn(query="tdd OR coverage")
+    result = json.loads(result_json)
+
+    assert result["count"] >= 2, f"Expected at least 2 results for 'tdd OR coverage', got {result['count']}"
+
+
+def test_search_sessions_hyphenated_in_multi_term(temp_db):
+    """Test search_sessions with hyphenated term in multi-term query."""
+    # Create session with both hyphenated and regular keywords
+    session = AIInteraction(
+        ai_tool="claude-code",
+        prompt="TDD and coverage work",
+        response_summary="Implementing test-driven development with coverage tracking",
+        is_session=True,
+        timestamp=datetime.now(),
+        keywords=json.dumps(["test-driven-development", "tdd", "coverage", "pytest"])
+    )
+    temp_db.add(session)
+    temp_db.commit()
+
+    # Query with hyphenated term + other terms should work
+    result_json = server.search_sessions.fn(query="test-driven-development coverage pytest")
+    result = json.loads(result_json)
+
+    assert result["count"] >= 1, f"Expected at least 1 result for hyphenated multi-term query, got {result['count']}"
+    assert result["sessions"][0]["id"] == session.id
+
+
 def test_get_sessions_summaries_returns_multiple(temp_db):
     """Test get_sessions_summaries retrieves multiple sessions."""
     # Create 3 sessions

@@ -260,9 +260,13 @@ def search_sessions(
         # Split on whitespace and OR the tokens for broader results
         tokens = query.split()
         if len(tokens) > 1:
-            base_query = " OR ".join(tokens)
+            # Quote hyphenated terms to prevent FTS5 from treating hyphens as operators
+            # FTS5 interprets "test-driven" as "test" minus column "driven", which fails
+            quoted_tokens = [f'"{token}"' if '-' in token else token for token in tokens]
+            base_query = " OR ".join(quoted_tokens)
         else:
-            base_query = query
+            # Single token - quote if hyphenated
+            base_query = f'"{query}"' if '-' in query else query
 
     if len(fts_columns) == 3:
         # All columns enabled - search across all columns
@@ -302,20 +306,29 @@ def search_sessions(
     except Exception as e:
         # Fall back to old LIKE-based search if FTS5 query fails
         # (e.g., sessions_fts table doesn't exist yet)
+        # Use tokenized query (split into individual terms) for LIKE search
+        search_terms = query.split()
+
         filters = []
-        if search_summaries:
-            filters.append(AIInteraction.response_summary.like(f"%{query}%"))
-        if search_prompts:
-            filters.append(AIInteraction.prompt.like(f"%{query}%"))
-        if search_keywords:
-            filters.append(AIInteraction.keywords.like(f"%{query}%"))
+        for term in search_terms:
+            # Search for each term independently (implicit OR)
+            term_filters = []
+            if search_summaries:
+                term_filters.append(AIInteraction.response_summary.like(f"%{term}%"))
+            if search_prompts:
+                term_filters.append(AIInteraction.prompt.like(f"%{term}%"))
+            if search_keywords:
+                term_filters.append(AIInteraction.keywords.like(f"%{term}%"))
+
+            if term_filters:
+                filters.append(or_(*term_filters))
 
         query_obj = db.query(AIInteraction).options(
             defer(AIInteraction.session_transcript)
         ).filter(
             and_(
                 AIInteraction.is_session == 1,
-                or_(*filters)
+                or_(*filters) if filters else True
             )
         )
 
