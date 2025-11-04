@@ -3192,14 +3192,26 @@ def setup_hooks(force: bool):
         config_dir.mkdir(exist_ok=True)
         console.print("[green]✓[/green] Created directory structure")
 
-        # Get Chronicle repo path (current working directory should be chronicle repo)
+        # Get Chronicle repo path - find the directory containing .claude/hooks
         repo_path = Path.cwd()
         source_hooks_dir = repo_path / ".claude" / "hooks"
         source_config_dir = repo_path / ".claude" / "config"
 
+        # If not found in current directory, look in parent directories
+        search_path = repo_path
+        while search_path != search_path.parent:
+            if (search_path / ".claude" / "hooks").exists():
+                repo_path = search_path
+                source_hooks_dir = repo_path / ".claude" / "hooks"
+                source_config_dir = repo_path / ".claude" / "config"
+                break
+            search_path = search_path.parent
+
         if not source_hooks_dir.exists():
             console.print(f"[red]✗[/red] Source hooks directory not found: {source_hooks_dir}")
             console.print("[dim]Make sure you're running this from the Chronicle repository[/dim]")
+            console.print(f"[dim]Current directory: {Path.cwd()}[/dim]")
+            console.print(f"[dim]Looked for: .claude/hooks in current directory and parent directories[/dim]")
             return
 
         # Copy hook scripts
