@@ -48,8 +48,8 @@ if [[ ! -f "$CONFIG_FILE" ]]; then
         if ! echo "$user_prompt" | grep -iqE "(read|view|show|explain|what is|search.*chronicle|mcp__chronicle)"; then
             output_context "🔍 SEARCH CHRONICLE FIRST
 
-⚠️ Before implementing, run:
-mcp__chronicle__search_sessions(query=\"relevant keywords\")
+⚠️ Before implementing, use chronicle-context-retriever skill:
+'How did I implement X last time?' or 'What was the blocker with Y?'
 
 WHY: 2,700x ROI - 1 second vs 20 minutes
 Proof: Sessions 21, 30, 31 show reinventing wastes time"
@@ -132,8 +132,8 @@ if echo "$user_prompt" | grep -iqE "(implement|add|create|build|fix|debug)"; the
     if ! echo "$user_prompt" | grep -iqE "(read|view|show|explain)"; then
         output_context "🔍 SEARCH CHRONICLE FIRST
 
-⚠️ Before implementing, run:
-mcp__chronicle__search_sessions(query=\"relevant keywords\")
+⚠️ Before implementing, use chronicle-context-retriever skill:
+'How did I implement X last time?' or 'What was the blocker with Y?'
 
 WHY: 2,700x ROI - 1 second vs 20 minutes
 Proof: Sessions 21, 30, 31 show reinventing wastes time"

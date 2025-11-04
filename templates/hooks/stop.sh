@@ -27,21 +27,10 @@ checklist="━━━━━━━━━━━━━━━━━━━━━━━
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 "
 
-# Check session tracking - try MCP call directly with error handling
-session_status=$(mcp__chronicle__get_current_session 2>/dev/null || echo '{"active": false}')
-if echo "$session_status" | jq -r '.active // false' 2>/dev/null | grep -q true; then
-    checklist+="✅ Session tracking: Active\n"
-elif echo "$session_status" | jq -e '.error' 2>/dev/null >/dev/null; then
-    # MCP tool exists but returned an error
-    checklist+="⚠️  Session tracking error (MCP issue)
-   💡 Tip: Check MCP server status
+# Session tracking reminder - let chronicle-assistant-guide skill handle this
+checklist+="❓ Session tracking: Use chronicle-assistant-guide skill
+   💡 The chronicle-assistant-guide skill provides complete workflow guidance
 "
-else
-    # MCP tool not available or other issue
-    checklist+="❓ Session tracking: Not checked
-   💡 Tip: Run 'chronicle start claude' to track work
-"
-fi
 
 # Add TDD reminder (always show)
 checklist+="
@@ -51,7 +40,7 @@ checklist+="
 # Add search reminder (always show)
 checklist+="
 🔍 Did you search Chronicle first?
-   💡 Try: mcp__chronicle__search_sessions(query=\"...\")
+   💡 Use chronicle-context-retriever skill: 'How did I implement X last time?'
    ⚡ 2,700x ROI - 1 second vs 20 minutes
 "
 
