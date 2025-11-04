@@ -293,14 +293,14 @@ Registers hooks with Claude Code:
     "UserPromptSubmit": [{
       "hooks": [{
         "type": "command",
-        "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/user-prompt-submit.sh",
+        "command": "~/.claude/hooks/user-prompt-submit.sh",
         "timeout": 5
       }]
     }],
     "Stop": [{
       "hooks": [{
         "type": "command",
-        "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/stop.sh",
+        "command": "~/.claude/hooks/stop.sh",
         "timeout": 5
       }]
     }],
@@ -308,7 +308,7 @@ Registers hooks with Claude Code:
       "matcher": "Edit|Write|NotebookEdit",
       "hooks": [{
         "type": "command",
-        "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/post-tool-use.sh",
+        "command": "~/.claude/hooks/post-tool-use.sh",
         "timeout": 5
       }]
     }]

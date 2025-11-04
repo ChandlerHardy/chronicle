@@ -1,0 +1,152 @@
+{
+  "chronicleAdvocate": {
+    "triggers": {
+      "keywords": ["implement", "add", "create", "build", "fix", "debug", "write"],
+      "phrases": [
+        "(?i)can't believe",
+        "(?i)why (isn't|doesn't|won't|can't)",
+        "(?i)this should",
+        "(?i)I (want|need) to (build|add|implement|create)",
+        "(?i)let's (build|add|implement|create)"
+      ],
+      "excludes": ["read", "view", "show", "explain", "what is", "search.*chronicle", "mcp__chronicle"]
+    },
+    "message": "🔍 SEARCH CHRONICLE FIRST\n\n⚠️ Before implementing, run:\nmcp__chronicle__search_sessions(query=\"relevant keywords\")\n\nWHY: 2,700x ROI - 1 second vs 20 minutes\nProof: Sessions 21, 30, 31 show reinventing wastes time"
+  },
+  "tddReminder": {
+    "triggers": {
+      "keywords": ["function", "class", "method"],
+      "phrases": [
+        "(?i)(write|add|create) (function|class|method|feature)"
+      ]
+    },
+    "message": "🧪 TDD Reminder: Write tests first (red-green-refactor)"
+  },
+  "skillActivation": {
+    "chronicle-session-documenter": {
+      "priority": 90,
+      "skillCommand": "chronicle-session-documenter",
+      "triggers": {
+        "keywords": [],
+        "phrases": [
+          "(?i)document session",
+          "(?i)export.*(session.*)?to obsidian",
+          "(?i)save.*(session.*)?to (vault|obsidian)",
+          "(?i)create (note|obsidian note) for",
+          "(?i)document (this|today'?s|my) (work|session)",
+          "(?i)document.*to (vault|obsidian)"
+        ],
+        "excludes": ["document.*code", "documentation.*for", "how to document", "documenting.*code"]
+      },
+      "message": "🎯 SKILL DETECTED: chronicle-session-documenter\n\nYour prompt matches documenting sessions to Obsidian vault.\n\nThis skill automates:\n- Fetching session summary from Chronicle\n- Creating structured Obsidian notes\n- Adding metadata, wikilinks, and tags\n\nLoad with: Skill(command=\"chronicle-session-documenter\")"
+    },
+    "chronicle-context-retriever": {
+      "priority": 90,
+      "skillCommand": "chronicle-context-retriever",
+      "triggers": {
+        "keywords": ["find", "past", "previous", "history", "recall", "remember"],
+        "phrases": [
+          "(?i)how did (I|we) (implement|fix|build|create|handle|solve)",
+          "(?i)what did (I|we) do (yesterday|last week|last month|before)",
+          "(?i)show me (all |past |previous )?work on",
+          "(?i)what was the blocker",
+          "(?i)when did (I|we) work on",
+          "(?i)find sessions? (about|on|for)",
+          "(?i)search (for |past )?sessions?"
+        ],
+        "excludes": ["mcp__chronicle__search", "chronicle search"]
+      },
+      "message": "🔍 SKILL DETECTED: chronicle-context-retriever\n\nYour prompt matches searching past development sessions.\n\nThis skill helps:\n- Search Chronicle database for relevant sessions\n- Retrieve detailed context from past work\n- Find similar problems and solutions\n- Recall previous decisions and rationale\n\nLoad with: Skill(command=\"chronicle-context-retriever\")"
+    },
+    "chronicle-project-tracker": {
+      "priority": 80,
+      "skillCommand": "chronicle-project-tracker",
+      "triggers": {
+        "keywords": ["milestone", "roadmap", "planning", "progress", "feature"],
+        "phrases": [
+          "(?i)what'?s next",
+          "(?i)show (me )?(the )?roadmap",
+          "(?i)what should (I|we) work on",
+          "(?i)plan (new |a )?feature",
+          "(?i)create (a )?milestone",
+          "(?i)mark.*(milestone|step).*complete",
+          "(?i)what'?s in progress",
+          "(?i)view (the )?milestones?",
+          "(?i)track progress"
+        ],
+        "excludes": []
+      },
+      "message": "📊 SKILL DETECTED: chronicle-project-tracker\n\nYour prompt matches project planning and tracking.\n\nThis skill manages:\n- Database-tracked milestones\n- Next steps and TODOs\n- Roadmap visualization\n- Progress reports\n- Session-to-milestone linking\n\nLoad with: Skill(command=\"chronicle-project-tracker\")"
+    },
+    "chronicle-workflow": {
+      "priority": 70,
+      "skillCommand": "chronicle-workflow",
+      "triggers": {
+        "keywords": ["workflow", "tracking", "setup"],
+        "phrases": [
+          "(?i)start.*(new|a)?.*session",
+          "(?i)how do (I|we) track",
+          "(?i)is this.*(being|session)?.*tracked",
+          "(?i)am I recording",
+          "(?i)set ?up chronicle",
+          "(?i)configure chronicle",
+          "(?i)chronicle workflow"
+        ],
+        "excludes": []
+      },
+      "message": "🔄 SKILL DETECTED: chronicle-workflow\n\nYour prompt matches Chronicle session workflow.\n\nThis skill guides:\n- Starting tracked Chronicle sessions\n- Best practices during development\n- Post-session summarization\n- Multi-project tracking\n- Obsidian integration\n\nLoad with: Skill(command=\"chronicle-workflow\")"
+    },
+    "chronicle-remote-summarizer": {
+      "priority": 60,
+      "skillCommand": "chronicle-remote-summarizer",
+      "triggers": {
+        "keywords": ["remote", "freebsd", "import", "ssh"],
+        "phrases": [
+          "(?i)summarize (session |.*)?on (remote|freebsd)",
+          "(?i)import session from",
+          "(?i)export and summarize",
+          "(?i)(remote|freebsd) session"
+        ],
+        "excludes": []
+      },
+      "message": "🌐 SKILL DETECTED: chronicle-remote-summarizer\n\nYour prompt matches remote session workflows.\n\nThis skill automates:\n- Exporting sessions from remote systems\n- Local summarization with Gemini API\n- Cross-system session management\n- Batch processing\n\nLoad with: Skill(command=\"chronicle-remote-summarizer\")"
+    },
+    "chronicle-assistant-guide": {
+      "priority": 50,
+      "skillCommand": "chronicle-assistant-guide",
+      "triggers": {
+        "keywords": ["how to use chronicle"],
+        "phrases": [
+          "(?i)how do (I|we) use chronicle",
+          "(?i)chronicle (help|guide)"
+        ],
+        "excludes": []
+      },
+      "message": "📚 SKILL DETECTED: chronicle-assistant-guide\n\nYour prompt matches Chronicle usage guidance.\n\nThis skill provides:\n- Universal Chronicle directives\n- Pre-flight checklists\n- MCP tool reference\n- Best practices\n- Common workflows\n\nLoad with: Skill(command=\"chronicle-assistant-guide\")"
+    },
+    "test-driven-development": {
+      "priority": 95,
+      "skillCommand": "test-driven-development",
+      "triggers": {
+        "keywords": [],
+        "phrases": [
+          "let'?s (implement|add|build|write|create)",
+          "yeah let'?s (implement|add|build|write|create)",
+          "(I want|we should|can you)( to)? (implement|add|build|write|create)",
+          "(write|add|create) (a |the |some )?(function|class|method|feature|code)"
+        ],
+        "excludes": [
+          "test",
+          "write.*test",
+          "TDD",
+          "red-green-refactor",
+          "what (does|is)",
+          "how (does|do)",
+          "show me",
+          "explain"
+        ]
+      },
+      "message": "🧪 TDD ENFORCER ACTIVATED\n\nBefore writing implementation code, we MUST:\n\n1. Write a failing test FIRST\n2. Watch it fail (RED)\n3. Write minimal code to pass (GREEN)\n4. Refactor if needed\n\nNo exceptions. The test-driven-development skill has comprehensive guidance.\n\nLoad with: Skill(command=\"test-driven-development\")"
+    }
+  }
+}

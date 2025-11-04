@@ -66,7 +66,9 @@ def setup():
     # Check if already configured
     existing_key = config.get("ai.gemini_api_key")
     if existing_key:
-        console.print(f"[yellow]⚠[/yellow]  Gemini API key already configured: {existing_key[:8]}...{existing_key[-4:]}")
+        console.print(
+            f"[yellow]⚠[/yellow]  Gemini API key already configured: {existing_key[:8]}...{existing_key[-4:]}"
+        )
         if not click.confirm("Do you want to update it?", default=False):
             console.print("[green]✓[/green] Setup cancelled. Configuration unchanged.")
             return
@@ -84,7 +86,7 @@ def setup():
         "Enter your Gemini API key",
         type=str,
         hide_input=True,
-        confirmation_prompt="Confirm API key"
+        confirmation_prompt="Confirm API key",
     )
 
     if not api_key or len(api_key) < 20:
@@ -115,7 +117,7 @@ def setup():
 
 
 @cli.command()
-@click.option('--check-only', is_flag=True, help='Check for updates without installing')
+@click.option("--check-only", is_flag=True, help="Check for updates without installing")
 def update(check_only: bool):
     """Check for and install Chronicle updates."""
     console.print("[bold cyan]Chronicle Update Check[/bold cyan]\n")
@@ -123,6 +125,7 @@ def update(check_only: bool):
     # Find Chronicle installation directory
     try:
         import backend
+
         chronicle_path = Path(backend.__file__).parent.parent
     except Exception:
         console.print("[red]✗[/red] Could not locate Chronicle installation")
@@ -132,7 +135,9 @@ def update(check_only: bool):
     if not (chronicle_path / ".git").exists():
         console.print("[yellow]⚠[/yellow]  Chronicle is not installed from git")
         console.print("This command only works for git-based installations (pip install -e .)")
-        console.print("\nTo update, reinstall from PyPI: [cyan]pip install --upgrade chronicle[/cyan]")
+        console.print(
+            "\nTo update, reinstall from PyPI: [cyan]pip install --upgrade chronicle[/cyan]"
+        )
         return
 
     # Check for updates
@@ -144,7 +149,7 @@ def update(check_only: bool):
             cwd=chronicle_path,
             capture_output=True,
             text=True,
-            timeout=10
+            timeout=10,
         )
 
         if result.returncode != 0:
@@ -156,7 +161,7 @@ def update(check_only: bool):
             ["git", "rev-parse", "--abbrev-ref", "HEAD"],
             cwd=chronicle_path,
             capture_output=True,
-            text=True
+            text=True,
         )
         current_branch = result.stdout.strip()
 
@@ -165,7 +170,7 @@ def update(check_only: bool):
             ["git", "rev-list", "--count", f"HEAD..origin/{current_branch}"],
             cwd=chronicle_path,
             capture_output=True,
-            text=True
+            text=True,
         )
         commits_behind = int(result.stdout.strip())
 
@@ -180,11 +185,11 @@ def update(check_only: bool):
             ["git", "log", "--oneline", f"HEAD..origin/{current_branch}"],
             cwd=chronicle_path,
             capture_output=True,
-            text=True
+            text=True,
         )
 
         console.print("[bold]What's new:[/bold]")
-        for line in result.stdout.strip().split('\n'):
+        for line in result.stdout.strip().split("\n"):
             console.print(f"  • {line}")
 
         if check_only:
@@ -203,7 +208,7 @@ def update(check_only: bool):
             ["git", "pull", "origin", current_branch],
             cwd=chronicle_path,
             capture_output=True,
-            text=True
+            text=True,
         )
 
         if result.returncode != 0:
@@ -217,7 +222,7 @@ def update(check_only: bool):
             ["git", "diff", "HEAD@{1}", "HEAD", "pyproject.toml"],
             cwd=chronicle_path,
             capture_output=True,
-            text=True
+            text=True,
         )
 
         if result.stdout.strip():
@@ -225,19 +230,21 @@ def update(check_only: bool):
 
             # Detect current install mode (check if fastmcp is installed)
             try:
-                import fastmcp
-                install_cmd = [sys.executable, "-m", "pip", "install", "-e", ".[mcp]"]
-                console.print("[dim]Reinstalling with MCP support...[/dim]")
+                import importlib.util
+
+                has_fastmcp = importlib.util.find_spec("fastmcp") is not None
+
+                if has_fastmcp:
+                    install_cmd = [sys.executable, "-m", "pip", "install", "-e", ".[mcp]"]
+                    console.print("[dim]Reinstalling with MCP support...[/dim]")
+                else:
+                    install_cmd = [sys.executable, "-m", "pip", "install", "-e", "."]
+                    console.print("[dim]Reinstalling (minimal)...[/dim]")
             except ImportError:
                 install_cmd = [sys.executable, "-m", "pip", "install", "-e", "."]
                 console.print("[dim]Reinstalling (minimal)...[/dim]")
 
-            result = subprocess.run(
-                install_cmd,
-                cwd=chronicle_path,
-                capture_output=True,
-                text=True
-            )
+            result = subprocess.run(install_cmd, cwd=chronicle_path, capture_output=True, text=True)
 
             if result.returncode != 0:
                 console.print(f"[red]✗[/red] Reinstall failed: {result.stderr}")
@@ -259,8 +266,8 @@ def update(check_only: bool):
 
 
 @cli.command()
-@click.argument('repo_path', type=click.Path(exists=True))
-@click.option('--limit', default=50, help='Number of recent commits to import')
+@click.argument("repo_path", type=click.Path(exists=True))
+@click.option("--limit", default=50, help="Number of recent commits to import")
 def add_repo(repo_path: str, limit: int):
     """Add a git repository to track."""
     db_session = get_session()
@@ -273,7 +280,9 @@ def add_repo(repo_path: str, limit: int):
 
         if commits:
             latest = commits[0]
-            console.print(f"[dim]Latest commit: {latest.sha[:8]} - {latest.message.split(chr(10))[0][:60]}[/dim]")
+            console.print(
+                f"[dim]Latest commit: {latest.sha[:8]} - {latest.message.split(chr(10))[0][:60]}[/dim]"
+            )
 
     except ValueError as e:
         console.print(f"[red]Error:[/red] {e}")
@@ -284,9 +293,9 @@ def add_repo(repo_path: str, limit: int):
 
 
 @cli.command()
-@click.argument('action', type=click.Choice(['today', 'yesterday', 'week']))
-@click.option('--repo', help='Filter by repository path (defaults to current directory)')
-@click.option('--all', 'show_all', is_flag=True, help='Show commits from all repositories')
+@click.argument("action", type=click.Choice(["today", "yesterday", "week"]))
+@click.option("--repo", help="Filter by repository path (defaults to current directory)")
+@click.option("--all", "show_all", is_flag=True, help="Show commits from all repositories")
 def show(action: str, repo: str = None, show_all: bool = False):
     """Show development activity.
 
@@ -304,17 +313,21 @@ def show(action: str, repo: str = None, show_all: bool = False):
     if repo is None and not show_all:
         repo = os.getcwd()
 
-    if action == 'today':
+    if action == "today":
         commits = monitor.get_commits_today(repo_path=repo)
         format_today_summary(commits)
 
-    elif action == 'yesterday':
-        yesterday_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=1)
+    elif action == "yesterday":
+        yesterday_start = datetime.now().replace(
+            hour=0, minute=0, second=0, microsecond=0
+        ) - timedelta(days=1)
         yesterday_end = yesterday_start + timedelta(days=1)
         commits = monitor.get_commits_by_date(yesterday_start, yesterday_end, repo_path=repo)
-        format_commits_list(commits, title=f"Commits from Yesterday ({yesterday_start.strftime('%B %d, %Y')})")
+        format_commits_list(
+            commits, title=f"Commits from Yesterday ({yesterday_start.strftime('%B %d, %Y')})"
+        )
 
-    elif action == 'week':
+    elif action == "week":
         week_start = datetime.now() - timedelta(days=7)
         commits = monitor.get_commits_by_date(week_start, repo_path=repo)
         format_commits_list(commits, title="Commits from Last 7 Days")
@@ -323,7 +336,7 @@ def show(action: str, repo: str = None, show_all: bool = False):
 
 
 @cli.command()
-@click.argument('search_term')
+@click.argument("search_term")
 def search(search_term: str):
     """Search commits by message content."""
     db_session = get_session()
@@ -336,7 +349,7 @@ def search(search_term: str):
 
 
 @cli.command()
-@click.argument('repo_path', type=click.Path(exists=True))
+@click.argument("repo_path", type=click.Path(exists=True))
 def stats(repo_path: str):
     """Show statistics for a repository."""
     db_session = get_session()
@@ -349,8 +362,8 @@ def stats(repo_path: str):
 
 
 @cli.command()
-@click.argument('repo_path', type=click.Path(exists=True))
-@click.option('--limit', default=50, help='Number of recent commits to scan')
+@click.argument("repo_path", type=click.Path(exists=True))
+@click.option("--limit", default=50, help="Number of recent commits to scan")
 def sync(repo_path: str, limit: int):
     """Sync a repository to capture new commits."""
     db_session = get_session()
@@ -371,13 +384,13 @@ def sync(repo_path: str, limit: int):
     db_session.close()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     cli()
 
 
 @cli.command()
-@click.argument('action', type=click.Choice(['today', 'yesterday', 'week']))
-@click.option('--tool', help='Filter by AI tool (gemini, qwen, claude)')
+@click.argument("action", type=click.Choice(["today", "yesterday", "week"]))
+@click.option("--tool", help="Filter by AI tool (gemini, qwen, claude)")
 def ai(action: str, tool: str = None):
     """Show AI interaction history."""
     db_session = get_session()
@@ -387,17 +400,24 @@ def ai(action: str, tool: str = None):
     if tool:
         tool = f"{tool}-cli"
 
-    if action == 'today':
+    if action == "today":
         interactions = tracker.get_interactions_today(ai_tool=tool)
         format_ai_interactions_list(interactions, title="AI Interactions Today")
 
-    elif action == 'yesterday':
-        yesterday_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=1)
+    elif action == "yesterday":
+        yesterday_start = datetime.now().replace(
+            hour=0, minute=0, second=0, microsecond=0
+        ) - timedelta(days=1)
         yesterday_end = yesterday_start + timedelta(days=1)
-        interactions = tracker.get_interactions_by_date(yesterday_start, yesterday_end, ai_tool=tool)
-        format_ai_interactions_list(interactions, title=f"AI Interactions from Yesterday ({yesterday_start.strftime('%B %d, %Y')})")
+        interactions = tracker.get_interactions_by_date(
+            yesterday_start, yesterday_end, ai_tool=tool
+        )
+        format_ai_interactions_list(
+            interactions,
+            title=f"AI Interactions from Yesterday ({yesterday_start.strftime('%B %d, %Y')})",
+        )
 
-    elif action == 'week':
+    elif action == "week":
         week_start = datetime.now() - timedelta(days=7)
         interactions = tracker.get_interactions_by_date(week_start, ai_tool=tool)
         format_ai_interactions_list(interactions, title="AI Interactions from Last 7 Days")
@@ -406,7 +426,7 @@ def ai(action: str, tool: str = None):
 
 
 @cli.command()
-@click.option('--days', default=30, help='Number of days to analyze (default: 30)')
+@click.option("--days", default=30, help="Number of days to analyze (default: 30)")
 def ai_stats(days: int):
     """Show AI tool usage statistics."""
     db_session = get_session()
@@ -431,11 +451,12 @@ def gemini_stats():
     except Exception as e:
         console.print(f"[red]✗[/red] Error fetching Gemini stats: {e}")
         import traceback
+
         traceback.print_exc()
 
 
 @cli.command()
-@click.argument('session_id', type=int)
+@click.argument("session_id", type=int)
 def session(session_id: int):
     """View a session with auto-generated summary.
 
@@ -466,7 +487,7 @@ def session(session_id: int):
     # Check if we need to generate a summary
     if interaction.is_session and not interaction.summary_generated:
         console.print(f"[cyan]Generating summary for session {session_id}...[/cyan]")
-        console.print(f"[dim]Using chunked summarization (handles sessions of any size)[/dim]\n")
+        console.print("[dim]Using chunked summarization (handles sessions of any size)[/dim]\n")
 
         try:
             summarizer = Summarizer()
@@ -476,10 +497,10 @@ def session(session_id: int):
             # - Small (<10K lines): 3K chunks → uses Flash-Preview 2.5
             # - Medium (10-50K lines): 5K chunks → uses Flash-Preview 2.5
             # - Large (>50K lines): 10K chunks → uses Flash 2.0 (1M TPM)
-            summary = summarizer.summarize_session_chunked(
+            summarizer.summarize_session_chunked(
                 session_id=session_id,
                 db_session=db_session,
-                use_cli=False  # Use Gemini API (reliable, free tier)
+                use_cli=False,  # Use Gemini API (reliable, free tier)
             )
 
             console.print("[green]✓[/green] Summary generated!\n")
@@ -498,8 +519,8 @@ def session(session_id: int):
 
 
 @cli.command()
-@click.argument('action', type=click.Choice(['today', 'week']))
-@click.option('--repo', help='Filter by repository path')
+@click.argument("action", type=click.Choice(["today", "week"]))
+@click.option("--repo", help="Filter by repository path")
 def summarize(action: str, repo: str = None):
     """Generate AI-powered summaries of your development activity.
 
@@ -517,23 +538,30 @@ def summarize(action: str, repo: str = None):
     monitor = GitMonitor(db_session)
     tracker = AITracker(db_session)
 
+    # Initialize variables to satisfy linter
+    commits = []
+    interactions = []
+    title = ""
+
     # Get data based on timeframe
-    if action == 'today':
+    if action == "today":
         commits = monitor.get_commits_today(repo_path=repo)
         interactions = tracker.get_interactions_today(repo_path=repo)
         title = f"Summary for {datetime.now().strftime('%B %d, %Y')}"
         if repo:
             from pathlib import Path
+
             repo_name = Path(repo).name
             title += f" - {repo_name}"
 
-    elif action == 'week':
+    elif action == "week":
         week_start = datetime.now() - timedelta(days=7)
         commits = monitor.get_commits_by_date(week_start, repo_path=repo)
         interactions = tracker.get_interactions_by_date(week_start, repo_path=repo)
         title = "Summary for Last 7 Days"
         if repo:
             from pathlib import Path
+
             repo_name = Path(repo).name
             title += f" - {repo_name}"
 
@@ -547,7 +575,9 @@ def summarize(action: str, repo: str = None):
     commit_messages = [f"{c.message}" for c in commits]
     interaction_prompts = [f"{i.prompt}" for i in interactions if i.prompt]
 
-    console.print(f"[dim]Generating summary for {len(commits)} commits and {len(interactions)} AI interactions...[/dim]\n")
+    console.print(
+        f"[dim]Generating summary for {len(commits)} commits and {len(interactions)} AI interactions...[/dim]\n"
+    )
 
     try:
         summarizer = Summarizer()
@@ -560,7 +590,9 @@ def summarize(action: str, repo: str = None):
         console.print(summary)
         console.print()
         console.print("═" * 60)
-        console.print(f"[dim]Based on {len(commits)} commits and {len(interactions)} AI interactions[/dim]")
+        console.print(
+            f"[dim]Based on {len(commits)} commits and {len(interactions)} AI interactions[/dim]"
+        )
 
     except ValueError as e:
         console.print(f"[red]Error:[/red] {e}")
@@ -573,9 +605,9 @@ def summarize(action: str, repo: str = None):
 
 
 @cli.command()
-@click.argument('action', type=click.Choice(['today', 'yesterday', 'week']))
-@click.option('--repo', help='Filter by repository path (defaults to current directory)')
-@click.option('--all', 'show_all', is_flag=True, help='Show timeline from all repositories')
+@click.argument("action", type=click.Choice(["today", "yesterday", "week"]))
+@click.option("--repo", help="Filter by repository path (defaults to current directory)")
+@click.option("--all", "show_all", is_flag=True, help="Show timeline from all repositories")
 def timeline(action: str, repo: str = None, show_all: bool = False):
     """Show combined timeline of commits and AI interactions.
 
@@ -594,17 +626,25 @@ def timeline(action: str, repo: str = None, show_all: bool = False):
     if repo is None and not show_all:
         repo = os.getcwd()
 
-    if action == 'today':
+    # Initialize variables to prevent "possibly used before assignment" error
+    commits = []
+    interactions = []
+
+    if action == "today":
         commits = monitor.get_commits_today(repo_path=repo)
         interactions = tracker.get_interactions_today(repo_path=repo)
 
-    elif action == 'yesterday':
-        yesterday_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=1)
+    elif action == "yesterday":
+        yesterday_start = datetime.now().replace(
+            hour=0, minute=0, second=0, microsecond=0
+        ) - timedelta(days=1)
         yesterday_end = yesterday_start + timedelta(days=1)
         commits = monitor.get_commits_by_date(yesterday_start, yesterday_end, repo_path=repo)
-        interactions = tracker.get_interactions_by_date(yesterday_start, yesterday_end, repo_path=repo)
+        interactions = tracker.get_interactions_by_date(
+            yesterday_start, yesterday_end, repo_path=repo
+        )
 
-    elif action == 'week':
+    elif action == "week":
         week_start = datetime.now() - timedelta(days=7)
         commits = monitor.get_commits_by_date(week_start, repo_path=repo)
         interactions = tracker.get_interactions_by_date(week_start, repo_path=repo)
@@ -615,9 +655,9 @@ def timeline(action: str, repo: str = None, show_all: bool = False):
 
 
 @cli.command()
-@click.argument('prompt')
-@click.option('--tool', required=True, type=click.Choice(['gemini']), help='AI tool to use')
-@click.option('--log-only', is_flag=True, help='Only log, don\'t execute (for testing)')
+@click.argument("prompt")
+@click.option("--tool", required=True, type=click.Choice(["gemini"]), help="AI tool to use")
+@click.option("--log-only", is_flag=True, help="Only log, don't execute (for testing)")
 def ask(prompt: str, tool: str, log_only: bool):
     """Ask Gemini a question via CLI (wrapper for convenience).
 
@@ -634,7 +674,7 @@ def ask(prompt: str, tool: str, log_only: bool):
             ai_tool=f"{tool}-cli",
             prompt=prompt,
             response="[Test mode - not executed]",
-            duration_ms=0
+            duration_ms=0,
         )
         console.print(f"[green]✓[/green] Logged test interaction for {tool}")
     else:
@@ -657,8 +697,8 @@ def ask(prompt: str, tool: str, log_only: bool):
 
 
 @cli.command()
-@click.argument('tool', type=click.Choice(['claude', 'gemini', 'qwen', 'droid', 'vim', 'other']))
-@click.option('--command', help='Custom command to run (overrides tool name)')
+@click.argument("tool", type=click.Choice(["claude", "gemini", "qwen", "droid", "vim", "other"]))
+@click.option("--command", help="Custom command to run (overrides tool name)")
 def start(tool: str, command: str = None):
     """Start an interactive session with a tool.
 
@@ -680,38 +720,39 @@ def start(tool: str, command: str = None):
 
     # Map tool names to actual commands
     tool_commands = {
-        'claude': 'claude',
-        'gemini': 'gemini',
-        'qwen': 'qwen',
-        'droid': 'droid',
-        'vim': 'vim',
-        'other': command or 'bash'
+        "claude": "claude",
+        "gemini": "gemini",
+        "qwen": "qwen",
+        "droid": "droid",
+        "vim": "vim",
+        "other": command or "bash",
     }
-    
+
     actual_command = command if command else tool_commands.get(tool)
-    
+
     if not actual_command:
         console.print(f"[red]Error:[/red] No command specified for '{tool}'")
         console.print("Use --command to specify a custom command")
         db_session.close()
         raise click.Abort()
-    
+
     try:
-        session_id = manager.start_session(tool, actual_command)
+        manager.start_session(tool, actual_command)
     except KeyboardInterrupt:
         console.print("\n[yellow]Session interrupted[/yellow]")
     except Exception as e:
         console.print(f"\n[red]Error:[/red] {e}")
         import traceback
+
         traceback.print_exc()
-    
+
     db_session.close()
 
 
 @cli.command()
-@click.option('--repo', help='Filter by repository path (defaults to current directory)')
-@click.option('--all', 'show_all', is_flag=True, help='Show sessions from all repositories')
-@click.option('--limit', default=10, help='Number of sessions to show (default: 10)')
+@click.option("--repo", help="Filter by repository path (defaults to current directory)")
+@click.option("--all", "show_all", is_flag=True, help="Show sessions from all repositories")
+@click.option("--limit", default=10, help="Number of sessions to show (default: 10)")
 def sessions(repo: str = None, show_all: bool = False, limit: int = 10):
     """List recent sessions.
 
@@ -730,8 +771,6 @@ def sessions(repo: str = None, show_all: bool = False, limit: int = 10):
         repo = os.getcwd()
 
     # Get recent sessions (last N)
-    from backend.services.ai_tracker import AITracker
-    tracker = AITracker(db_session)
 
     query = db_session.query(AIInteraction).filter_by(is_session=1)
 
@@ -739,10 +778,8 @@ def sessions(repo: str = None, show_all: bool = False, limit: int = 10):
     if repo:
         query = query.filter(AIInteraction.repo_path.like(f"%{repo}%"))
 
-    interactions = query.order_by(
-        AIInteraction.timestamp.desc()
-    ).limit(limit).all()
-    
+    interactions = query.order_by(AIInteraction.timestamp.desc()).limit(limit).all()
+
     if not interactions:
         if repo and not show_all:
             console.print(f"[yellow]No sessions found for repository: {repo}[/yellow]")
@@ -761,8 +798,9 @@ def sessions(repo: str = None, show_all: bool = False, limit: int = 10):
         repo_name = Path(repo).name
         console.print(f"[dim]Showing: {repo_name} ({repo})[/dim]")
     console.print("═" * 80)
-    
+
     from rich.table import Table
+
     table = Table(show_header=True, header_style="bold cyan", show_lines=False)
     table.add_column("ID", width=6)
     table.add_column("Title / Tool", width=35)
@@ -799,23 +837,30 @@ def sessions(repo: str = None, show_all: bool = False, limit: int = 10):
             tags_display = "[dim]-[/dim]"
 
         table.add_row(session_id, title_display, timestamp, duration, tags_display)
-    
+
     console.print(table)
-    console.print(f"\n[dim]Use 'chronicle session <id>' to view full details[/dim]")
+    console.print("\n[dim]Use 'chronicle session <id>' to view full details[/dim]")
 
     db_session.close()
 
 
-@cli.command(name='search-sessions')
-@click.argument('query')
-@click.option('--repo', help='Filter by repository path (defaults to current directory)')
-@click.option('--all', 'show_all', is_flag=True, help='Search sessions from all repositories')
-@click.option('--limit', default=10, help='Number of results to show (default: 10, max: 50)')
-@click.option('--summaries-only', is_flag=True, help='Search only in AI-generated summaries')
-@click.option('--prompts-only', is_flag=True, help='Search only in session prompts')
-@click.option('--keywords-only', is_flag=True, help='Search only in AI-extracted keywords')
-def search_sessions(query: str, repo: str = None, show_all: bool = False, limit: int = 10,
-                    summaries_only: bool = False, prompts_only: bool = False, keywords_only: bool = False):
+@cli.command(name="search-sessions")
+@click.argument("query")
+@click.option("--repo", help="Filter by repository path (defaults to current directory)")
+@click.option("--all", "show_all", is_flag=True, help="Search sessions from all repositories")
+@click.option("--limit", default=10, help="Number of results to show (default: 10, max: 50)")
+@click.option("--summaries-only", is_flag=True, help="Search only in AI-generated summaries")
+@click.option("--prompts-only", is_flag=True, help="Search only in session prompts")
+@click.option("--keywords-only", is_flag=True, help="Search only in AI-extracted keywords")
+def search_sessions(
+    query: str,
+    repo: str = None,
+    show_all: bool = False,
+    limit: int = 10,
+    summaries_only: bool = False,
+    prompts_only: bool = False,
+    keywords_only: bool = False,
+):
     """Search Chronicle sessions using FTS5 full-text search.
 
     Multi-word searches work intelligently with boolean operators:
@@ -853,14 +898,14 @@ def search_sessions(query: str, repo: str = None, show_all: bool = False, limit:
     # Build FTS5 column list based on flags
     fts_columns = []
     if summaries_only:
-        fts_columns = ['response_summary']
+        fts_columns = ["response_summary"]
     elif prompts_only:
-        fts_columns = ['prompt']
+        fts_columns = ["prompt"]
     elif keywords_only:
-        fts_columns = ['keywords']
+        fts_columns = ["keywords"]
     else:
         # Default: search all fields
-        fts_columns = ['response_summary', 'prompt', 'keywords']
+        fts_columns = ["response_summary", "prompt", "keywords"]
 
     # Build FTS5 query with OR by default (more user-friendly, broader results)
     # Users can use explicit AND or quotes for precise matching
@@ -890,15 +935,18 @@ def search_sessions(query: str, repo: str = None, show_all: bool = False, limit:
     try:
         # Use FTS5 MATCH query with raw SQL
         # SQLAlchemy doesn't have great FTS5 support, so we execute raw SQL
-        sql = text("""
+        sql = text(
+            """
             SELECT ai_interactions.*
             FROM ai_interactions
             JOIN sessions_fts ON sessions_fts.rowid = ai_interactions.id
             WHERE sessions_fts MATCH :fts_query
-        """)
+        """
+        )
 
         if repo:
-            sql = text("""
+            sql = text(
+                """
                 SELECT ai_interactions.*
                 FROM ai_interactions
                 JOIN sessions_fts ON sessions_fts.rowid = ai_interactions.id
@@ -906,33 +954,32 @@ def search_sessions(query: str, repo: str = None, show_all: bool = False, limit:
                   AND ai_interactions.repo_path LIKE :repo_filter
                 ORDER BY bm25(sessions_fts) ASC
                 LIMIT :limit_val
-            """)
+            """
+            )
             result = db_session.execute(
-                sql,
-                {"fts_query": fts_query, "repo_filter": f"%{repo}%", "limit_val": limit}
+                sql, {"fts_query": fts_query, "repo_filter": f"%{repo}%", "limit_val": limit}
             )
         else:
-            sql = text("""
+            sql = text(
+                """
                 SELECT ai_interactions.*
                 FROM ai_interactions
                 JOIN sessions_fts ON sessions_fts.rowid = ai_interactions.id
                 WHERE sessions_fts MATCH :fts_query
                 ORDER BY bm25(sessions_fts) ASC
                 LIMIT :limit_val
-            """)
-            result = db_session.execute(
-                sql,
-                {"fts_query": fts_query, "limit_val": limit}
+            """
             )
+            result = db_session.execute(sql, {"fts_query": fts_query, "limit_val": limit})
 
         # Fetch all session IDs from FTS results
         session_ids = [row[0] for row in result.fetchall()]
 
         # Load full session objects
         if session_ids:
-            sessions = db_session.query(AIInteraction).filter(
-                AIInteraction.id.in_(session_ids)
-            ).all()
+            sessions = (
+                db_session.query(AIInteraction).filter(AIInteraction.id.in_(session_ids)).all()
+            )
             # Sort by original FTS ranking order
             id_order = {id: i for i, id in enumerate(session_ids)}
             sessions = sorted(sessions, key=lambda s: id_order.get(s.id, 999))
@@ -941,24 +988,23 @@ def search_sessions(query: str, repo: str = None, show_all: bool = False, limit:
 
     except Exception as e:
         # Fallback to old LIKE-based search if FTS5 fails
-        console.print(f"[yellow]FTS5 search unavailable, using basic search[/yellow]")
+        console.print("[yellow]FTS5 search unavailable, using basic search[/yellow]")
         console.print(f"[dim]Error: {e}[/dim]\n")
 
         from sqlalchemy import or_
 
         filters = []
-        if 'response_summary' in fts_columns:
+        if "response_summary" in fts_columns:
             filters.append(AIInteraction.response_summary.like(f"%{query}%"))
-        if 'prompt' in fts_columns:
+        if "prompt" in fts_columns:
             filters.append(AIInteraction.prompt.like(f"%{query}%"))
-        if 'keywords' in fts_columns:
+        if "keywords" in fts_columns:
             filters.append(AIInteraction.keywords.like(f"%{query}%"))
 
-        sessions_query = db_session.query(AIInteraction).options(
-            defer(AIInteraction.session_transcript)
-        ).filter(
-            AIInteraction.is_session == 1,
-            or_(*filters)
+        sessions_query = (
+            db_session.query(AIInteraction)
+            .options(defer(AIInteraction.session_transcript))
+            .filter(AIInteraction.is_session == 1, or_(*filters))
         )
 
         if repo:
@@ -972,8 +1018,12 @@ def search_sessions(query: str, repo: str = None, show_all: bool = False, limit:
             console.print("Tip: Use [cyan]--all[/cyan] to search all repositories")
         console.print("\nTry:")
         console.print("  • Using different keywords")
-        console.print("  • Using OR operator: [cyan]chronicle search-sessions \"gemini OR claude\"[/cyan]")
-        console.print("  • Excluding terms: [cyan]chronicle search-sessions \"testing NOT deprecated\"[/cyan]")
+        console.print(
+            '  • Using OR operator: [cyan]chronicle search-sessions "gemini OR claude"[/cyan]'
+        )
+        console.print(
+            '  • Excluding terms: [cyan]chronicle search-sessions "testing NOT deprecated"[/cyan]'
+        )
         db_session.close()
         return
 
@@ -989,6 +1039,7 @@ def search_sessions(query: str, repo: str = None, show_all: bool = False, limit:
 
     # Display results in table
     from rich.table import Table
+
     table = Table(show_header=True, header_style="bold cyan", show_lines=False)
     table.add_column("ID", width=6)
     table.add_column("Title / Tool", width=35)
@@ -1027,8 +1078,8 @@ def search_sessions(query: str, repo: str = None, show_all: bool = False, limit:
         table.add_row(session_id, title_display, timestamp, duration, tags_display)
 
     console.print(table)
-    console.print(f"\n[dim]Use 'chronicle session <id>' to view full details[/dim]")
-    console.print(f"[dim]Results ranked by relevance (BM25 algorithm)[/dim]")
+    console.print("\n[dim]Use 'chronicle session <id>' to view full details[/dim]")
+    console.print("[dim]Results ranked by relevance (BM25 algorithm)[/dim]")
 
     db_session.close()
 
@@ -1054,20 +1105,23 @@ def status():
     active_session = tracker.get_active_session()
 
     if not active_session:
-        console.print(Panel(
-            "[yellow]No active Chronicle session detected[/yellow]\n\n"
-            "💡 To start tracking:\n"
-            "   • Claude Code: [cyan]chronicle start claude[/cyan]\n"
-            "   • Gemini CLI:  [cyan]chronicle start gemini[/cyan]\n"
-            "   • Qwen CLI:    [cyan]chronicle start qwen[/cyan]",
-            title="[bold]Chronicle Status[/bold]",
-            border_style="yellow"
-        ))
+        console.print(
+            Panel(
+                "[yellow]No active Chronicle session detected[/yellow]\n\n"
+                "💡 To start tracking:\n"
+                "   • Claude Code: [cyan]chronicle start claude[/cyan]\n"
+                "   • Gemini CLI:  [cyan]chronicle start gemini[/cyan]\n"
+                "   • Qwen CLI:    [cyan]chronicle start qwen[/cyan]",
+                title="[bold]Chronicle Status[/bold]",
+                border_style="yellow",
+            )
+        )
         db_session.close()
         return
 
     # Calculate elapsed time
     from datetime import datetime
+
     elapsed = datetime.now() - active_session.timestamp
     elapsed_minutes = elapsed.total_seconds() / 60
 
@@ -1101,18 +1155,18 @@ def status():
     if active_session.tags_list:
         table.add_row("Tags", ", ".join(active_session.tags_list))
 
-    console.print(Panel(
-        table,
-        title="[bold green]✓ Active Chronicle Session[/bold green]",
-        border_style="green"
-    ))
+    console.print(
+        Panel(
+            table, title="[bold green]✓ Active Chronicle Session[/bold green]", border_style="green"
+        )
+    )
 
     db_session.close()
 
 
 @cli.command("rename-session")
-@click.argument('session_id', type=int)
-@click.argument('title', type=str)
+@click.argument("session_id", type=int)
+@click.argument("title", type=str)
 def rename_session(session_id: int, title: str):
     """Set a descriptive title for a session.
 
@@ -1143,10 +1197,10 @@ def rename_session(session_id: int, title: str):
 
 
 @cli.command("tag-session")
-@click.argument('session_id', type=int)
-@click.argument('tags', type=str)
-@click.option('--add', is_flag=True, help='Add tags (instead of replacing)')
-@click.option('--remove', is_flag=True, help='Remove tags')
+@click.argument("session_id", type=int)
+@click.argument("tags", type=str)
+@click.option("--add", is_flag=True, help="Add tags (instead of replacing)")
+@click.option("--remove", is_flag=True, help="Remove tags")
 def tag_session(session_id: int, tags: str, add: bool = False, remove: bool = False):
     """Add, remove, or set tags for a session.
 
@@ -1155,7 +1209,6 @@ def tag_session(session_id: int, tags: str, add: bool = False, remove: bool = Fa
         chronicle tag-session 32 optimization --add             # Add tag to existing
         chronicle tag-session 32 wip --remove                   # Remove tag
     """
-    import json
 
     db_session = get_session()
 
@@ -1168,7 +1221,7 @@ def tag_session(session_id: int, tags: str, add: bool = False, remove: bool = Fa
         return
 
     # Parse input tags
-    new_tags = [t.strip() for t in tags.split(',') if t.strip()]
+    new_tags = [t.strip() for t in tags.split(",") if t.strip()]
 
     # Get current tags
     current_tags = session.tags_list if session.tags else []
@@ -1199,14 +1252,13 @@ def tag_session(session_id: int, tags: str, add: bool = False, remove: bool = Fa
 
 
 @cli.command("auto-title")
-@click.argument('session_id', type=int)
+@click.argument("session_id", type=int)
 def auto_title(session_id: int):
     """Generate a descriptive title from session summary using AI.
 
     Examples:
         chronicle auto-title 32                 # Generate title for session 32
     """
-    from backend.services.summarizer import Summarizer
     import google.generativeai as genai
 
     db_session = get_session()
@@ -1231,6 +1283,7 @@ def auto_title(session_id: int):
 
     try:
         from backend.core.config import get_config
+
         config = get_config()
         api_key = config.get("ai.gemini_api_key")
 
@@ -1241,7 +1294,7 @@ def auto_title(session_id: int):
             return
 
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-2.0-flash-exp')
+        model = genai.GenerativeModel("gemini-2.0-flash-exp")
 
         prompt = f"""Based on this development session summary, generate a concise, descriptive title (max 60 characters).
 
@@ -1281,9 +1334,11 @@ Generate ONLY the title, nothing else:"""
 
 
 @cli.command()
-@click.option('--sessions', 'session_range', type=str, help='Session range (e.g., "28-32" or "30,31,32")')
-@click.option('--repo', type=str, help='Filter by repository')
-@click.option('--days', type=int, help='Show sessions from last N days')
+@click.option(
+    "--sessions", "session_range", type=str, help='Session range (e.g., "28-32" or "30,31,32")'
+)
+@click.option("--repo", type=str, help="Filter by repository")
+@click.option("--days", type=int, help="Show sessions from last N days")
 def graph(session_range: str = None, repo: str = None, days: int = None):
     """Visualize session relationships and connections.
 
@@ -1294,7 +1349,6 @@ def graph(session_range: str = None, repo: str = None, days: int = None):
         chronicle graph --repo /path/to/project   # Graph sessions for a repo
     """
     from rich.tree import Tree
-    from rich.panel import Panel
 
     db_session = get_session()
 
@@ -1303,14 +1357,15 @@ def graph(session_range: str = None, repo: str = None, days: int = None):
 
     if session_range:
         # Parse range
-        if '-' in session_range:
-            start, end = map(int, session_range.split('-'))
+        if "-" in session_range:
+            start, end = map(int, session_range.split("-"))
             session_ids = list(range(start, end + 1))
         else:
-            session_ids = [int(sid.strip()) for sid in session_range.split(',')]
+            session_ids = [int(sid.strip()) for sid in session_range.split(",")]
         sessions_query = sessions_query.filter(AIInteraction.id.in_(session_ids))
     elif days:
         from datetime import datetime, timedelta
+
         cutoff = datetime.now() - timedelta(days=days)
         sessions_query = sessions_query.filter(AIInteraction.timestamp >= cutoff)
     elif repo:
@@ -1388,9 +1443,9 @@ def graph(session_range: str = None, repo: str = None, days: int = None):
 
 
 @cli.command()
-@click.argument('key', required=False)
-@click.argument('value', required=False)
-@click.option('--list', 'show_all', is_flag=True, help='Show all configuration')
+@click.argument("key", required=False)
+@click.argument("value", required=False)
+@click.option("--list", "show_all", is_flag=True, help="Show all configuration")
 def config(key: str = None, value: str = None, show_all: bool = False):
     """Get or set configuration values.
 
@@ -1407,6 +1462,7 @@ def config(key: str = None, value: str = None, show_all: bool = False):
     if show_all:
         # Show all configuration
         import yaml
+
         console.print("\n[bold cyan]Chronicle Configuration[/bold cyan]")
         console.print("═" * 60)
         console.print(yaml.dump(cfg._config, default_flow_style=False, sort_keys=False))
@@ -1430,7 +1486,11 @@ def config(key: str = None, value: str = None, show_all: bool = False):
         else:
             # Mask API keys for security
             if "api_key" in key.lower() and isinstance(current_value, str):
-                masked = current_value[:8] + "..." + current_value[-4:] if len(current_value) > 12 else "***"
+                masked = (
+                    current_value[:8] + "..." + current_value[-4:]
+                    if len(current_value) > 12
+                    else "***"
+                )
                 console.print(f"[bold]{key}:[/bold] {masked}")
             else:
                 console.print(f"[bold]{key}:[/bold] {current_value}")
@@ -1445,14 +1505,14 @@ def config(key: str = None, value: str = None, show_all: bool = False):
 def test_gemini():
     """Test Gemini API connection."""
     from backend.services.summarizer import Summarizer
-    
+
     console.print("\n[bold cyan]Testing Gemini API Connection[/bold cyan]")
     console.print("═" * 60)
-    
+
     try:
         summarizer = Summarizer()
         result = summarizer.test_connection()
-        
+
         if result["success"]:
             console.print(f"[green]✓[/green] {result['message']}")
             console.print(f"[bold]Model:[/bold] {result['model']}")
@@ -1463,22 +1523,32 @@ def test_gemini():
             console.print("\n[yellow]Troubleshooting:[/yellow]")
             console.print("1. Check your API key: chronicle config ai.gemini_api_key")
             console.print("2. Verify at: https://aistudio.google.com/app/apikey")
-            
+
     except ValueError as e:
-        console.print(f"[red]✗[/red] Configuration Error")
+        console.print("[red]✗[/red] Configuration Error")
         console.print(f"{e}")
     except Exception as e:
-        console.print(f"[red]✗[/red] Unexpected Error")
+        console.print("[red]✗[/red] Unexpected Error")
         console.print(f"{e}")
         import traceback
+
         traceback.print_exc()
 
 
 @cli.command()
-@click.argument('session_id', type=int)
-@click.option('--chunk-size', default=8000, help='Number of lines per chunk (default: 8000)')
-@click.option('--use-cli', is_flag=True, help='Use CLI tool (qwen/gemini) instead of API (bypasses rate limits)')
-@click.option('--cli-tool', type=click.Choice(['qwen', 'gemini']), default='qwen', help='Which CLI tool to use with --use-cli')
+@click.argument("session_id", type=int)
+@click.option("--chunk-size", default=8000, help="Number of lines per chunk (default: 8000)")
+@click.option(
+    "--use-cli",
+    is_flag=True,
+    help="Use CLI tool (qwen/gemini) instead of API (bypasses rate limits)",
+)
+@click.option(
+    "--cli-tool",
+    type=click.Choice(["qwen", "gemini"]),
+    default="qwen",
+    help="Which CLI tool to use with --use-cli",
+)
 def summarize_chunked(session_id: int, chunk_size: int, use_cli: bool, cli_tool: str):
     """Summarize a large session using incremental chunked summarization.
 
@@ -1521,17 +1591,19 @@ def summarize_chunked(session_id: int, chunk_size: int, use_cli: bool, cli_tool:
 
     try:
         summarizer = Summarizer()
-        summary = summarizer.summarize_session_chunked(
+        summarizer.summarize_session_chunked(
             session_id=session_id,
             chunk_size_lines=chunk_size,
             db_session=db_session,
             use_cli=use_cli,
-            cli_tool=cli_tool
+            cli_tool=cli_tool,
         )
 
         console.print("\n[bold green]✓ Summarization Complete![/bold green]")
         console.print(f"\nView summary with: [cyan]chronicle session {session_id}[/cyan]")
-        console.print(f"View chunks: [cyan]sqlite3 ~/.ai-session/sessions.db \"SELECT * FROM session_summary_chunks WHERE session_id={session_id}\"[/cyan]")
+        console.print(
+            f'View chunks: [cyan]sqlite3 ~/.ai-session/sessions.db "SELECT * FROM session_summary_chunks WHERE session_id={session_id}"[/cyan]'
+        )
 
     except ValueError as e:
         console.print(f"[red]✗[/red] Configuration Error: {e}")
@@ -1542,6 +1614,7 @@ def summarize_chunked(session_id: int, chunk_size: int, use_cli: bool, cli_tool:
     except Exception as e:
         console.print(f"[red]✗[/red] Error: {e}")
         import traceback
+
         traceback.print_exc()
 
     finally:
@@ -1549,7 +1622,7 @@ def summarize_chunked(session_id: int, chunk_size: int, use_cli: bool, cli_tool:
 
 
 @cli.command()
-@click.argument('session_id', type=int)
+@click.argument("session_id", type=int)
 def clean_session(session_id: int):
     """Migrate a session to file-based storage (create .cleaned file).
 
@@ -1580,17 +1653,17 @@ def clean_session(session_id: int):
 
     if not session.session_transcript:
         console.print(f"[yellow]⚠[/yellow] Session {session_id} has no transcript in database")
-        console.print(f"[dim]Checking for .log file...[/dim]")
+        console.print("[dim]Checking for .log file...[/dim]")
 
         # Try reading from .log file instead
         log_path = Path.home() / ".ai-session" / "sessions" / f"session_{session_id}.log"
         if not log_path.exists():
-            console.print(f"[red]✗[/red] No .log file found either")
+            console.print("[red]✗[/red] No .log file found either")
             db_session.close()
             return
 
-        console.print(f"[green]✓[/green] Found .log file, reading...")
-        with open(log_path, 'r', encoding='utf-8', errors='ignore') as f:
+        console.print("[green]✓[/green] Found .log file, reading...")
+        with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
             transcript = f.read()
     else:
         transcript = session.session_transcript
@@ -1602,13 +1675,14 @@ def clean_session(session_id: int):
 
     # Apply full cleaning
     from backend.utils.transcript_cleaner import clean_transcript
+
     cleaned = clean_transcript(transcript)
 
     # Save to .cleaned file
     sessions_dir = Path.home() / ".ai-session" / "sessions"
     cleaned_path = sessions_dir / f"session_{session_id}.cleaned"
 
-    with open(cleaned_path, 'w', encoding='utf-8') as f:
+    with open(cleaned_path, "w", encoding="utf-8") as f:
         f.write(cleaned)
 
     # NULL out database transcript
@@ -1617,20 +1691,20 @@ def clean_session(session_id: int):
 
     # Report results
     new_size = len(cleaned)
-    reduction = ((original_size - new_size) / original_size * 100)
+    reduction = (original_size - new_size) / original_size * 100
 
-    console.print(f"[green]✓[/green] Session migrated successfully!")
+    console.print("[green]✓[/green] Session migrated successfully!")
     console.print(f"File: {cleaned_path.name}")
     console.print(f"Size: {new_size:,} chars ({new_size / 1024 / 1024:.2f} MB)")
     console.print(f"[bold green]Reduction: {reduction:.1f}%[/bold green]")
-    console.print(f"[dim]Database transcript cleared (saves space)[/dim]")
+    console.print("[dim]Database transcript cleared (saves space)[/dim]")
 
     db_session.close()
 
 
 @cli.command()
-@click.argument('session_id', type=int)
-@click.option('--summary', help='Summary text (or use stdin if not provided)')
+@click.argument("session_id", type=int)
+@click.option("--summary", help="Summary text (or use stdin if not provided)")
 def save_summary(session_id: int, summary: str = None):
     """Save a manually generated summary to a session.
 
@@ -1659,16 +1733,23 @@ def save_summary(session_id: int, summary: str = None):
         return
 
     if not session.is_session:
-        console.print(f"[red]✗[/red] ID {session_id} is not a session (it's a one-off AI interaction)")
+        console.print(
+            f"[red]✗[/red] ID {session_id} is not a session (it's a one-off AI interaction)"
+        )
         db_session.close()
         return
 
     # Get summary from stdin if not provided via --summary
     if summary is None:
-        console.print("[cyan]Paste your summary below, then press Ctrl+D (or Ctrl+Z on Windows):[/cyan]")
-        console.print("[dim](Or pipe it in: cat summary.txt | chronicle save-summary {session_id})[/dim]\n")
+        console.print(
+            "[cyan]Paste your summary below, then press Ctrl+D (or Ctrl+Z on Windows):[/cyan]"
+        )
+        console.print(
+            "[dim](Or pipe it in: cat summary.txt | chronicle save-summary {session_id})[/dim]\n"
+        )
 
         import sys
+
         summary = sys.stdin.read().strip()
 
         if not summary:
@@ -1689,13 +1770,20 @@ def save_summary(session_id: int, summary: str = None):
 
 
 @cli.command()
-@click.argument('transcript_file', type=click.Path(exists=True))
-@click.option('--tool', type=click.Choice(['claude', 'gemini']), default='claude',
-              help='Which AI tool generated this session')
-@click.option('--timestamp', help='Session start time (YYYY-MM-DD HH:MM), defaults to file mtime')
-@click.option('--repo', type=click.Path(), help='Repository path (auto-detected if not provided)')
-@click.option('--summarize/--no-summarize', default=True,
-              help='Automatically summarize after import (default: yes)')
+@click.argument("transcript_file", type=click.Path(exists=True))
+@click.option(
+    "--tool",
+    type=click.Choice(["claude", "gemini"]),
+    default="claude",
+    help="Which AI tool generated this session",
+)
+@click.option("--timestamp", help="Session start time (YYYY-MM-DD HH:MM), defaults to file mtime")
+@click.option("--repo", type=click.Path(), help="Repository path (auto-detected if not provided)")
+@click.option(
+    "--summarize/--no-summarize",
+    default=True,
+    help="Automatically summarize after import (default: yes)",
+)
 def import_session(transcript_file, tool, timestamp, repo, summarize):
     """Import a session from a text file retroactively.
 
@@ -1713,17 +1801,17 @@ def import_session(transcript_file, tool, timestamp, repo, summarize):
         # Import without summarizing (do it later)
         chronicle import-session large-session.txt --no-summarize
     """
-    import sys
     import os
     import git
     from backend.services.session_manager import SessionManager
+    from backend.utils.transcript_cleaner import clean_transcript
 
     db_session = get_session()
     transcript_path = Path(transcript_file)
 
     # Read transcript
     try:
-        with open(transcript_path, 'r', encoding='utf-8', errors='ignore') as f:
+        with open(transcript_path, "r", encoding="utf-8", errors="ignore") as f:
             transcript = f.read()
     except Exception as e:
         console.print(f"[red]✗[/red] Could not read file: {e}")
@@ -1731,7 +1819,7 @@ def import_session(transcript_file, tool, timestamp, repo, summarize):
         return
 
     if not transcript.strip():
-        console.print(f"[red]✗[/red] Transcript file is empty")
+        console.print("[red]✗[/red] Transcript file is empty")
         db_session.close()
         return
 
@@ -1740,25 +1828,29 @@ def import_session(transcript_file, tool, timestamp, repo, summarize):
         try:
             start_time = datetime.strptime(timestamp, "%Y-%m-%d %H:%M")
         except ValueError:
-            console.print(f"[red]✗[/red] Invalid timestamp format. Use: YYYY-MM-DD HH:MM")
+            console.print("[red]✗[/red] Invalid timestamp format. Use: YYYY-MM-DD HH:MM")
             db_session.close()
             return
     else:
         # Use file modification time
         import os
+
         file_mtime = os.path.getmtime(transcript_path)
         start_time = datetime.fromtimestamp(file_mtime)
-        console.print(f"[dim]Using file modification time: {start_time.strftime('%Y-%m-%d %H:%M')}[/dim]")
+        console.print(
+            f"[dim]Using file modification time: {start_time.strftime('%Y-%m-%d %H:%M')}[/dim]"
+        )
 
     # Detect repository
     if not repo:
         # Try to detect from current directory
         import git
+
         try:
             git_repo = git.Repo(os.getcwd(), search_parent_directories=True)
             repo = git_repo.working_dir
             console.print(f"[dim]Detected repository: {repo}[/dim]")
-        except:
+        except (git.InvalidGitRepositoryError, git.NoSuchPathError):
             repo = os.getcwd()
             console.print(f"[dim]Not a git repo, using current directory: {repo}[/dim]")
 
@@ -1766,16 +1858,18 @@ def import_session(transcript_file, tool, timestamp, repo, summarize):
 
     # Clean the transcript
     session_manager = SessionManager(db_session)
-    clean_transcript = session_manager._clean_ansi(transcript)
+    clean_transcript_content = clean_transcript(transcript)
 
     # Calculate duration (estimate based on transcript size - ~1 min per 1000 lines)
-    lines = clean_transcript.count('\n')
+    lines = clean_transcript_content.count("\n")
     estimated_duration_ms = (lines // 10) * 60 * 1000  # ~1 min per 100 lines
 
-    console.print(f"\n[cyan]Importing session...[/cyan]")
+    console.print("\n[cyan]Importing session...[/cyan]")
     console.print(f"  Tool: {tool}")
     console.print(f"  Lines: {lines:,}")
-    console.print(f"  Size: {len(clean_transcript):,} chars ({len(clean_transcript) / 1024 / 1024:.1f} MB)")
+    console.print(
+        f"  Size: {len(clean_transcript_content):,} chars ({len(clean_transcript_content) / 1024 / 1024:.1f} MB)"
+    )
     console.print(f"  Start time: {start_time}")
     console.print(f"  Repository: {repo}")
 
@@ -1787,10 +1881,10 @@ def import_session(transcript_file, tool, timestamp, repo, summarize):
         prompt=f"Imported session ({estimated_duration_ms / 1000 / 60:.0f}m)",
         duration_ms=estimated_duration_ms,
         is_session=True,
-        session_transcript=clean_transcript,
+        session_transcript=clean_transcript_content,
         working_directory=repo,
-        repo_path=repo if os.path.isdir(os.path.join(repo, '.git')) else None,
-        summary_generated=False
+        repo_path=repo if os.path.isdir(os.path.join(repo, ".git")) else None,
+        summary_generated=False,
     )
 
     db_session.add(interaction)
@@ -1801,25 +1895,27 @@ def import_session(transcript_file, tool, timestamp, repo, summarize):
 
     # Trigger summarization if requested
     if summarize:
-        console.print(f"\n[cyan]Starting automatic summarization...[/cyan]")
-        console.print(f"[dim](This may take a while for large sessions)[/dim]\n")
+        console.print("\n[cyan]Starting automatic summarization...[/cyan]")
+        console.print("[dim](This may take a while for large sessions)[/dim]\n")
 
         try:
             from backend.services.summarizer import Summarizer
+
             summarizer = Summarizer()
 
             # Use chunked summarization for reliability
             # Chunk size auto-optimized: 3K/5K/10K based on session size
             summary = summarizer.summarize_session_chunked(
-                session_id=session_id,
-                db_session=db_session
+                session_id=session_id, db_session=db_session
             )
 
-            console.print(f"\n[green]✓[/green] Session summarized!")
+            console.print("\n[green]✓[/green] Session summarized!")
             console.print(f"[dim]Summary length: {len(summary)} characters[/dim]")
         except Exception as e:
             console.print(f"\n[yellow]⚠[/yellow] Summarization failed: {e}")
-            console.print(f"[dim]You can summarize later with: chronicle session {session_id}[/dim]")
+            console.print(
+                f"[dim]You can summarize later with: chronicle session {session_id}[/dim]"
+            )
 
     console.print(f"\nView session: [cyan]chronicle session {session_id}[/cyan]")
 
@@ -1827,10 +1923,10 @@ def import_session(transcript_file, tool, timestamp, repo, summarize):
 
 
 @cli.command()
-@click.option('--description', '-d', required=True, help='Description of what was accomplished')
-@click.option('--tool', '-t', default='claude-code', help='AI tool used (default: claude-code)')
-@click.option('--duration', type=int, help='Duration in minutes (optional)')
-@click.option('--repo', help='Repository path (default: auto-detect from current directory)')
+@click.option("--description", "-d", required=True, help="Description of what was accomplished")
+@click.option("--tool", "-t", default="claude-code", help="AI tool used (default: claude-code)")
+@click.option("--duration", type=int, help="Duration in minutes (optional)")
+@click.option("--repo", help="Repository path (default: auto-detect from current directory)")
 def add_manual(description: str, tool: str, duration: int, repo: str):
     """Manually add a session entry for work that wasn't tracked.
 
@@ -1844,7 +1940,6 @@ def add_manual(description: str, tool: str, duration: int, repo: str):
         chronicle add-manual -d "Refactored API endpoints" --repo ~/projects/my-app
     """
     from backend.database.models import get_session, AIInteraction
-    from backend.services.summarizer import Summarizer
     import subprocess
 
     console.print("[bold]📝 Adding Manual Session Entry[/bold]\n")
@@ -1853,10 +1948,7 @@ def add_manual(description: str, tool: str, duration: int, repo: str):
     if not repo:
         try:
             result = subprocess.run(
-                ['git', 'rev-parse', '--show-toplevel'],
-                capture_output=True,
-                text=True,
-                check=True
+                ["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True, check=True
             )
             repo = result.stdout.strip()
             console.print(f"[dim]Detected repository: {repo}[/dim]")
@@ -1878,7 +1970,7 @@ def add_manual(description: str, tool: str, duration: int, repo: str):
         summary_generated=False,  # Mark for later AI summarization
         duration_ms=duration * 60000 if duration else None,
         working_directory=os.getcwd(),
-        repo_path=repo
+        repo_path=repo,
     )
 
     db_session.add(session)
@@ -1895,7 +1987,9 @@ def add_manual(description: str, tool: str, duration: int, repo: str):
     # Ask if user wants to add more details
     console.print("\n[bold]Optional:[/bold] Add more details?")
     console.print("You can:")
-    console.print(f"  1. Let AI generate a better summary: [cyan]chronicle session {session_id}[/cyan]")
+    console.print(
+        f"  1. Let AI generate a better summary: [cyan]chronicle session {session_id}[/cyan]"
+    )
     console.print("  2. Manually edit in database or Obsidian vault")
     console.print("  3. Export to Obsidian: [cyan]chronicle export obsidian[/cyan] (coming soon)")
 
@@ -1906,15 +2000,27 @@ def add_manual(description: str, tool: str, duration: int, repo: str):
 # PROJECT TRACKING COMMANDS (Milestones & Next Steps)
 # ============================================================================
 
+
 @cli.command()
-@click.argument('title')
-@click.option('--description', '-d', help='Detailed description of the milestone')
-@click.option('--type', 'milestone_type', type=click.Choice(['feature', 'bugfix', 'optimization', 'documentation']), default='feature', help='Type of milestone')
-@click.option('--priority', type=int, default=3, help='Priority (1=highest, 5=lowest)')
-@click.option('--tags', help='Comma-separated tags (e.g., "phase-4,mcp,obsidian")')
-def milestone(title: str, description: str = None, milestone_type: str = 'feature', priority: int = 3, tags: str = None):
+@click.argument("title")
+@click.option("--description", "-d", help="Detailed description of the milestone")
+@click.option(
+    "--type",
+    "milestone_type",
+    type=click.Choice(["feature", "bugfix", "optimization", "documentation"]),
+    default="feature",
+    help="Type of milestone",
+)
+@click.option("--priority", type=int, default=3, help="Priority (1=highest, 5=lowest)")
+@click.option("--tags", help='Comma-separated tags (e.g., "phase-4,mcp,obsidian")')
+def milestone(
+    title: str,
+    description: str = None,
+    milestone_type: str = "feature",
+    priority: int = 3,
+    tags: str = None,
+):
     """Create a new project milestone."""
-    from rich.table import Table
 
     db_session = get_session()
 
@@ -1923,11 +2029,11 @@ def milestone(title: str, description: str = None, milestone_type: str = 'featur
         description=description,
         milestone_type=milestone_type,
         priority=priority,
-        status='planned'
+        status="planned",
     )
 
     if tags:
-        milestone.tags_list = [tag.strip() for tag in tags.split(',')]
+        milestone.tags_list = [tag.strip() for tag in tags.split(",")]
 
     db_session.add(milestone)
     db_session.commit()
@@ -1939,18 +2045,32 @@ def milestone(title: str, description: str = None, milestone_type: str = 'featur
     if tags:
         console.print(f"[dim]Tags: {tags}[/dim]")
 
-    console.print(f"\n[bold]Next:[/bold]")
-    console.print(f"  - Link a session: [cyan]chronicle link-session <session_id> --milestone {milestone_id}[/cyan]")
-    console.print(f"  - Update status: [cyan]chronicle milestone-status {milestone_id} in_progress[/cyan]")
+    console.print("\n[bold]Next:[/bold]")
+    console.print(
+        f"  - Link a session: [cyan]chronicle link-session <session_id> --milestone {milestone_id}[/cyan]"
+    )
+    console.print(
+        f"  - Update status: [cyan]chronicle milestone-status {milestone_id} in_progress[/cyan]"
+    )
     console.print(f"  - Mark complete: [cyan]chronicle milestone-complete {milestone_id}[/cyan]")
 
     db_session.close()
 
 
 @cli.command()
-@click.option('--status', type=click.Choice(['all', 'planned', 'in_progress', 'completed', 'archived']), default='all', help='Filter by status')
-@click.option('--type', 'milestone_type', type=click.Choice(['feature', 'bugfix', 'optimization', 'documentation']), help='Filter by type')
-@click.option('--limit', type=int, default=20, help='Max number of milestones to show')
+@click.option(
+    "--status",
+    type=click.Choice(["all", "planned", "in_progress", "completed", "archived"]),
+    default="all",
+    help="Filter by status",
+)
+@click.option(
+    "--type",
+    "milestone_type",
+    type=click.Choice(["feature", "bugfix", "optimization", "documentation"]),
+    help="Filter by type",
+)
+@click.option("--limit", type=int, default=20, help="Max number of milestones to show")
 def milestones(status: str, milestone_type: str = None, limit: int = 20):
     """List project milestones."""
     from rich.table import Table
@@ -1960,7 +2080,7 @@ def milestones(status: str, milestone_type: str = None, limit: int = 20):
 
     query = db_session.query(ProjectMilestone)
 
-    if status != 'all':
+    if status != "all":
         query = query.filter(ProjectMilestone.status == status)
 
     if milestone_type:
@@ -1969,7 +2089,7 @@ def milestones(status: str, milestone_type: str = None, limit: int = 20):
     query = query.order_by(
         ProjectMilestone.completed_at.desc().nullsfirst(),
         desc(ProjectMilestone.priority),
-        ProjectMilestone.created_at.desc()
+        ProjectMilestone.created_at.desc(),
     )
 
     milestones_list = query.limit(limit).all()
@@ -1990,14 +2110,14 @@ def milestones(status: str, milestone_type: str = None, limit: int = 20):
 
     for m in milestones_list:
         status_color = {
-            'planned': 'blue',
-            'in_progress': 'yellow',
-            'completed': 'green',
-            'archived': 'dim'
-        }.get(m.status, 'white')
+            "planned": "blue",
+            "in_progress": "yellow",
+            "completed": "green",
+            "archived": "dim",
+        }.get(m.status, "white")
 
         session_count = len(m.sessions_list) if m.sessions_list else 0
-        tags_str = ', '.join(m.tags_list[:3]) if m.tags_list else ''
+        tags_str = ", ".join(m.tags_list[:3]) if m.tags_list else ""
 
         table.add_row(
             str(m.id),
@@ -2006,7 +2126,7 @@ def milestones(status: str, milestone_type: str = None, limit: int = 20):
             f"[{status_color}]{m.status}[/{status_color}]",
             f"P{m.priority}",
             str(session_count),
-            tags_str
+            tags_str,
         )
 
     console.print(table)
@@ -2016,8 +2136,10 @@ def milestones(status: str, milestone_type: str = None, limit: int = 20):
 
 
 @cli.command()
-@click.argument('milestone_id', type=int)
-@click.argument('new_status', type=click.Choice(['planned', 'in_progress', 'completed', 'archived']))
+@click.argument("milestone_id", type=int)
+@click.argument(
+    "new_status", type=click.Choice(["planned", "in_progress", "completed", "archived"])
+)
 def milestone_status(milestone_id: int, new_status: str):
     """Update milestone status."""
     db_session = get_session()
@@ -2032,7 +2154,7 @@ def milestone_status(milestone_id: int, new_status: str):
     old_status = milestone.status
     milestone.status = new_status
 
-    if new_status == 'completed' and not milestone.completed_at:
+    if new_status == "completed" and not milestone.completed_at:
         milestone.completed_at = datetime.now()
 
     db_session.commit()
@@ -2044,7 +2166,7 @@ def milestone_status(milestone_id: int, new_status: str):
 
 
 @cli.command()
-@click.argument('milestone_id', type=int)
+@click.argument("milestone_id", type=int)
 def milestone_complete(milestone_id: int):
     """Mark a milestone as completed."""
     db_session = get_session()
@@ -2056,7 +2178,7 @@ def milestone_complete(milestone_id: int):
         db_session.close()
         return
 
-    milestone.status = 'completed'
+    milestone.status = "completed"
     milestone.completed_at = datetime.now()
 
     db_session.commit()
@@ -2071,7 +2193,7 @@ def milestone_complete(milestone_id: int):
 
 
 @cli.command()
-@click.argument('milestone_id', type=int)
+@click.argument("milestone_id", type=int)
 def milestone_show(milestone_id: int):
     """Show detailed milestone information."""
     from rich.panel import Panel
@@ -2120,12 +2242,23 @@ def milestone_show(milestone_id: int):
 
 
 @cli.command()
-@click.argument('description')
-@click.option('--priority', type=int, default=3, help='Priority (1=highest, 5=lowest)')
-@click.option('--effort', type=click.Choice(['small', 'medium', 'large']), help='Estimated effort')
-@click.option('--category', type=click.Choice(['feature', 'optimization', 'fix', 'docs']), default='feature', help='Category')
-@click.option('--milestone', type=int, help='Link to milestone ID')
-def next_step(description: str, priority: int = 3, effort: str = None, category: str = 'feature', milestone: int = None):
+@click.argument("description")
+@click.option("--priority", type=int, default=3, help="Priority (1=highest, 5=lowest)")
+@click.option("--effort", type=click.Choice(["small", "medium", "large"]), help="Estimated effort")
+@click.option(
+    "--category",
+    type=click.Choice(["feature", "optimization", "fix", "docs"]),
+    default="feature",
+    help="Category",
+)
+@click.option("--milestone", type=int, help="Link to milestone ID")
+def next_step(
+    description: str,
+    priority: int = 3,
+    effort: str = None,
+    category: str = "feature",
+    milestone: int = None,
+):
     """Add a next step / TODO item."""
     db_session = get_session()
 
@@ -2134,8 +2267,8 @@ def next_step(description: str, priority: int = 3, effort: str = None, category:
         priority=priority,
         estimated_effort=effort,
         category=category,
-        created_by='manual',
-        related_milestone_id=milestone
+        created_by="manual",
+        related_milestone_id=milestone,
     )
 
     db_session.add(step)
@@ -2154,9 +2287,9 @@ def next_step(description: str, priority: int = 3, effort: str = None, category:
 
 
 @cli.command()
-@click.option('--all', 'show_all', is_flag=True, help='Show completed items too')
-@click.option('--milestone', type=int, help='Filter by milestone ID')
-@click.option('--limit', type=int, default=20, help='Max number of items to show')
+@click.option("--all", "show_all", is_flag=True, help="Show completed items too")
+@click.option("--milestone", type=int, help="Filter by milestone ID")
+@click.option("--limit", type=int, default=20, help="Max number of items to show")
 def next_steps(show_all: bool = False, milestone: int = None, limit: int = 20):
     """List next steps / TODOs."""
     from rich.table import Table
@@ -2172,11 +2305,7 @@ def next_steps(show_all: bool = False, milestone: int = None, limit: int = 20):
     if milestone:
         query = query.filter(NextStep.related_milestone_id == milestone)
 
-    query = query.order_by(
-        NextStep.completed,
-        desc(NextStep.priority),
-        NextStep.created_at.desc()
-    )
+    query = query.order_by(NextStep.completed, desc(NextStep.priority), NextStep.created_at.desc())
 
     steps = query.limit(limit).all()
 
@@ -2195,15 +2324,10 @@ def next_steps(show_all: bool = False, milestone: int = None, limit: int = 20):
 
     for step in steps:
         status = "[green]✓ Done[/green]" if step.completed else "[yellow]Pending[/yellow]"
-        effort = step.estimated_effort or '-'
+        effort = step.estimated_effort or "-"
 
         table.add_row(
-            str(step.id),
-            step.description[:60],
-            f"P{step.priority}",
-            effort,
-            step.category,
-            status
+            str(step.id), step.description[:60], f"P{step.priority}", effort, step.category, status
         )
 
     console.print(table)
@@ -2213,7 +2337,7 @@ def next_steps(show_all: bool = False, milestone: int = None, limit: int = 20):
 
 
 @cli.command()
-@click.argument('step_id', type=int)
+@click.argument("step_id", type=int)
 def next_step_complete(step_id: int):
     """Mark a next step as completed."""
     db_session = get_session()
@@ -2236,11 +2360,15 @@ def next_step_complete(step_id: int):
 
 
 @cli.command()
-@click.argument('session_id', type=int)
-@click.option('--milestone', type=int, help='Milestone ID to link to')
-@click.option('--continues-from', 'parent_id', type=int, help='Mark as continuation of this session')
-@click.option('--related-to', 'related_ids', type=str, help='Comma-separated related session IDs')
-def link_session(session_id: int, milestone: int = None, parent_id: int = None, related_ids: str = None):
+@click.argument("session_id", type=int)
+@click.option("--milestone", type=int, help="Milestone ID to link to")
+@click.option(
+    "--continues-from", "parent_id", type=int, help="Mark as continuation of this session"
+)
+@click.option("--related-to", "related_ids", type=str, help="Comma-separated related session IDs")
+def link_session(
+    session_id: int, milestone: int = None, parent_id: int = None, related_ids: str = None
+):
     """Link a session to milestones or other sessions.
 
     Examples:
@@ -2275,7 +2403,9 @@ def link_session(session_id: int, milestone: int = None, parent_id: int = None, 
             milestone_obj.sessions_list = sessions
             changes.append(f"Milestone: {milestone_obj.title}")
         else:
-            console.print(f"[yellow]Session #{session_id} already linked to milestone #{milestone}[/yellow]")
+            console.print(
+                f"[yellow]Session #{session_id} already linked to milestone #{milestone}[/yellow]"
+            )
 
     # Set parent session
     if parent_id is not None:
@@ -2291,7 +2421,7 @@ def link_session(session_id: int, milestone: int = None, parent_id: int = None, 
 
     # Add related sessions
     if related_ids is not None:
-        new_related = [int(rid.strip()) for rid in related_ids.split(',') if rid.strip()]
+        new_related = [int(rid.strip()) for rid in related_ids.split(",") if rid.strip()]
 
         # Verify all exist
         for rid in new_related:
@@ -2309,7 +2439,9 @@ def link_session(session_id: int, milestone: int = None, parent_id: int = None, 
         changes.append(f"Related to: Sessions {', '.join(map(str, updated_related))}")
 
     if not changes:
-        console.print("[yellow]No changes specified. Use --milestone, --continues-from, or --related-to[/yellow]")
+        console.print(
+            "[yellow]No changes specified. Use --milestone, --continues-from, or --related-to[/yellow]"
+        )
         db_session.close()
         return
 
@@ -2326,33 +2458,38 @@ def link_session(session_id: int, milestone: int = None, parent_id: int = None, 
 
 
 @cli.command()
-@click.option('--days', type=int, default=7, help='Number of days to show')
+@click.option("--days", type=int, default=7, help="Number of days to show")
 def roadmap(days: int = 7):
     """Show project roadmap and progress."""
-    from rich.table import Table
-    from rich.panel import Panel
 
     db_session = get_session()
 
     # In progress milestones
-    in_progress = db_session.query(ProjectMilestone).filter_by(status='in_progress').all()
+    in_progress = db_session.query(ProjectMilestone).filter_by(status="in_progress").all()
 
     # Recent completions
     cutoff = datetime.now() - timedelta(days=days)
-    completed = db_session.query(ProjectMilestone).filter(
-        ProjectMilestone.status == 'completed',
-        ProjectMilestone.completed_at >= cutoff
-    ).order_by(ProjectMilestone.completed_at.desc()).limit(10).all()
+    completed = (
+        db_session.query(ProjectMilestone)
+        .filter(ProjectMilestone.status == "completed", ProjectMilestone.completed_at >= cutoff)
+        .order_by(ProjectMilestone.completed_at.desc())
+        .limit(10)
+        .all()
+    )
 
     # Planned (high priority)
-    planned = db_session.query(ProjectMilestone).filter_by(status='planned').order_by(
-        ProjectMilestone.priority
-    ).limit(5).all()
+    planned = (
+        db_session.query(ProjectMilestone)
+        .filter_by(status="planned")
+        .order_by(ProjectMilestone.priority)
+        .limit(5)
+        .all()
+    )
 
     # Pending next steps
-    pending_steps = db_session.query(NextStep).filter_by(completed=0).order_by(
-        NextStep.priority
-    ).limit(5).all()
+    pending_steps = (
+        db_session.query(NextStep).filter_by(completed=0).order_by(NextStep.priority).limit(5).all()
+    )
 
     # Show roadmap
     console.print("\n[bold cyan]Chronicle Development Roadmap[/bold cyan]\n")
@@ -2361,13 +2498,15 @@ def roadmap(days: int = 7):
         console.print("[bold yellow]🚧 In Progress[/bold yellow]")
         for m in in_progress:
             sessions_count = len(m.sessions_list) if m.sessions_list else 0
-            console.print(f"  • [bold]{m.title}[/bold] ({m.milestone_type}, {sessions_count} sessions)")
+            console.print(
+                f"  • [bold]{m.title}[/bold] ({m.milestone_type}, {sessions_count} sessions)"
+            )
         console.print()
 
     if completed:
         console.print(f"[bold green]✅ Completed (last {days} days)[/bold green]")
         for m in completed:
-            completed_date = m.completed_at.strftime('%b %d')
+            completed_date = m.completed_at.strftime("%b %d")
             console.print(f"  • {m.title} ({completed_date})")
         console.print()
 
@@ -2386,11 +2525,13 @@ def roadmap(days: int = 7):
 
     # Stats
     total_milestones = db_session.query(ProjectMilestone).count()
-    total_completed = db_session.query(ProjectMilestone).filter_by(status='completed').count()
+    total_completed = db_session.query(ProjectMilestone).filter_by(status="completed").count()
     total_steps = db_session.query(NextStep).count()
     completed_steps = db_session.query(NextStep).filter_by(completed=1).count()
 
-    console.print(f"[dim]Milestones: {total_completed}/{total_milestones} completed | Next Steps: {completed_steps}/{total_steps} done[/dim]")
+    console.print(
+        f"[dim]Milestones: {total_completed}/{total_milestones} completed | Next Steps: {completed_steps}/{total_steps} done[/dim]"
+    )
 
     db_session.close()
 
@@ -2424,14 +2565,14 @@ def vacuum():
     # Get size before
     size_before = db_path.stat().st_size
 
-    console.print(f"\n[cyan]Compacting database...[/cyan]")
+    console.print("\n[cyan]Compacting database...[/cyan]")
     console.print(f"[dim]Path: {db_path}[/dim]")
     console.print(f"[dim]Size before: {size_before / 1024 / 1024:.1f} MB[/dim]")
 
     try:
         # Connect and vacuum
         conn = sqlite3.connect(str(db_path))
-        console.print(f"[dim]Running VACUUM...[/dim]")
+        console.print("[dim]Running VACUUM...[/dim]")
         conn.execute("VACUUM")
         conn.close()
 
@@ -2439,18 +2580,21 @@ def vacuum():
         size_after = db_path.stat().st_size
         reduction = ((size_before - size_after) / size_before * 100) if size_before > 0 else 0
 
-        console.print(f"\n[green]✓[/green] Database compacted successfully!")
+        console.print("\n[green]✓[/green] Database compacted successfully!")
         console.print(f"[bold]Size after: {size_after / 1024 / 1024:.1f} MB[/bold]")
-        console.print(f"[bold green]Space reclaimed: {(size_before - size_after) / 1024 / 1024:.1f} MB ({reduction:.1f}%)[/bold green]")
+        console.print(
+            f"[bold green]Space reclaimed: {(size_before - size_after) / 1024 / 1024:.1f} MB ({reduction:.1f}%)[/bold green]"
+        )
 
     except Exception as e:
         console.print(f"[red]✗[/red] Error during vacuum: {e}")
         import traceback
+
         traceback.print_exc()
 
 
 @cli.command()
-@click.argument('session_id', type=int)
+@click.argument("session_id", type=int)
 def export_session(session_id: int):
     """Export a session as JSON (for cross-system summarization).
 
@@ -2458,18 +2602,22 @@ def export_session(session_id: int):
         chronicle export-session 42 > session.json
         chronicle export-session 42 | ssh mac "chronicle import-and-summarize" > summary.json
     """
-    db_path = os.getenv('CHRONICLE_DB')  # For testing
+    db_path = os.getenv("CHRONICLE_DB")  # For testing
     db_session = get_session(db_path)
 
     try:
         session = db_session.query(AIInteraction).filter_by(id=session_id).first()
 
         if not session:
-            console.print(f"[red]✗[/red] Session {session_id} not found", )
+            console.print(
+                f"[red]✗[/red] Session {session_id} not found",
+            )
             sys.exit(1)
 
         if not session.is_session:
-            console.print(f"[red]✗[/red] ID {session_id} is not a session (use for full sessions only)", )
+            console.print(
+                f"[red]✗[/red] ID {session_id} is not a session (use for full sessions only)",
+            )
             sys.exit(1)
 
         # Get transcript (fallback chain: database → .cleaned → .log → None)
@@ -2481,10 +2629,10 @@ def export_session(session_id: int):
             log_path = home / ".ai-session" / "sessions" / f"session_{session_id}.log"
 
             if cleaned_path.exists():
-                transcript = cleaned_path.read_text(encoding='utf-8', errors='ignore')
+                transcript = cleaned_path.read_text(encoding="utf-8", errors="ignore")
             elif log_path.exists():
                 # Fallback to .log file (raw transcript, not cleaned)
-                transcript = log_path.read_text(encoding='utf-8', errors='ignore')
+                transcript = log_path.read_text(encoding="utf-8", errors="ignore")
 
         # Build export JSON
         export_data = {
@@ -2504,28 +2652,30 @@ def export_session(session_id: int):
                 "files_mentioned": session.files_mentioned,
                 "parent_session_id": session.parent_session_id,
                 "related_session_ids": session.related_session_ids,
-            }
+            },
         }
 
         # Output to stdout (for piping)
         print(json.dumps(export_data, indent=2))
 
     except Exception as e:
-        console.print(f"[red]✗[/red] Export failed: {e}", )
+        console.print(
+            f"[red]✗[/red] Export failed: {e}",
+        )
         sys.exit(1)
     finally:
         db_session.close()
 
 
 @cli.command()
-def import_session():
+def import_session_json():
     """Import a session from JSON (stdin) and return new session ID.
 
     Example:
-        cat session.json | chronicle import-session
-        chronicle export-session 42 | ssh mac "chronicle import-session"
+        cat session.json | chronicle import-session-json
+        chronicle export-session 42 | ssh mac "chronicle import-session-json"
     """
-    db_path = os.getenv('CHRONICLE_DB')  # For testing
+    db_path = os.getenv("CHRONICLE_DB")  # For testing
     db_session = get_session(db_path)
 
     try:
@@ -2533,7 +2683,9 @@ def import_session():
         import_data = json.load(sys.stdin)
 
         if import_data.get("version") != "1.0":
-            console.print(f"[red]✗[/red] Unsupported export version: {import_data.get('version')}", )
+            console.print(
+                f"[red]✗[/red] Unsupported export version: {import_data.get('version')}",
+            )
             sys.exit(1)
 
         session_data = import_data["session"]
@@ -2545,7 +2697,11 @@ def import_session():
 
         # Create new session (with new ID)
         new_session = AIInteraction(
-            timestamp=datetime.fromisoformat(session_data["timestamp"]) if session_data.get("timestamp") else datetime.now(),
+            timestamp=(
+                datetime.fromisoformat(session_data["timestamp"])
+                if session_data.get("timestamp")
+                else datetime.now()
+            ),
             ai_tool=session_data["ai_tool"],
             prompt="",  # Sessions don't have prompts (full transcript instead)
             is_session=True,
@@ -2568,33 +2724,57 @@ def import_session():
         transcript_content = session_data.get("session_transcript")
         if transcript_content:
             from pathlib import Path
+
             sessions_dir = Path.home() / ".ai-session" / "sessions"
             sessions_dir.mkdir(parents=True, exist_ok=True)
 
             # Create .cleaned file (primary location for v6+ sessions)
             cleaned_path = sessions_dir / f"session_{new_session.id}.cleaned"
-            cleaned_path.write_text(transcript_content, encoding='utf-8')
+            cleaned_path.write_text(transcript_content, encoding="utf-8")
 
-            console.print(f"[green]✓[/green] Session imported as ID {new_session.id}", )
-            console.print(f"[dim]Original ID: {session_data.get('original_id')}[/dim]", )
-            console.print(f"[dim]Tool: {new_session.ai_tool}[/dim]", )
-            console.print(f"[dim]Transcript size: {len(transcript_content)} chars[/dim]", )
-            console.print(f"[dim]✓ Transcript saved to {cleaned_path.name}[/dim]", )
+            console.print(
+                f"[green]✓[/green] Session imported as ID {new_session.id}",
+            )
+            console.print(
+                f"[dim]Original ID: {session_data.get('original_id')}[/dim]",
+            )
+            console.print(
+                f"[dim]Tool: {new_session.ai_tool}[/dim]",
+            )
+            console.print(
+                f"[dim]Transcript size: {len(transcript_content)} chars[/dim]",
+            )
+            console.print(
+                f"[dim]✓ Transcript saved to {cleaned_path.name}[/dim]",
+            )
         else:
-            console.print(f"[green]✓[/green] Session imported as ID {new_session.id}", )
-            console.print(f"[dim]Original ID: {session_data.get('original_id')}[/dim]", )
-            console.print(f"[dim]Tool: {new_session.ai_tool}[/dim]", )
-            console.print(f"[yellow]⚠[/yellow] No transcript data provided[/dim]", )
+            console.print(
+                f"[green]✓[/green] Session imported as ID {new_session.id}",
+            )
+            console.print(
+                f"[dim]Original ID: {session_data.get('original_id')}[/dim]",
+            )
+            console.print(
+                f"[dim]Tool: {new_session.ai_tool}[/dim]",
+            )
+            console.print(
+                "[yellow]⚠[/yellow] No transcript data provided[/dim]",
+            )
 
         # Output just the new ID to stdout (for piping)
         print(new_session.id)
 
     except json.JSONDecodeError as e:
-        console.print(f"[red]✗[/red] Invalid JSON: {e}", )
+        console.print(
+            f"[red]✗[/red] Invalid JSON: {e}",
+        )
         sys.exit(1)
     except Exception as e:
-        console.print(f"[red]✗[/red] Import failed: {e}", )
+        console.print(
+            f"[red]✗[/red] Import failed: {e}",
+        )
         import traceback
+
         traceback.print_exc()
         sys.exit(1)
     finally:
@@ -2602,8 +2782,8 @@ def import_session():
 
 
 @cli.command()
-@click.option('--chunk-size', type=int, default=10000, help='Lines per chunk for large sessions')
-@click.option('--quiet', is_flag=True, help='Suppress status messages, output only JSON')
+@click.option("--chunk-size", type=int, default=10000, help="Lines per chunk for large sessions")
+@click.option("--quiet", is_flag=True, help="Suppress status messages, output only JSON")
 def import_and_summarize(chunk_size: int, quiet: bool):
     """Import session from JSON (stdin) and immediately summarize it.
 
@@ -2619,6 +2799,10 @@ def import_and_summarize(chunk_size: int, quiet: bool):
     import os
     import time
     import errno
+    try:
+        import fcntl
+    except ImportError:
+        fcntl = None
 
     lock_file = os.path.expanduser("~/.ai-session/.import_and_summarize.lock")
     lock_dir = os.path.dirname(lock_file)
@@ -2628,8 +2812,9 @@ def import_and_summarize(chunk_size: int, quiet: bool):
     try:
         # Try to acquire exclusive lock with timeout
         lock_fd = os.open(lock_file, os.O_CREAT | os.O_WRONLY | os.O_TRUNC)
-        try:
-            # Try to acquire lock, wait up to 60 seconds
+
+        # Try to acquire lock, wait up to 60 seconds
+        if fcntl is not None:
             start_time = time.time()
             while time.time() - start_time < 60:
                 try:
@@ -2642,17 +2827,21 @@ def import_and_summarize(chunk_size: int, quiet: bool):
                         raise
             else:
                 if not quiet:
-                    console.print("[red]✗[/red] Another import-and-summarize operation is in progress. Please wait.", )
+                    console.print(
+                        "[red]✗[/red] Another import-and-summarize operation is in progress. Please wait.",
+                    )
                 sys.exit(1)
-        except NameError:
-            # fcntl not available (Windows), just continue without locking
+        else:
+            # fcntl not available, skip locking (Windows systems)
             pass
     except OSError as e:
         if not quiet:
-            console.print(f"[red]✗[/red] Cannot create lock file: {e}", )
+            console.print(
+                f"[red]✗[/red] Cannot create lock file: {e}",
+            )
         sys.exit(1)
 
-    db_path = os.getenv('CHRONICLE_DB')  # For testing
+    db_path = os.getenv("CHRONICLE_DB")  # For testing
     db_session = get_session(db_path)
 
     try:
@@ -2660,13 +2849,17 @@ def import_and_summarize(chunk_size: int, quiet: bool):
         import_data = json.load(sys.stdin)
 
         if import_data.get("version") != "1.0":
-            console.print(f"[red]✗[/red] Unsupported export version: {import_data.get('version')}", )
+            console.print(
+                f"[red]✗[/red] Unsupported export version: {import_data.get('version')}",
+            )
             sys.exit(1)
 
         session_data = import_data["session"]
 
         if not quiet:
-            console.print(f"[dim]Importing session from {session_data['ai_tool']}...[/dim]", )
+            console.print(
+                f"[dim]Importing session from {session_data['ai_tool']}...[/dim]",
+            )
 
         # JSON-encode files_mentioned if it's a list
         files_mentioned = session_data.get("files_mentioned")
@@ -2689,7 +2882,11 @@ def import_and_summarize(chunk_size: int, quiet: bool):
 
         temp_session = AIInteraction(
             id=temp_id,  # Explicit negative ID for temporary session
-            timestamp=datetime.fromisoformat(session_data["timestamp"]) if session_data.get("timestamp") else datetime.now(),
+            timestamp=(
+                datetime.fromisoformat(session_data["timestamp"])
+                if session_data.get("timestamp")
+                else datetime.now()
+            ),
             ai_tool=session_data["ai_tool"],
             prompt="",  # Sessions don't have prompts (full transcript instead)
             is_session=True,
@@ -2715,6 +2912,7 @@ def import_and_summarize(chunk_size: int, quiet: bool):
             import uuid
             import fcntl
             from pathlib import Path
+
             sessions_dir = Path.home() / ".ai-session" / "sessions"
             sessions_dir.mkdir(parents=True, exist_ok=True)
 
@@ -2724,27 +2922,33 @@ def import_and_summarize(chunk_size: int, quiet: bool):
 
             # Use file locking to prevent concurrent writes
             try:
-                with open(cleaned_path, 'w', encoding='utf-8') as f:
+                with open(cleaned_path, "w", encoding="utf-8") as f:
                     # Apply exclusive lock for write safety
                     fcntl.flock(f.fileno(), fcntl.LOCK_EX)
                     f.write(transcript_content)
                 # Lock is automatically released when file is closed
             except ImportError:
                 # Windows or systems without fcntl
-                cleaned_path.write_text(transcript_content, encoding='utf-8')
+                cleaned_path.write_text(transcript_content, encoding="utf-8")
             except OSError:
                 # Fallback if file locking fails
-                cleaned_path.write_text(transcript_content, encoding='utf-8')
+                cleaned_path.write_text(transcript_content, encoding="utf-8")
 
             # Store the unique filename reference for cleanup
             temp_session.session_transcript = str(cleaned_path.name)
 
             if not quiet:
-                console.print(f"[dim]✓ Transcript saved to {cleaned_path.name}[/dim]", )
+                console.print(
+                    f"[dim]✓ Transcript saved to {cleaned_path.name}[/dim]",
+                )
 
         if not quiet:
-            console.print(f"[green]✓[/green] Temporary session created (ID: {temp_session.id})", )
-            console.print(f"[dim]Summarizing (this may take a while)...[/dim]", )
+            console.print(
+                f"[green]✓[/green] Temporary session created (ID: {temp_session.id})",
+            )
+            console.print(
+                "[dim]Summarizing (this may take a while)...[/dim]",
+            )
 
         summary_data = None
         try:
@@ -2754,11 +2958,13 @@ def import_and_summarize(chunk_size: int, quiet: bool):
                 session_id=temp_session.id,
                 chunk_size_lines=chunk_size,
                 db_session=db_session,
-                quiet=quiet
+                quiet=quiet,
             )
 
             if not quiet:
-                console.print(f"[green]✓[/green] Summary generated ({len(summary)} chars)", )
+                console.print(
+                    f"[green]✓[/green] Summary generated ({len(summary)} chars)",
+                )
 
             # Refresh session to get updated summary
             db_session.refresh(temp_session)
@@ -2771,25 +2977,33 @@ def import_and_summarize(chunk_size: int, quiet: bool):
             }
 
         except Exception as e:
-            console.print(f"[red]✗[/red] Summarization failed: {e}", )
+            console.print(
+                f"[red]✗[/red] Summarization failed: {e}",
+            )
             raise
 
         finally:
             # Clean up temporary session and files (always run)
             if not quiet:
-                console.print(f"[dim]Cleaning up temporary session...[/dim]", )
+                console.print(
+                    "[dim]Cleaning up temporary session...[/dim]",
+                )
 
             # Delete external file if it exists
             if cleaned_path and cleaned_path.exists():
                 cleaned_path.unlink()
                 if not quiet:
-                    console.print(f"[dim]✓ Deleted {cleaned_path.name}[/dim]", )
+                    console.print(
+                        f"[dim]✓ Deleted {cleaned_path.name}[/dim]",
+                    )
 
             # Delete temporary session from database
             db_session.delete(temp_session)
             db_session.commit()
             if not quiet:
-                console.print(f"[dim]✓ Deleted temporary session {temp_session.id}[/dim]", )
+                console.print(
+                    f"[dim]✓ Deleted temporary session {temp_session.id}[/dim]",
+                )
 
         # Output summary JSON to stdout
         output = {
@@ -2803,21 +3017,32 @@ def import_and_summarize(chunk_size: int, quiet: bool):
         print(json.dumps(output, indent=2))
 
     except ImportError as e:
-        console.print(f"[red]✗[/red] {e}", )
-        console.print("[dim]Install with: pip install --user google-generativeai[/dim]", )
-        console.print("[dim]Or use Ollama: chronicle config ai.summarization_provider ollama[/dim]", )
+        console.print(
+            f"[red]✗[/red] {e}",
+        )
+        console.print(
+            "[dim]Install with: pip install --user google-generativeai[/dim]",
+        )
+        console.print(
+            "[dim]Or use Ollama: chronicle config ai.summarization_provider ollama[/dim]",
+        )
         sys.exit(1)
     except json.JSONDecodeError as e:
-        console.print(f"[red]✗[/red] Invalid JSON: {e}", )
+        console.print(
+            f"[red]✗[/red] Invalid JSON: {e}",
+        )
         sys.exit(1)
     except Exception as e:
-        console.print(f"[red]✗[/red] Failed: {e}", )
+        console.print(
+            f"[red]✗[/red] Failed: {e}",
+        )
         import traceback
+
         traceback.print_exc()
         sys.exit(1)
     finally:
         # Clean up lock file
-        if 'lock_fd' in locals() and lock_fd is not None:
+        if "lock_fd" in locals() and lock_fd is not None:
             try:
                 fcntl.flock(lock_fd, fcntl.LOCK_UN)  # Release lock
                 os.close(lock_fd)
@@ -2839,7 +3064,7 @@ def import_summary():
         cat summary.json | chronicle import-summary
         ssh mac "chronicle export-session 42 | chronicle import-and-summarize" | chronicle import-summary
     """
-    db_path = os.getenv('CHRONICLE_DB')  # For testing
+    db_path = os.getenv("CHRONICLE_DB")  # For testing
     db_session = get_session(db_path)
 
     try:
@@ -2847,7 +3072,9 @@ def import_summary():
         summary_data = json.load(sys.stdin)
 
         if summary_data.get("version") != "1.0":
-            console.print(f"[red]✗[/red] Unsupported summary version: {summary_data.get('version')}", )
+            console.print(
+                f"[red]✗[/red] Unsupported summary version: {summary_data.get('version')}",
+            )
             sys.exit(1)
 
         original_id = summary_data.get("original_id")
@@ -2855,21 +3082,27 @@ def import_summary():
         keywords = summary_data.get("keywords")
 
         if not original_id:
-            console.print(f"[red]✗[/red] No original_id in summary JSON", )
+            console.print(
+                "[red]✗[/red] No original_id in summary JSON",
+            )
             sys.exit(1)
 
         # Find the original session
         session = db_session.query(AIInteraction).filter_by(id=original_id).first()
 
         if not session:
-            console.print(f"[red]✗[/red] Session {original_id} not found", )
+            console.print(
+                f"[red]✗[/red] Session {original_id} not found",
+            )
             sys.exit(1)
 
         # Data integrity checks
         if summary and len(summary) > 50:
             # Check if session already has a summary
             if session.response_summary and session.summary_generated:
-                console.print(f"[yellow]⚠️[/yellow] Session {original_id} already has a summary. Overwriting...", )
+                console.print(
+                    f"[yellow]⚠️[/yellow] Session {original_id} already has a summary. Overwriting...",
+                )
 
                 # Warn if summaries are very different (possible corruption)
                 existing_summary = session.response_summary
@@ -2880,16 +3113,22 @@ def import_summary():
 
                     if summary_words and existing_words:
                         common_words = summary_words.intersection(existing_words)
-                        similarity = len(common_words) / min(len(summary_words), len(existing_words))
+                        similarity = len(common_words) / min(
+                            len(summary_words), len(existing_words)
+                        )
 
                         if similarity < 0.3:  # Less than 30% similar
-                            console.print(f"[red]⚠️[/red] WARNING: New summary is very different from existing one!")
+                            console.print(
+                                "[red]⚠️[/red] WARNING: New summary is very different from existing one!"
+                            )
                             console.print(f"[red]⚠️[/red] Existing: {existing_summary[:100]}...")
                             console.print(f"[red]⚠️[/red] New: {summary[:100]}...")
-                            console.print(f"[red]⚠️[/red] This may indicate data corruption or wrong session ID.")
+                            console.print(
+                                "[red]⚠️[/red] This may indicate data corruption or wrong session ID."
+                            )
 
                             response = input("Continue anyway? (y/N): ").strip().lower()
-                            if response != 'y':
+                            if response != "y":
                                 console.print("Import cancelled.")
                                 sys.exit(1)
 
@@ -2906,11 +3145,16 @@ def import_summary():
         console.print(f"[dim]Keywords: {keywords}[/dim]")
 
     except json.JSONDecodeError as e:
-        console.print(f"[red]✗[/red] Invalid JSON: {e}", )
+        console.print(
+            f"[red]✗[/red] Invalid JSON: {e}",
+        )
         sys.exit(1)
     except Exception as e:
-        console.print(f"[red]✗[/red] Import failed: {e}", )
+        console.print(
+            f"[red]✗[/red] Import failed: {e}",
+        )
         import traceback
+
         traceback.print_exc()
         sys.exit(1)
     finally:
@@ -2939,7 +3183,9 @@ def provider_list():
         console.print("[yellow]⚠[/yellow]  No providers configured")
         return
 
-    table = Table(title="Available Claude Code Providers", show_header=True, header_style="bold cyan")
+    table = Table(
+        title="Available Claude Code Providers", show_header=True, header_style="bold cyan"
+    )
     table.add_column("Provider", style="cyan")
     table.add_column("Type", style="dim")
     table.add_column("Description")
@@ -3018,8 +3264,8 @@ def provider_use(provider: str):
     if provider == "zai":
         api_key = provider_config.get("api_key")
         if not api_key:
-            console.print(f"[red]✗[/red] Z.AI API key not configured")
-            console.print(f"[dim]Run: chronicle claude-provider setup zai[/dim]")
+            console.print("[red]✗[/red] Z.AI API key not configured")
+            console.print("[dim]Run: chronicle claude-provider setup zai[/dim]")
             return
 
         base_url = provider_config.get("base_url", "https://api.z.ai/api/anthropic")
@@ -3029,9 +3275,9 @@ def provider_use(provider: str):
         try:
             switcher.switch_to_zai(api_key, base_url, timeout_ms)
             config.set_current_claude_provider("zai")
-            console.print(f"[green]✓[/green] Switched to Z.AI provider")
+            console.print("[green]✓[/green] Switched to Z.AI provider")
             console.print(f"[dim]Base URL: {base_url}[/dim]")
-            console.print(f"\n[yellow]⚠[/yellow]  Restart Claude Code for changes to take effect")
+            console.print("\n[yellow]⚠[/yellow]  Restart Claude Code for changes to take effect")
         except Exception as e:
             console.print(f"[red]✗[/red] Failed to switch provider: {e}")
             return
@@ -3041,8 +3287,8 @@ def provider_use(provider: str):
         try:
             switcher.switch_to_anthropic()
             config.set_current_claude_provider("anthropic")
-            console.print(f"[green]✓[/green] Switched to Anthropic OAuth provider")
-            console.print(f"\n[yellow]⚠[/yellow]  Restart Claude Code for changes to take effect")
+            console.print("[green]✓[/green] Switched to Anthropic OAuth provider")
+            console.print("\n[yellow]⚠[/yellow]  Restart Claude Code for changes to take effect")
         except Exception as e:
             console.print(f"[red]✗[/red] Failed to switch provider: {e}")
             return
@@ -3076,7 +3322,7 @@ def provider_setup(provider: str):
             "Enter your Z.AI API key",
             type=str,
             hide_input=True,
-            confirmation_prompt="Confirm API key"
+            confirmation_prompt="Confirm API key",
         )
 
         if not api_key or len(api_key) < 10:
@@ -3086,7 +3332,7 @@ def provider_setup(provider: str):
         # Save API key
         config.set_claude_provider_api_key("zai", api_key)
         console.print(f"\n[green]✓[/green] Z.AI API key saved: {api_key[:8]}...{api_key[-4:]}")
-        console.print(f"\n[dim]To switch to Z.AI: chronicle claude-provider use zai[/dim]")
+        console.print("\n[dim]To switch to Z.AI: chronicle claude-provider use zai[/dim]")
 
 
 @claude_provider.command(name="backups")
@@ -3114,13 +3360,13 @@ def provider_backups():
             # Parse timestamp
             dt = datetime.strptime(timestamp_str, "%Y%m%d_%H%M%S")
             created = dt.strftime("%Y-%m-%d %I:%M:%S %p")
-        except:
+        except ValueError:
             created = timestamp_str
 
         table.add_row(str(idx), backup_path.name, created)
 
     console.print(table)
-    console.print(f"\n[dim]To restore: chronicle claude-provider restore <backup-file>[/dim]")
+    console.print("\n[dim]To restore: chronicle claude-provider restore <backup-file>[/dim]")
 
 
 @claude_provider.command(name="restore")
@@ -3137,12 +3383,14 @@ def provider_restore(backup_file: str):
 
     if not backup_path.exists():
         console.print(f"[red]✗[/red] Backup file not found: {backup_file}")
-        console.print(f"[dim]Run: chronicle claude-provider backups[/dim]")
+        console.print("[dim]Run: chronicle claude-provider backups[/dim]")
         return
 
     # Confirm restore
-    console.print(f"[yellow]⚠[/yellow]  This will restore settings from: [cyan]{backup_file}[/cyan]")
-    console.print(f"[dim]Current settings will be backed up first[/dim]\n")
+    console.print(
+        f"[yellow]⚠[/yellow]  This will restore settings from: [cyan]{backup_file}[/cyan]"
+    )
+    console.print("[dim]Current settings will be backed up first[/dim]\n")
 
     if not click.confirm("Continue with restore?", default=False):
         console.print("Restore cancelled.")
@@ -3156,7 +3404,7 @@ def provider_restore(backup_file: str):
         switcher.restore_from_backup(backup_path)
 
         console.print(f"[green]✓[/green] Settings restored from {backup_file}")
-        console.print(f"\n[yellow]⚠[/yellow]  Restart Claude Code for changes to take effect")
+        console.print("\n[yellow]⚠[/yellow]  Restart Claude Code for changes to take effect")
 
     except Exception as e:
         console.print(f"[red]✗[/red] Restore failed: {e}")
@@ -3164,7 +3412,7 @@ def provider_restore(backup_file: str):
 
 
 @cli.command()
-@click.option('--force', is_flag=True, help='Overwrite existing hooks and settings')
+@click.option("--force", is_flag=True, help="Overwrite existing hooks and settings")
 def setup_hooks(force: bool):
     """Set up Claude Code hooks for Chronicle workflow automation."""
     console.print("[bold cyan]Chronicle Hooks Setup[/bold cyan]\n")
@@ -3175,7 +3423,8 @@ def setup_hooks(force: bool):
     hooks_dir = claude_dir / "hooks"
     config_dir = claude_dir / "config"
 
-    console.print(f"Setting up hooks in: [cyan]{claude_dir}[/cyan]\n")
+    console.print(f"Setting up hooks in: [cyan]{claude_dir}[/cyan]")
+    console.print(f"Using templates from: [cyan]./templates[/cyan]\n")
 
     # Check if already exists
     if claude_dir.exists() and not force:
@@ -3192,27 +3441,30 @@ def setup_hooks(force: bool):
         config_dir.mkdir(exist_ok=True)
         console.print("[green]✓[/green] Created directory structure")
 
-        # Get Chronicle repo path - find the directory containing .claude/hooks
+        # Find the repository root to get source templates
         repo_path = Path.cwd()
-        source_hooks_dir = repo_path / ".claude" / "hooks"
-        source_config_dir = repo_path / ".claude" / "config"
+        templates_dir = None
 
-        # If not found in current directory, look in parent directories
+        # Look for templates directory in current directory or parent directories
         search_path = repo_path
         while search_path != search_path.parent:
-            if (search_path / ".claude" / "hooks").exists():
-                repo_path = search_path
-                source_hooks_dir = repo_path / ".claude" / "hooks"
-                source_config_dir = repo_path / ".claude" / "config"
+            potential_templates = search_path / "templates"
+            if potential_templates.exists() and (potential_templates / "hooks").exists():
+                templates_dir = potential_templates
                 break
             search_path = search_path.parent
 
-        if not source_hooks_dir.exists():
-            console.print(f"[red]✗[/red] Source hooks directory not found: {source_hooks_dir}")
+        if templates_dir is None:
+            console.print("[red]✗[/red] Templates directory not found")
             console.print("[dim]Make sure you're running this from the Chronicle repository[/dim]")
             console.print(f"[dim]Current directory: {Path.cwd()}[/dim]")
-            console.print(f"[dim]Looked for: .claude/hooks in current directory and parent directories[/dim]")
+            console.print(
+                "[dim]Looked for: templates/hooks in current directory and parent directories[/dim]"
+            )
             return
+
+        source_hooks_dir = templates_dir / "hooks"
+        source_config_dir = templates_dir
 
         # Copy hook scripts
         hook_files = ["user-prompt-submit.sh", "stop.sh", "post-tool-use.sh"]
@@ -3224,9 +3476,9 @@ def setup_hooks(force: bool):
                 target_path.write_text(source_path.read_text())
                 # Make executable
                 os.chmod(target_path, 0o755)
-                console.print(f"[green]✓[/green] Installed {hook_file}")
+                console.print(f"[green]✓[/green] Installed {hook_file} from templates")
             else:
-                console.print(f"[yellow]⚠[/yellow]  {hook_file} not found in source")
+                console.print(f"[yellow]⚠[/yellow]  {hook_file} not found in templates")
 
         # Copy config files
         config_files = ["skill-rules.json"]
@@ -3236,9 +3488,9 @@ def setup_hooks(force: bool):
 
             if source_path.exists():
                 target_path.write_text(source_path.read_text())
-                console.print(f"[green]✓[/green] Installed {config_file}")
+                console.print(f"[green]✓[/green] Installed {config_file} from templates")
             else:
-                console.print(f"[yellow]⚠[/yellow]  {config_file} not found in source")
+                console.print(f"[yellow]⚠[/yellow]  {config_file} not found in templates")
 
         # Create or update settings.local.json with hooks configuration
         settings_file = claude_dir / "settings.local.json"
@@ -3259,22 +3511,14 @@ def setup_hooks(force: bool):
                     "hooks": [
                         {
                             "type": "command",
-                            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/user-prompt-submit.sh",
-                            "timeout": 5
+                            "command": "~/.claude/hooks/user-prompt-submit.sh",
+                            "timeout": 5,
                         }
                     ]
                 }
             ],
             "Stop": [
-                {
-                    "hooks": [
-                        {
-                            "type": "command",
-                            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/stop.sh",
-                            "timeout": 5
-                        }
-                    ]
-                }
+                {"hooks": [{"type": "command", "command": "~/.claude/hooks/stop.sh", "timeout": 5}]}
             ],
             "PostToolUse": [
                 {
@@ -3282,12 +3526,12 @@ def setup_hooks(force: bool):
                     "hooks": [
                         {
                             "type": "command",
-                            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/post-tool-use.sh",
-                            "timeout": 5
+                            "command": "~/.claude/hooks/post-tool-use.sh",
+                            "timeout": 5,
                         }
-                    ]
+                    ],
                 }
-            ]
+            ],
         }
 
         # Merge hooks into settings
@@ -3580,36 +3824,46 @@ mcp__chronicle__search_sessions(query="bug OR issue OR error OR problem")
                     for plugin_key, plugin_info in installed_data.get("plugins", {}).items():
                         if "superpowers" in plugin_key:
                             superpowers_available = True
-                            console.print(f"[green]✓[/green] Superpowers skills installed (v{plugin_info.get('version', 'unknown')})")
+                            console.print(
+                                f"[green]✓[/green] Superpowers skills installed (v{plugin_info.get('version', 'unknown')})"
+                            )
                             break
                 except Exception as e:
                     console.print(f"[yellow]⚠[/yellow]  Could not check installed skills: {e}")
 
             if not superpowers_available:
                 console.print("[yellow]⚠[/yellow]  Superpowers skills not installed")
-                console.print("[dim]TDD skill auto-activation requires superpowers marketplace[/dim]")
-                console.print("[dim]Install with: /plugin install superpowers@superpowers-marketplace[/dim]")
+                console.print(
+                    "[dim]TDD skill auto-activation requires superpowers marketplace[/dim]"
+                )
+                console.print(
+                    "[dim]Install with: /plugin install superpowers@superpowers-marketplace[/dim]"
+                )
         else:
             console.print("[yellow]⚠[/yellow]  Superpowers marketplace not configured")
             console.print("[dim]TDD skill auto-activation requires superpowers marketplace[/dim]")
             console.print("[dim]Install with: /plugin install superpowers-marketplace[/dim]")
 
         # Success message
-        console.print(f"\n[bold green]✓ Hooks setup complete![/bold green]")
-        console.print(f"\n[cyan]What was installed:[/cyan]")
+        console.print("\n[bold green]✓ Hooks setup complete![/bold green]")
+        console.print("\n[cyan]What was installed:[/cyan]")
         console.print(f"  • Hook scripts in: {hooks_dir}")
         console.print(f"  • Configuration in: {settings_file}")
         console.print(f"  • Universal directives in: {claude_md_file}")
 
-        console.print(f"\n[cyan]Next steps:[/cyan]")
-        console.print(f"  1. Restart Claude Code for hooks to take effect")
-        console.print(f"  2. If superpowers skills weren't detected, run: /plugin install superpowers@superpowers-marketplace")
-        console.print(f"  3. Hooks will automatically remind you to search Chronicle")
-        console.print(f"  4. Universal CLAUDE.md provides development best practices")
-        console.print(f"  5. TDD skill will auto-activate when you start implementing (requires superpowers)")
+        console.print("\n[cyan]Next steps:[/cyan]")
+        console.print("  1. Restart Claude Code for hooks to take effect")
+        console.print(
+            "  2. If superpowers skills weren't detected, run: /plugin install superpowers@superpowers-marketplace"
+        )
+        console.print("  3. Hooks will automatically remind you to search Chronicle")
+        console.print("  4. Universal CLAUDE.md provides development best practices")
+        console.print(
+            "  5. TDD skill will auto-activate when you start implementing (requires superpowers)"
+        )
 
         if not force:
-            console.print(f"\n[dim]To reinstall later: chronicle setup-hooks --force[/dim]")
+            console.print("\n[dim]To reinstall later: chronicle setup-hooks --force[/dim]")
 
     except Exception as e:
         console.print(f"[red]✗[/red] Setup failed: {e}")
