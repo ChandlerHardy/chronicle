@@ -635,6 +635,105 @@ Summary:"""
         # Default minimum delay between chunks
         return 8
 
+    def summarize_session_smart(
+        self,
+        session_id: int,
+        db_session = None,
+        use_cli: bool = False,
+        cli_tool: str = "qwen",
+        quiet: bool = False,
+        force_chunked: bool = False
+    ) -> str:
+        """Smart summarization that chooses the best method based on session size.
+
+        Args:
+            session_id: ID of the session to summarize
+            db_session: SQLAlchemy database session (required)
+            use_cli: If True, use CLI tools instead of API
+            cli_tool: Which CLI tool to use if use_cli=True
+            quiet: If True, suppress status messages
+            force_chunked: Force use of chunked summarization regardless of size
+
+        Returns:
+            Summary text
+        """
+        from backend.database.models import AIInteraction
+        from pathlib import Path
+
+        def qprint(*args, **kwargs):
+            if not quiet:
+                print(*args, **kwargs)
+
+        if db_session is None:
+            raise ValueError("db_session is required for smart summarization")
+
+        # Get the session and transcript size
+        session = db_session.query(AIInteraction).filter_by(id=session_id).first()
+        if not session:
+            raise ValueError(f"Session {session_id} not found")
+
+        # Check transcript size to determine summarization method
+        cleaned_path = Path.home() / ".ai-session" / "sessions" / f"session_{session_id}.cleaned"
+        log_path = Path.home() / ".ai-session" / "sessions" / f"session_{session_id}.log"
+
+        if cleaned_path.exists():
+            with open(cleaned_path, 'r', encoding='utf-8', errors='ignore') as f:
+                transcript = f.read()
+        elif log_path.exists():
+            with open(log_path, 'r', encoding='utf-8', errors='ignore') as f:
+                raw_transcript = f.read()
+            transcript = clean_transcript(raw_transcript)
+        elif session.session_transcript:
+            transcript = session.session_transcript
+        else:
+            raise ValueError(f"Session {session_id} has no transcript")
+
+        total_lines = len(transcript.split('\n'))
+        qprint(f"📄 Session {session_id}: {total_lines:,} lines")
+
+        # Choose summarization method based on size
+        if force_chunked:
+            qprint(f"🔧 Using chunked summarization (forced)")
+            return self.summarize_session_chunked(
+                session_id=session_id,
+                db_session=db_session,
+                use_cli=use_cli,
+                cli_tool=cli_tool,
+                quiet=quiet
+            )
+        elif total_lines <= 8000:  # Small sessions - use regular summarization
+            qprint(f"🚀 Using regular summarization (small session)")
+            # Set adaptive max_length based on session size
+            if total_lines <= 2000:
+                max_length = 1500  # Very small sessions
+            elif total_lines <= 5000:
+                max_length = 2500  # Small sessions
+            else:
+                max_length = 3000  # Upper end of small sessions
+
+            summary = self.summarize_session(transcript, max_length=max_length)
+
+            # Extract keywords and update session
+            keywords = self.extract_keywords(summary)
+            session.response_summary = summary
+            session.keywords_list = keywords
+            session.summary_generated = True
+            db_session.commit()
+
+            qprint(f"✅ Session summarized: {len(summary)} characters")
+            qprint(f"📌 Keywords: {', '.join(keywords[:5])}...")
+            return summary
+
+        else:
+            qprint(f"🔧 Using chunked summarization (large session)")
+            return self.summarize_session_chunked(
+                session_id=session_id,
+                db_session=db_session,
+                use_cli=use_cli,
+                cli_tool=cli_tool,
+                quiet=quiet
+            )
+
     def summarize_session_chunked(
         self,
         session_id: int,
@@ -834,9 +933,13 @@ Summary:"""
             # Generate prompt based on whether this is the first chunk
             if chunk_num == 0:
                 # First chunk - just summarize it
-                prompt = f"""Summarize this development session transcript chunk in approximately {target_length} characters. Tell the story of what was built - what problems were encountered, how they were solved, what was implemented, and what decisions were made.
+                prompt = f"""Summarize this development session transcript chunk in exactly {target_length} characters. Tell the story of what was built - what problems were encountered, how they were solved, what was implemented, and what decisions were made.
 
-TARGET LENGTH: {target_length} characters (provide comprehensive detail while staying within bounds)
+🚨 CRITICAL LENGTH REQUIREMENT: EXACTLY {target_length} characters (+/- 5%)
+- Your summary MUST be between {int(target_length * 0.95)} and {int(target_length * 1.05)} characters
+- This is a hard requirement, not a suggestion
+- If summary is too short, add more implementation details
+- If summary is too long, condense language while preserving key information
 
 FOCUS ON (in priority order):
 1. **Implementation work**: What code/features were actually built
@@ -855,16 +958,18 @@ Keep the summary narrative and technical while respecting the target length.
 Transcript chunk:
 {chunk_text}
 
-Summary:"""
+Summary (EXACTLY {target_length} characters):"""
             else:
                 # Subsequent chunks - update the cumulative summary
                 prompt = f"""You are maintaining a running summary of a development session. Your task is to integrate new activity into the existing narrative while keeping the TOTAL updated summary under {target_length} characters.
 
-IMPORTANT LENGTH CONSTRAINT:
+🚨 CRITICAL LENGTH REQUIREMENT: EXACTLY {target_length} characters (+/- 5%)
 - Current summary length: {len(cumulative_summary)} characters
 - Target total length: {target_length} characters
-- Use the full target length - integrate new information comprehensively
-- If near the limit, condense previous details when adding new information
+- Your updated summary MUST be between {int(target_length * 0.95)} and {int(target_length * 1.05)} characters
+- This is a hard requirement, not a suggestion
+- If over limit, aggressively condense previous details to make room
+- If under limit, expand implementation details
 
 PREVIOUS SUMMARY (everything up to line {start_line}):
 {cumulative_summary}
@@ -878,9 +983,9 @@ INSTRUCTIONS:
 - Skip repeated conversations (if LangChain explained 10x, you already summarized it once)
 - Extract git commits verbatim (they're the best signal)
 - Keep it cohesive and well-organized
-- **RESPECT THE LENGTH CONSTRAINT** - this is critical
+- **LENGTH ENFORCEMENT IS MANDATORY** - summary will be checked and truncated if needed
 
-Updated Summary:"""
+Updated Summary (MUST be {target_length} characters +/- 5%):"""
 
             # Generate summary for this chunk with automatic retry
             max_retries = 5  # Increased from 3 to handle rate limits better
@@ -996,6 +1101,30 @@ Updated Summary:"""
                 # The chunk_summary IS the updated cumulative summary
                 cumulative_summary = chunk_summary
 
+            # Enforce length constraints (hard enforcement after generation)
+            min_length = int(target_length * 0.95)
+            max_length = int(target_length * 1.05)
+
+            if len(cumulative_summary) > max_length:
+                # Truncate to max_length, but try to end at sentence boundary
+                truncated = cumulative_summary[:max_length]
+                # Try to end at last sentence boundary
+                last_sentence_end = max(
+                    truncated.rfind('. '),
+                    truncated.rfind('! '),
+                    truncated.rfind('? '),
+                    truncated.rfind('\n')
+                )
+                if last_sentence_end > max_length * 0.8:  # Only if we get a good cut point
+                    cumulative_summary = truncated[:last_sentence_end + 1]
+                else:
+                    cumulative_summary = truncated + "..."
+
+                qprint(f"  📏 Length enforcement: truncated from {len(chunk_summary)} to {len(cumulative_summary)} chars")
+            elif len(cumulative_summary) < min_length and chunk_num == 0:
+                # Only warn for short summaries on first chunk (subsequent chunks are updates)
+                qprint(f"  ⚠️  Summary shorter than expected: {len(cumulative_summary)} chars (target: {target_length})")
+
             # Save this chunk to database (delete existing if present to avoid duplicates)
             db_session.query(SessionSummaryChunk).filter_by(
                 session_id=session_id,
@@ -1007,14 +1136,18 @@ Updated Summary:"""
                 chunk_number=chunk_num + 1,
                 chunk_start_line=start_line,
                 chunk_end_line=end_line,
-                chunk_summary=chunk_summary,
-                cumulative_summary=cumulative_summary,
+                chunk_summary=chunk_summary,  # Original (pre-enforcement) summary
+                cumulative_summary=cumulative_summary,  # Length-enforced summary
                 timestamp=datetime.now()
             )
             db_session.add(chunk_record)
             db_session.commit()
 
-            qprint(f"✓ Chunk {chunk_num + 1} summarized ({len(chunk_summary)} chars)")
+            # Show original and final lengths if different
+            if len(cumulative_summary) != len(chunk_summary):
+                qprint(f"✓ Chunk {chunk_num + 1} summarized: {len(chunk_summary)} → {len(cumulative_summary)} chars")
+            else:
+                qprint(f"✓ Chunk {chunk_num + 1} summarized ({len(cumulative_summary)} chars)")
             qprint()
 
             # Adaptive delay between chunks to avoid rate limits

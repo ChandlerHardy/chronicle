@@ -22,10 +22,24 @@ output_context() {
         }'
 }
 
-# Get script directory
+# Get script directory - note: when run from ~/.claude/hooks/, we need to find Chronicle project
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-CONFIG_FILE="$PROJECT_ROOT/config/skill-rules.json"
+
+# Chronicle is a global tool - prioritize global configuration
+if [[ -f "$HOME/.claude/config/skill-rules.json" ]]; then
+    # Primary: Global config (installed by setup-hooks)
+    CONFIG_FILE="$HOME/.claude/config/skill-rules.json"
+elif [[ -f "/Users/chandlerhardy/repos/chronicle/templates/skill-rules.json" ]]; then
+    # Fallback: Chronicle repo templates (for development)
+    CONFIG_FILE="/Users/chandlerhardy/repos/chronicle/templates/skill-rules.json"
+else
+    # Final fallback - search from current directory
+    PROJECT_ROOT="$(pwd)"
+    while [[ "$PROJECT_ROOT" != "/" ]] && [[ ! -f "$PROJECT_ROOT/templates/skill-rules.json" ]]; do
+        PROJECT_ROOT="$(dirname "$PROJECT_ROOT")"
+    done
+    CONFIG_FILE="$PROJECT_ROOT/templates/skill-rules.json"
+fi
 
 # Check if skill rules config exists
 if [[ ! -f "$CONFIG_FILE" ]]; then
