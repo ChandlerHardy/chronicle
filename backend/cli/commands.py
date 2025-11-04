@@ -3161,3 +3161,444 @@ def provider_restore(backup_file: str):
     except Exception as e:
         console.print(f"[red]✗[/red] Restore failed: {e}")
         return
+
+
+@cli.command()
+@click.option('--force', is_flag=True, help='Overwrite existing hooks and settings')
+def setup_hooks(force: bool):
+    """Set up Claude Code hooks for Chronicle workflow automation."""
+    console.print("[bold cyan]Chronicle Hooks Setup[/bold cyan]\n")
+
+    # Get user's home directory
+    home = Path.home()
+    claude_dir = home / ".claude"
+    hooks_dir = claude_dir / "hooks"
+    config_dir = claude_dir / "config"
+
+    console.print(f"Setting up hooks in: [cyan]{claude_dir}[/cyan]\n")
+
+    # Check if already exists
+    if claude_dir.exists() and not force:
+        console.print("[yellow]⚠[/yellow]  .claude directory already exists")
+        if not click.confirm("Continue and potentially overwrite files?", default=False):
+            console.print("Setup cancelled.")
+            ctx = click.get_current_context()
+            ctx.exit(1)
+
+    try:
+        # Create directories
+        claude_dir.mkdir(exist_ok=True)
+        hooks_dir.mkdir(exist_ok=True)
+        config_dir.mkdir(exist_ok=True)
+        console.print("[green]✓[/green] Created directory structure")
+
+        # Get Chronicle repo path (current working directory should be chronicle repo)
+        repo_path = Path.cwd()
+        source_hooks_dir = repo_path / ".claude" / "hooks"
+        source_config_dir = repo_path / ".claude" / "config"
+
+        if not source_hooks_dir.exists():
+            console.print(f"[red]✗[/red] Source hooks directory not found: {source_hooks_dir}")
+            console.print("[dim]Make sure you're running this from the Chronicle repository[/dim]")
+            return
+
+        # Copy hook scripts
+        hook_files = ["user-prompt-submit.sh", "stop.sh", "post-tool-use.sh"]
+        for hook_file in hook_files:
+            source_path = source_hooks_dir / hook_file
+            target_path = hooks_dir / hook_file
+
+            if source_path.exists():
+                target_path.write_text(source_path.read_text())
+                # Make executable
+                os.chmod(target_path, 0o755)
+                console.print(f"[green]✓[/green] Installed {hook_file}")
+            else:
+                console.print(f"[yellow]⚠[/yellow]  {hook_file} not found in source")
+
+        # Copy config files
+        config_files = ["skill-rules.json"]
+        for config_file in config_files:
+            source_path = source_config_dir / config_file
+            target_path = config_dir / config_file
+
+            if source_path.exists():
+                target_path.write_text(source_path.read_text())
+                console.print(f"[green]✓[/green] Installed {config_file}")
+            else:
+                console.print(f"[yellow]⚠[/yellow]  {config_file} not found in source")
+
+        # Create or update settings.local.json with hooks configuration
+        settings_file = claude_dir / "settings.local.json"
+        settings = {}
+
+        # Load existing settings if file exists
+        if settings_file.exists() and not force:
+            try:
+                settings = json.loads(settings_file.read_text())
+                console.print("[green]✓[/green] Loaded existing settings")
+            except Exception as e:
+                console.print(f"[yellow]⚠[/yellow]  Could not parse existing settings: {e}")
+
+        # Update hooks configuration
+        hooks_config = {
+            "UserPromptSubmit": [
+                {
+                    "hooks": [
+                        {
+                            "type": "command",
+                            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/user-prompt-submit.sh",
+                            "timeout": 5
+                        }
+                    ]
+                }
+            ],
+            "Stop": [
+                {
+                    "hooks": [
+                        {
+                            "type": "command",
+                            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/stop.sh",
+                            "timeout": 5
+                        }
+                    ]
+                }
+            ],
+            "PostToolUse": [
+                {
+                    "matcher": "Edit|Write|NotebookEdit",
+                    "hooks": [
+                        {
+                            "type": "command",
+                            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/post-tool-use.sh",
+                            "timeout": 5
+                        }
+                    ]
+                }
+            ]
+        }
+
+        # Merge hooks into settings
+        settings["hooks"] = hooks_config
+
+        # Write settings file
+        settings_file.write_text(json.dumps(settings, indent=2))
+        console.print("[green]✓[/green] Updated settings.local.json")
+
+        # Create universal CLAUDE.md
+        universal_claude_md = """# Universal Development Directives
+
+> **=🔍 For Chronicle-Specific Context**: See `~/repos/chronicle/CLAUDE.md`
+>
+> **This file**: Universal best practices that apply to ALL development work
+
+---
+
+## =🔍 CRITICAL: SEARCH FIRST (MANDATORY)
+
+**BEFORE IMPLEMENTING ANYTHING, YOU MUST SEARCH CHRONICLE:**
+
+```python
+# Basic search (multiple words = OR, any order - broader results)
+mcp__chronicle__search_sessions(query="relevant keywords", limit=10)
+
+# Use AND for precise searches, NOT to exclude, quotes for exact phrases
+mcp__chronicle__search_sessions(query="authentication AND authorization", limit=10)
+```
+
+**WHY THIS IS MANDATORY:**
+- Searching: **1 second**
+- Reinventing: **10-20 minutes**
+- **ROI: 2,700x** (proven from Sessions 21, 30, 31 - 45+ minutes wasted)
+
+**This is not optional. This is not a suggestion. Search first, ALWAYS.**
+
+**Trigger phrases that REQUIRE searching:**
+- User says "I can't believe..." → Search first!
+- User says "why isn't..." → Search first!
+- User says "this should work..." → Search first!
+- Before adding any feature → Check if it exists
+- When debugging → Check past sessions for similar issues
+
+---
+
+## <🎯 Skills (Use These First!)
+
+**BEFORE manually calling MCP tools, check if a skill exists for the task:**
+
+| Task | Use This Skill | Instead of Manual |
+|------|----------------|-------------------|
+| =📝 Export session to Obsidian | `chronicle-session-documenter` | Manual `mcp__chronicle__get_session_summary()` + `mcp__obsidian__write_note()` calls |
+| =🔍 Search past sessions for context | `chronicle-context-retriever` | Manual search and analysis across multiple sessions |
+| =🔄 Complete Chronicle workflow guidance | `chronicle-workflow` | Ad-hoc workflow instructions |
+| =📊 Manage milestones and roadmap | `chronicle-project-tracker` | Manual milestone/next step operations |
+| =💡 Brainstorming and design refinement | `brainstorming` | Ad-hoc ideation |
+
+### How to Invoke Skills
+
+**Method 1: Let skill auto-activate (preferred)**
+```
+User: "Export session 75 to Obsidian"
+→ Skill should auto-activate based on description match
+→ Follow skill's guidance
+```
+
+**Method 2: Explicit invocation**
+```python
+Skill(command="chronicle-session-documenter")
+→ Skill loads and provides detailed instructions
+→ Follow the workflow it describes
+```
+
+### Why Use Skills Over Manual MCP Calls?
+
+- ✅ **Complete workflows** - Skills guide through entire process, not just one MCP call
+- ✅ **Best practices** - Skills encode correct patterns (formatting, error handling, etc.)
+- ✅ **Consistency** - Same structured output every time
+- ✅ **Examples** - Skills include usage examples and common patterns
+- ✅ **Maintenance** - Update skill once, all uses benefit
+
+---
+
+## ⚡ USE MCP OVER CLI (MANDATORY)
+
+**Always prefer MCP tools, NEVER use CLI for programmatic access:**
+
+```python
+# ✅ CORRECT (MCP - fast, structured JSON):
+sessions = mcp__chronicle__search_sessions(query="storage", limit=5)
+roadmap = mcp__chronicle__get_roadmap(days=7)
+
+# ❌ WRONG (CLI - slow, hard to parse):
+Bash("chronicle search 'storage'")
+Bash("chronicle roadmap")
+```
+
+**Why MCP over CLI:**
+- **Speed**: MCP queries DB directly (<10ms), CLI spawns subprocess (>100ms)
+- **Programmatic**: Returns structured JSON, not formatted text
+- **Reliable**: No parsing of human-readable output
+
+---
+
+## =📋 CHECK ROADMAP BEFORE PLANNING (REQUIRED)
+
+**Avoid duplicate work:**
+```python
+mcp__chronicle__get_roadmap(days=7)
+mcp__chronicle__get_next_steps(completed=False)
+```
+
+**Failure to check roadmap can result in duplicating already-planned work**
+
+---
+
+## =🔍 CHECK SESSION STATUS (REQUIRED)
+
+**Verify if current session is being tracked:**
+```python
+# Check if conversation is being tracked
+status = mcp__chronicle__get_current_session()
+# Returns: {"active": true, "session": {...}} or {"active": false}
+```
+
+**If not tracking:**
+- Current session NOT tracked unless started with `chronicle start claude`
+- **YOU MUST suggest exit and restart if meaningful work is happening
+- User can verify with: `chronicle status` command
+
+---
+
+## =🧪 WRITE TESTS FIRST (MANDATORY - TDD)
+
+**NEVER write implementation code without tests:**
+
+```python
+# ❌ WRONG: Writing implementation first
+def export_session(session_id):
+    # ... implementation ...
+
+# ✅ CORRECT: Writing test first (red-green-refactor)
+def test_export_session_with_file_fallback():
+    # ... test that fails ...
+    # THEN write implementation to make test pass
+```
+
+**When you MUST write tests:**
+- Before implementing new features
+- Before fixing bugs (write failing test that reproduces bug)
+- Before refactoring (ensure tests pass before AND after)
+- When user asks "why don't you write tests??" (you violated this!)
+
+---
+
+## =🔎 FTS5 Search Tips (Use Boolean Operators!)
+
+**When searching Chronicle, use these patterns:**
+
+- **Multiple words** = implicit OR (finds sessions with ANY word, broader results)
+- **AND operator** = require all words ("gemini AND model", "bug AND issue")
+- **OR operator** = find either topic ("gemini OR claude", "bug OR issue")
+- **NOT operator** = exclude terms ("testing NOT deprecated", "api NOT legacy")
+- **Quotes** = exact phrase match ('"data corruption"' vs 'data corruption')
+- **Combine** = "(gemini OR claude) AND testing"
+
+**When to use which pattern:**
+```python
+# User asks about a specific feature/bug → Use AND for precision
+mcp__chronicle__search_sessions(query="authentication AND session")
+
+# User asks "did we work on X or Y?" → Use OR for breadth
+mcp__chronicle__search_sessions(query="authentication OR authorization")
+
+# User asks "X but not Y" → Use NOT
+mcp__chronicle__search_sessions(query="api NOT deprecated")
+
+# User mentions exact error message → Use quotes
+mcp__chronicle__search_sessions(query='"OperationalError: database is locked"')
+
+# User asks broad question → Cast wide net with OR
+mcp__chronicle__search_sessions(query="bug OR issue OR error OR problem")
+```
+
+---
+
+## <📝 SUGGEST SESSION ORGANIZATION (REQUIRED)
+
+**After significant work:**
+- YOU MUST propose descriptive title
+- YOU MUST suggest relevant tags (technologies, features, bugs)
+- YOU MUST link to related sessions
+
+---
+
+## =📋 PRE-FLIGHT CHECKLIST (FOR EVERY TASK)
+
+**Before starting ANY development task, run this checklist:**
+
+1. **SEARCH CHRONICLE** (1 second, saves 10-20 minutes):
+   ```python
+   mcp__chronicle__search_sessions(query="<your task>", limit=10)
+   ```
+
+2. **CHECK ROADMAP** (avoid duplicate planning):
+   ```python
+   mcp__chronicle__get_roadmap(days=7)
+   mcp__chronicle__get_next_steps(completed=False)
+   ```
+
+3. **WRITE TESTS FIRST** (TDD red-green-refactor):
+   - Write failing test
+   - Implement feature to make test pass
+   - Refactor
+
+4. **CHECK FOR SKILLS** (use workflows, not manual calls):
+   - Check if a skill exists for your task
+   - Use Skill tool instead of manual MCP calls
+
+**Violating this checklist wastes time and frustrates the user. Follow it religiously.**
+
+---
+
+## ⚠️ Common Mistakes to Avoid
+
+**Learn from real violations:**
+
+### Mistake #1: Not Searching Chronicle First
+**Impact**: Wasted 20+ minutes debugging, user had to remind me
+**Solution**: Always search first - ROI is 2,700x
+
+### Mistake #2: Writing Code Without Tests
+**Impact**: Had to write 17 tests retroactively, added extra work
+**Solution**: TDD red-green-refactor cycle
+
+### Mistake #3: Using CLI Instead of MCP
+**Impact**: 10x slower, fragile parsing of human-readable output
+**Solution**: Always use MCP tools for programmatic access
+
+### Mistake #4: Not Checking Roadmap
+**Impact**: Duplicating already-planned work
+**Solution**: Check roadmap before implementing anything
+
+---
+
+## <💡 Final Reminder
+
+**Before you start working on any task:**
+
+1. **SEARCH CHRONICLE FIRST** - `mcp__chronicle__search_sessions(query="...", limit=10)`
+2. **CHECK ROADMAP** - `mcp__chronicle__get_roadmap(days=7)`
+3. **WRITE TESTS FIRST** - TDD red-green-refactor cycle
+4. **CHECK FOR SKILLS** - Use Skill tool for complete workflows
+5. **USE MCP OVER CLI** - 10x faster, structured data
+6. **VERIFY SESSION TRACKING** - `mcp__chronicle__get_current_session()` to check if active
+
+**This is mandatory. Every single time. No exceptions.**
+
+**If you hear trigger phrases ("I can't believe...", "why isn't..."), STOP and search Chronicle.**
+
+---
+
+**For project-specific context (Chronicle development, architecture, etc.), see:**
+- `~/repos/chronicle/CLAUDE.md` - Chronicle project-specific guide
+"""
+
+        claude_md_file = claude_dir / "CLAUDE.md"
+        claude_md_file.write_text(universal_claude_md)
+        console.print("[green]✓[/green] Created universal CLAUDE.md")
+
+        # Check for superpowers skills
+        plugins_dir = claude_dir / "plugins"
+        installed_plugins_file = plugins_dir / "installed_plugins.json"
+        superpowers_available = False
+
+        console.print("\n[cyan]Checking superpowers skills availability...[/cyan]")
+
+        # Check if superpowers marketplace is configured
+        marketplaces_dir = plugins_dir / "marketplaces"
+        superpowers_marketplace = marketplaces_dir / "superpowers-marketplace"
+
+        if superpowers_marketplace.exists():
+            console.print("[green]✓[/green] Superpowers marketplace configured")
+
+            # Check if superpowers skills are installed
+            if installed_plugins_file.exists():
+                try:
+                    installed_data = json.loads(installed_plugins_file.read_text())
+                    for plugin_key, plugin_info in installed_data.get("plugins", {}).items():
+                        if "superpowers" in plugin_key:
+                            superpowers_available = True
+                            console.print(f"[green]✓[/green] Superpowers skills installed (v{plugin_info.get('version', 'unknown')})")
+                            break
+                except Exception as e:
+                    console.print(f"[yellow]⚠[/yellow]  Could not check installed skills: {e}")
+
+            if not superpowers_available:
+                console.print("[yellow]⚠[/yellow]  Superpowers skills not installed")
+                console.print("[dim]TDD skill auto-activation requires superpowers marketplace[/dim]")
+                console.print("[dim]Install with: /plugin install superpowers@superpowers-marketplace[/dim]")
+        else:
+            console.print("[yellow]⚠[/yellow]  Superpowers marketplace not configured")
+            console.print("[dim]TDD skill auto-activation requires superpowers marketplace[/dim]")
+            console.print("[dim]Install with: /plugin install superpowers-marketplace[/dim]")
+
+        # Success message
+        console.print(f"\n[bold green]✓ Hooks setup complete![/bold green]")
+        console.print(f"\n[cyan]What was installed:[/cyan]")
+        console.print(f"  • Hook scripts in: {hooks_dir}")
+        console.print(f"  • Configuration in: {settings_file}")
+        console.print(f"  • Universal directives in: {claude_md_file}")
+
+        console.print(f"\n[cyan]Next steps:[/cyan]")
+        console.print(f"  1. Restart Claude Code for hooks to take effect")
+        console.print(f"  2. If superpowers skills weren't detected, run: /plugin install superpowers@superpowers-marketplace")
+        console.print(f"  3. Hooks will automatically remind you to search Chronicle")
+        console.print(f"  4. Universal CLAUDE.md provides development best practices")
+        console.print(f"  5. TDD skill will auto-activate when you start implementing (requires superpowers)")
+
+        if not force:
+            console.print(f"\n[dim]To reinstall later: chronicle setup-hooks --force[/dim]")
+
+    except Exception as e:
+        console.print(f"[red]✗[/red] Setup failed: {e}")
+        return

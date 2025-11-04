@@ -674,6 +674,234 @@ class TestExportCommands:
                 assert os.path.exists(output_file)
 
 
+class TestSetupHooksCommand:
+    """Tests for 'chronicle setup-hooks' command."""
+
+    def test_setup_hooks_creates_hooks_directory(self, runner):
+        """GREEN phase: Test 'chronicle setup-hooks' creates .claude/hooks directory."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            home_dir = Path(tmpdir)
+            claude_dir = home_dir / ".claude"
+            hooks_dir = claude_dir / "hooks"
+
+            # Create mock source hooks directory in current working directory
+            source_hooks_dir = Path.cwd() / ".claude" / "hooks"
+            if not source_hooks_dir.exists():
+                # Create mock hooks for testing
+                source_hooks_dir.mkdir(parents=True, exist_ok=True)
+                (source_hooks_dir / "user-prompt-submit.sh").write_text("#!/bin/bash\necho 'test'")
+                (source_hooks_dir / "stop.sh").write_text("#!/bin/bash\necho 'test'")
+                (source_hooks_dir / "post-tool-use.sh").write_text("#!/bin/bash\necho 'test'")
+
+            with patch.dict(os.environ, {'HOME': str(home_dir)}):
+                result = runner.invoke(cli, ['setup-hooks', '--force'])
+
+            # Should succeed
+            assert result.exit_code == 0
+            # Directory should be created
+            assert hooks_dir.exists()
+            assert "Created directory structure" in result.output
+
+    def test_setup_hooks_copies_hook_scripts(self, runner):
+        """GREEN phase: Test 'chronicle setup-hooks' copies hook scripts with correct permissions."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            home_dir = Path(tmpdir)
+            claude_dir = home_dir / ".claude"
+            hooks_dir = claude_dir / "hooks"
+
+            # Create mock source hooks directory
+            source_hooks_dir = Path.cwd() / ".claude" / "hooks"
+            source_hooks_dir.mkdir(parents=True, exist_ok=True)
+
+            test_hook = "#!/bin/bash\necho 'test hook'"
+            (source_hooks_dir / "user-prompt-submit.sh").write_text(test_hook)
+            (source_hooks_dir / "stop.sh").write_text(test_hook)
+            (source_hooks_dir / "post-tool-use.sh").write_text(test_hook)
+
+            with patch.dict(os.environ, {'HOME': str(home_dir)}):
+                result = runner.invoke(cli, ['setup-hooks', '--force'])
+
+            # Should succeed
+            assert result.exit_code == 0
+            # Hook scripts should be copied and be executable
+            for hook_file in ["user-prompt-submit.sh", "stop.sh", "post-tool-use.sh"]:
+                hook_path = hooks_dir / hook_file
+                assert hook_path.exists()
+                assert hook_path.read_text() == test_hook
+                # Check if executable (on Unix systems)
+                if os.name == 'posix':
+                    assert os.access(hook_path, os.X_OK)
+
+    def test_setup_hooks_creates_universal_claude_md(self, runner):
+        """GREEN phase: Test 'chronicle setup-hooks' creates universal CLAUDE.md file."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            home_dir = Path(tmpdir)
+            claude_dir = home_dir / ".claude"
+            claude_md_path = claude_dir / "CLAUDE.md"
+
+            # Create mock source hooks directory
+            source_hooks_dir = Path.cwd() / ".claude" / "hooks"
+            source_hooks_dir.mkdir(parents=True, exist_ok=True)
+            (source_hooks_dir / "user-prompt-submit.sh").write_text("#!/bin/bash")
+
+            with patch.dict(os.environ, {'HOME': str(home_dir)}):
+                result = runner.invoke(cli, ['setup-hooks', '--force'])
+
+            # Should succeed
+            assert result.exit_code == 0
+            # CLAUDE.md should be created with universal directives
+            assert claude_md_path.exists()
+            content = claude_md_path.read_text()
+            assert "Universal Development Directives" in content
+            assert "SEARCH FIRST (MANDATORY)" in content
+            assert "WRITE TESTS FIRST (MANDATORY - TDD)" in content
+            assert "Created universal CLAUDE.md" in result.output
+
+    def test_setup_hooks_handles_existing_files(self, runner):
+        """GREEN phase: Test 'chronicle setup-hooks' handles existing .claude directory gracefully."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            home_dir = Path(tmpdir)
+            claude_dir = home_dir / ".claude"
+            claude_dir.mkdir(exist_ok=True)
+
+            # Create existing files
+            existing_file = claude_dir / "existing.txt"
+            existing_file.write_text("existing file")
+
+            # Create mock source hooks directory
+            source_hooks_dir = Path.cwd() / ".claude" / "hooks"
+            source_hooks_dir.mkdir(parents=True, exist_ok=True)
+            (source_hooks_dir / "user-prompt-submit.sh").write_text("#!/bin/bash")
+
+            with patch.dict(os.environ, {'HOME': str(home_dir)}):
+                result = runner.invoke(cli, ['setup-hooks', '--force'])
+
+            # Should succeed with --force
+            assert result.exit_code == 0
+            # Existing file should remain (we don't delete unknown files)
+            assert existing_file.exists()
+            assert existing_file.read_text() == "existing file"
+            # But new files should be created
+            assert (claude_dir / "CLAUDE.md").exists()
+
+    def test_setup_hooks_prompts_before_overwrite(self, runner):
+        """Test 'chronicle setup-hooks' prompts before overwriting existing files."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            home_dir = Path(tmpdir)
+            claude_dir = home_dir / ".claude"
+            claude_dir.mkdir(exist_ok=True)
+
+            # Create mock source hooks directory
+            source_hooks_dir = Path.cwd() / ".claude" / "hooks"
+            source_hooks_dir.mkdir(parents=True, exist_ok=True)
+            (source_hooks_dir / "user-prompt-submit.sh").write_text("#!/bin/bash")
+
+            with patch.dict(os.environ, {'HOME': str(home_dir)}):
+                # Test without --force, should prompt and abort
+                result = runner.invoke(cli, ['setup-hooks'], input='N\n')
+
+            # Should abort without overwriting
+            assert result.exit_code == 1
+            assert "Continue and potentially overwrite files?" in result.output
+            assert "Setup cancelled" in result.output
+
+    def test_setup_hooks_creates_settings_json(self, runner):
+        """Test 'chronicle setup-hooks' creates settings.local.json with hooks configuration."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            home_dir = Path(tmpdir)
+            claude_dir = home_dir / ".claude"
+            settings_file = claude_dir / "settings.local.json"
+
+            # Create mock source hooks directory
+            source_hooks_dir = Path.cwd() / ".claude" / "hooks"
+            source_hooks_dir.mkdir(parents=True, exist_ok=True)
+            (source_hooks_dir / "user-prompt-submit.sh").write_text("#!/bin/bash")
+
+            with patch.dict(os.environ, {'HOME': str(home_dir)}):
+                result = runner.invoke(cli, ['setup-hooks', '--force'])
+
+            # Should succeed
+            assert result.exit_code == 0
+            # Settings file should be created with hooks configuration
+            assert settings_file.exists()
+            settings = json.loads(settings_file.read_text())
+            assert "hooks" in settings
+            assert "UserPromptSubmit" in settings["hooks"]
+            assert "Stop" in settings["hooks"]
+            assert "PostToolUse" in settings["hooks"]
+            assert "Updated settings.local.json" in result.output
+
+    def test_setup_hooks_checks_superpowers_skills(self, runner):
+        """Test 'chronicle setup-hooks' checks for superpowers skills availability."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            home_dir = Path(tmpdir)
+            claude_dir = home_dir / ".claude"
+
+            # Create mock plugins structure
+            plugins_dir = claude_dir / "plugins"
+            plugins_dir.mkdir(parents=True)
+
+            # Create mock marketplaces
+            marketplaces_dir = plugins_dir / "marketplaces"
+            marketplaces_dir.mkdir(parents=True)
+
+            superpowers_marketplace = marketplaces_dir / "superpowers-marketplace"
+            superpowers_marketplace.mkdir(parents=True)
+
+            # Create mock installed_plugins.json with superpowers
+            installed_plugins = {
+                "version": 1,
+                "plugins": {
+                    "superpowers@superpowers-marketplace": {
+                        "version": "3.2.3",
+                        "installedAt": "2025-01-01T00:00:00Z",
+                        "installPath": "/mock/path",
+                        "isLocal": False
+                    }
+                }
+            }
+            (plugins_dir / "installed_plugins.json").write_text(json.dumps(installed_plugins))
+
+            # Create mock source hooks directory
+            source_hooks_dir = Path.cwd() / ".claude" / "hooks"
+            source_hooks_dir.mkdir(parents=True, exist_ok=True)
+            (source_hooks_dir / "user-prompt-submit.sh").write_text("#!/bin/bash")
+
+            with patch.dict(os.environ, {'HOME': str(home_dir)}):
+                result = runner.invoke(cli, ['setup-hooks', '--force'])
+
+            # Should succeed
+            assert result.exit_code == 0
+            # Should check superpowers availability
+            assert "Checking superpowers skills availability" in result.output
+            assert "Superpowers marketplace configured" in result.output
+            assert "Superpowers skills installed" in result.output
+
+    def test_setup_hooks_handles_missing_superpowers(self, runner):
+        """Test 'chronicle setup-hooks' handles missing superpowers gracefully."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            home_dir = Path(tmpdir)
+            claude_dir = home_dir / ".claude"
+
+            # Create empty plugins structure
+            plugins_dir = claude_dir / "plugins"
+            plugins_dir.mkdir(parents=True)
+
+            # Create mock source hooks directory
+            source_hooks_dir = Path.cwd() / ".claude" / "hooks"
+            source_hooks_dir.mkdir(parents=True, exist_ok=True)
+            (source_hooks_dir / "user-prompt-submit.sh").write_text("#!/bin/bash")
+
+            with patch.dict(os.environ, {'HOME': str(home_dir)}):
+                result = runner.invoke(cli, ['setup-hooks', '--force'])
+
+            # Should succeed but warn about missing superpowers
+            assert result.exit_code == 0
+            assert "Checking superpowers skills availability" in result.output
+            assert "Superpowers marketplace not configured" in result.output
+            assert "/plugin install superpowers-marketplace" in result.output
+
+
 class TestGeminiCommands:
     """Tests for Gemini-specific commands."""
 
