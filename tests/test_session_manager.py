@@ -430,7 +430,7 @@ class TestSessionManager:
         assert mock_popen.called
         call_args = mock_popen.call_args
 
-        # Check that it's running the summarize-chunked command
+        # Check that it's running the summarize-session command
         assert "backend.main" in call_args[0][0]
-        assert "summarize-chunked" in call_args[0][0]
+        assert "summarize-session" in call_args[0][0]
         assert str(session.id) in call_args[0][0]

@@ -911,6 +911,246 @@ def test_create_milestone_creates_milestone(temp_db):
     assert result.get("title") == "New Milestone" or "success" in result
 
 
+def test_update_milestone_updates_fields(temp_db, sample_milestone):
+    """Test update_milestone updates milestone fields."""
+    result_json = server.update_milestone.fn(
+        milestone_id=sample_milestone.id,
+        title="Updated Title",
+        description="Updated description",
+        priority=3
+    )
+    result = json.loads(result_json)
+
+    assert result["success"] is True
+    assert result["title"] == "Updated Title"
+    assert result["description"] == "Updated description"
+    assert result["priority"] == 3
+
+
+def test_update_milestone_not_found(temp_db):
+    """Test update_milestone with non-existent ID."""
+    result_json = server.update_milestone.fn(
+        milestone_id=999,
+        title="Updated Title"
+    )
+    result = json.loads(result_json)
+
+    assert "error" in result
+    assert "not found" in result["error"]
+
+
+def test_update_milestone_invalid_type(temp_db, sample_milestone):
+    """Test update_milestone rejects invalid milestone type."""
+    result_json = server.update_milestone.fn(
+        milestone_id=sample_milestone.id,
+        milestone_type="invalid_type"
+    )
+    result = json.loads(result_json)
+
+    assert "error" in result
+    assert "Type must be" in result["error"]
+
+
+def test_update_milestone_invalid_priority(temp_db, sample_milestone):
+    """Test update_milestone rejects invalid priority."""
+    result_json = server.update_milestone.fn(
+        milestone_id=sample_milestone.id,
+        priority=10  # Invalid (must be 1-5)
+    )
+    result = json.loads(result_json)
+
+    assert "error" in result
+    assert "Priority must be between" in result["error"]
+
+
+def test_update_next_step_updates_fields(temp_db, sample_next_step):
+    """Test update_next_step updates step fields."""
+    result_json = server.update_next_step.fn(
+        step_id=sample_next_step.id,
+        description="Updated description",
+        priority=5,
+        effort="large"
+    )
+    result = json.loads(result_json)
+
+    assert result["success"] is True
+    assert result["description"] == "Updated description"
+    assert result["priority"] == 5
+    assert result.get("estimated_effort") == "large"  # Field name in response
+
+
+def test_update_next_step_not_found(temp_db):
+    """Test update_next_step with non-existent ID."""
+    result_json = server.update_next_step.fn(
+        step_id=999,
+        description="Updated"
+    )
+    result = json.loads(result_json)
+
+    assert "error" in result
+
+
+def test_delete_milestone_requires_confirmation(temp_db, sample_milestone):
+    """Test delete_milestone requires confirmation."""
+    result_json = server.delete_milestone.fn(
+        milestone_id=sample_milestone.id,
+        confirm=False
+    )
+    result = json.loads(result_json)
+
+    assert "error" in result
+    assert "confirm" in result["error"].lower()  # Looks for "confirm" instead of "confirmation"
+
+
+def test_delete_milestone_deletes_with_confirmation(temp_db, sample_milestone):
+    """Test delete_milestone deletes with confirmation."""
+    milestone_id = sample_milestone.id
+    result_json = server.delete_milestone.fn(
+        milestone_id=milestone_id,
+        confirm=True
+    )
+    result = json.loads(result_json)
+
+    assert result["success"] is True
+
+    # Verify milestone was deleted
+    db = temp_db
+    milestone = db.query(ProjectMilestone).filter_by(id=milestone_id).first()
+    assert milestone is None
+
+
+def test_delete_milestone_not_found(temp_db):
+    """Test delete_milestone with non-existent ID."""
+    result_json = server.delete_milestone.fn(
+        milestone_id=999,
+        confirm=True
+    )
+    result = json.loads(result_json)
+
+    assert "error" in result
+
+
+def test_delete_next_step_requires_confirmation(temp_db, sample_next_step):
+    """Test delete_next_step requires confirmation."""
+    result_json = server.delete_next_step.fn(
+        step_id=sample_next_step.id,
+        confirm=False
+    )
+    result = json.loads(result_json)
+
+    assert "error" in result
+    assert "confirm" in result["error"].lower()  # Looks for "confirm" instead of "confirmation"
+
+
+def test_delete_next_step_deletes_with_confirmation(temp_db, sample_next_step):
+    """Test delete_next_step deletes with confirmation."""
+    step_id = sample_next_step.id
+    result_json = server.delete_next_step.fn(
+        step_id=step_id,
+        confirm=True
+    )
+    result = json.loads(result_json)
+
+    assert result["success"] is True
+
+    # Verify step was deleted
+    db = temp_db
+    step = db.query(NextStep).filter_by(id=step_id).first()
+    assert step is None
+
+
+def test_delete_next_step_not_found(temp_db):
+    """Test delete_next_step with non-existent ID."""
+    result_json = server.delete_next_step.fn(
+        step_id=999,
+        confirm=True
+    )
+    result = json.loads(result_json)
+
+    assert "error" in result
+
+
+def test_uncomplete_next_step_reopens_step(temp_db):
+    """Test uncomplete_next_step reopens a completed step."""
+    # Create a completed step
+    step = NextStep(
+        description="Completed step",
+        priority=1,
+        category="feature",
+        completed=True,
+        completed_at=datetime.now()
+    )
+    temp_db.add(step)
+    temp_db.commit()
+    temp_db.refresh(step)
+
+    # Uncomplete it
+    result_json = server.uncomplete_next_step.fn(step_id=step.id)
+    result = json.loads(result_json)
+
+    assert result["success"] is True
+
+    # Verify step is no longer completed
+    temp_db.refresh(step)
+    assert step.completed == 0  # SQLite stores boolean as 0/1
+    assert step.completed_at is None
+
+
+def test_uncomplete_next_step_not_found(temp_db):
+    """Test uncomplete_next_step with non-existent ID."""
+    result_json = server.uncomplete_next_step.fn(step_id=999)
+    result = json.loads(result_json)
+
+    assert "error" in result
+
+
+def test_get_current_session_no_active(temp_db):
+    """Test get_current_session when no active session exists."""
+    result_json = server.get_current_session.fn()
+    result = json.loads(result_json)
+
+    assert result["active"] is False
+
+
+def test_get_current_session_with_active(temp_db):
+    """Test get_current_session when active session exists."""
+    # Create an active session (no duration)
+    session = AIInteraction(
+        ai_tool="claude-code",
+        prompt="Active session",
+        is_session=True,
+        timestamp=datetime.now(),
+        duration_ms=None,  # No duration = still active
+        repo_path="/test/repo"
+    )
+    temp_db.add(session)
+    temp_db.commit()
+
+    result_json = server.get_current_session.fn()
+    result = json.loads(result_json)
+
+    assert result["active"] is True
+    assert "session" in result
+    assert result["session"]["tool"] == "claude-code"
+
+
+def test_search_commits_finds_by_message(temp_db, sample_commit):
+    """Test search_commits finds commits by message."""
+    result_json = server.search_commits.fn(query="Test commit")
+    result = json.loads(result_json)
+
+    assert result["count"] == 1
+    assert result["commits"][0]["sha"] == "abc123def456"
+
+
+def test_search_commits_no_results(temp_db):
+    """Test search_commits with query that matches nothing."""
+    result_json = server.search_commits.fn(query="nonexistent")
+    result = json.loads(result_json)
+
+    assert result["count"] == 0
+
+
 # Run the test
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
