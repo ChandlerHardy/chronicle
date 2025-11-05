@@ -933,7 +933,7 @@ Summary:"""
             # Generate prompt based on whether this is the first chunk
             if chunk_num == 0:
                 # First chunk - just summarize it
-                prompt = f"""Summarize this development session transcript chunk in exactly {target_length} characters. Tell the story of what was built - what problems were encountered, how they were solved, what was implemented, and what decisions were made.
+                prompt = f"""Summarize this development session transcript chunk in approximately {target_length} characters. Tell the story of what was built - what problems were encountered, how they were solved, what was implemented, and what decisions were made.
 
 🎯 TARGET LENGTH: ~{target_length} characters (flexible within 25%)
 - Target range: {int(target_length * 0.75)} to {int(target_length * 1.25)} characters
@@ -958,7 +958,7 @@ Keep the summary narrative and technical while respecting the target length.
 Transcript chunk:
 {chunk_text}
 
-Summary (EXACTLY {target_length} characters):"""
+Summary (~{target_length} characters):"""
             else:
                 # Subsequent chunks - update the cumulative summary
                 prompt = f"""You are maintaining a running summary of a development session. Your task is to integrate new activity into the existing narrative while keeping the TOTAL updated summary around {target_length} characters.
@@ -989,7 +989,7 @@ INSTRUCTIONS:
 - Keep it cohesive and well-organized
 - Maintain structure quality: if previous summary had bullets/headers, keep them
 
-Updated Summary (MUST be {target_length} characters +/- 5%):"""
+Updated Summary (~{target_length} characters, flexible):"""
 
             # Generate summary for this chunk with automatic retry
             max_retries = 5  # Increased from 3 to handle rate limits better
