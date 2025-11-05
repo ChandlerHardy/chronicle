@@ -705,11 +705,11 @@ Summary:"""
             qprint(f"🚀 Using regular summarization (small session)")
             # Set adaptive max_length based on session size
             if total_lines <= 2000:
-                max_length = 1500  # Very small sessions
+                max_length = 2500  # Very small sessions
             elif total_lines <= 5000:
-                max_length = 2500  # Small sessions
+                max_length = 3500  # Small sessions
             else:
-                max_length = 3000  # Upper end of small sessions
+                max_length = 4500  # Upper end of small sessions
 
             summary = self.summarize_session(transcript, max_length=max_length)
 
@@ -863,9 +863,9 @@ Summary:"""
 
         # Adaptive summary length targets based on session complexity
         target_summary_lengths = {
-            "small": 2500,   # Good detail for quick sessions
-            "medium": 4000,  # Balanced detail with more narrative depth
-            "large": 5500    # Comprehensive for complex sessions
+            "small": 3500,   # Good detail for quick sessions
+            "medium": 5000,  # Balanced detail with more narrative depth
+            "large": 6500    # Comprehensive for complex sessions
         }
         target_length = target_summary_lengths[complexity]
         qprint(f"📏 Target summary length: {target_length:,} characters")
@@ -935,17 +935,17 @@ Summary:"""
                 # First chunk - just summarize it
                 prompt = f"""Summarize this development session transcript chunk in exactly {target_length} characters. Tell the story of what was built - what problems were encountered, how they were solved, what was implemented, and what decisions were made.
 
-🚨 CRITICAL LENGTH REQUIREMENT: EXACTLY {target_length} characters (+/- 5%)
-- Your summary MUST be between {int(target_length * 0.95)} and {int(target_length * 1.05)} characters
-- This is a hard requirement, not a suggestion
-- If summary is too short, add more implementation details
-- If summary is too long, condense language while preserving key information
+🎯 TARGET LENGTH: ~{target_length} characters (flexible within 25%)
+- Target range: {int(target_length * 0.75)} to {int(target_length * 1.25)} characters
+- Prioritize completeness and structure over strict length limits
+- If naturally shorter, that's fine - don't pad unnecessarily
+- If naturally longer, include the detail - truncation only at 25% over target
 
 FOCUS ON (in priority order):
 1. **Implementation work**: What code/features were actually built
 2. **Specific files created/modified** (with details)
 3. **Tests written** (count them!)
-4. **Git commits** (extract verbatim if found)
+4. **Git commits** (reference by hash and short title only, e.g., "Commit abc1234: Fix bug in...")
 5. **Technical decisions and why**
 
 IGNORE:
@@ -961,15 +961,19 @@ Transcript chunk:
 Summary (EXACTLY {target_length} characters):"""
             else:
                 # Subsequent chunks - update the cumulative summary
-                prompt = f"""You are maintaining a running summary of a development session. Your task is to integrate new activity into the existing narrative while keeping the TOTAL updated summary under {target_length} characters.
+                prompt = f"""You are maintaining a running summary of a development session. Your task is to integrate new activity into the existing narrative while keeping the TOTAL updated summary around {target_length} characters.
 
-🚨 CRITICAL LENGTH REQUIREMENT: EXACTLY {target_length} characters (+/- 5%)
+🎯 TARGET LENGTH: ~{target_length} characters (flexible within 25%)
 - Current summary length: {len(cumulative_summary)} characters
 - Target total length: {target_length} characters
-- Your updated summary MUST be between {int(target_length * 0.95)} and {int(target_length * 1.05)} characters
-- This is a hard requirement, not a suggestion
-- If over limit, aggressively condense previous details to make room
-- If under limit, expand implementation details
+- Acceptable range: {int(target_length * 0.75)} to {int(target_length * 1.25)} characters
+- Only condense if you exceed {int(target_length * 1.25)} characters (25% grace period)
+
+STRUCTURE PRESERVATION (CRITICAL):
+- PRESERVE all structured sections from previous summary (bullets, headings, numbered lists)
+- PRESERVE all technical details: file paths, line numbers, function names, test counts
+- Add new work as additional sections/bullets, maintaining the organizational structure
+- Only condense prose/narrative if you exceed the 25% grace period
 
 PREVIOUS SUMMARY (everything up to line {start_line}):
 {cumulative_summary}
@@ -981,9 +985,9 @@ INSTRUCTIONS:
 - Tell the story - integrate new info into narrative, don't just append
 - Prioritize implementation work (code, tests, commits) over discussion
 - Skip repeated conversations (if LangChain explained 10x, you already summarized it once)
-- Extract git commits verbatim (they're the best signal)
+- Reference git commits by hash and short title only (e.g., "Commit abc1234: Fix bug"), NOT verbatim
 - Keep it cohesive and well-organized
-- **LENGTH ENFORCEMENT IS MANDATORY** - summary will be checked and truncated if needed
+- Maintain structure quality: if previous summary had bullets/headers, keep them
 
 Updated Summary (MUST be {target_length} characters +/- 5%):"""
 
@@ -1101,9 +1105,9 @@ Updated Summary (MUST be {target_length} characters +/- 5%):"""
                 # The chunk_summary IS the updated cumulative summary
                 cumulative_summary = chunk_summary
 
-            # Enforce length constraints (hard enforcement after generation)
-            min_length = int(target_length * 0.95)
-            max_length = int(target_length * 1.05)
+            # Enforce length constraints with 25% grace period
+            min_length = int(target_length * 0.75)
+            max_length = int(target_length * 1.25)
 
             if len(cumulative_summary) > max_length:
                 # Truncate to max_length, but try to end at sentence boundary
