@@ -26,7 +26,8 @@ def hook_env():
     """Environment variables for running hooks."""
     return {
         "CLAUDE_PROJECT_DIR": str(PROJECT_ROOT),
-        "PATH": os.environ.get("PATH", "")
+        "PATH": os.environ.get("PATH", ""),
+        "HOME": os.environ.get("HOME", str(Path.home()))
     }
 
 
@@ -87,16 +88,16 @@ class TestUserPromptSubmitHook:
         """Test that 'export to obsidian' triggers documenter."""
         result = run_hook("export session to obsidian", str(hook_path), hook_env)
 
-        assert "hookSpecificOutput" in result
-        context = result["hookSpecificOutput"]["additionalContext"]
+        assert "systemMessage" in result
+        context = result["systemMessage"]
         assert "chronicle-session-documenter" in context
 
     def test_documenter_save_vault(self, hook_path, hook_env):
         """Test that 'save to vault' triggers documenter."""
         result = run_hook("save session 10 to vault", str(hook_path), hook_env)
 
-        assert "hookSpecificOutput" in result
-        context = result["hookSpecificOutput"]["additionalContext"]
+        assert "systemMessage" in result
+        context = result["systemMessage"]
         assert "chronicle-session-documenter" in context
 
     def test_documenter_exclusion_document_code(self, hook_path, hook_env):
@@ -104,13 +105,13 @@ class TestUserPromptSubmitHook:
         result = run_hook("how do I document my code properly?", str(hook_path), hook_env)
 
         # Should return empty (no triggers)
-        assert result == {} or "chronicle-session-documenter" not in result.get("hookSpecificOutput", {}).get("additionalContext", "")
+        assert result == {} or "chronicle-session-documenter" not in result.get("systemMessage", "")
 
     def test_documenter_exclusion_documentation_for(self, hook_path, hook_env):
         """Test that 'documentation for' does NOT trigger documenter."""
         result = run_hook("write documentation for this function", str(hook_path), hook_env)
 
-        assert result == {} or "chronicle-session-documenter" not in result.get("hookSpecificOutput", {}).get("additionalContext", "")
+        assert result == {} or "chronicle-session-documenter" not in result.get("systemMessage", "")
 
     # ===== Chronicle Context Retriever Tests =====
 
@@ -118,24 +119,24 @@ class TestUserPromptSubmitHook:
         """Test that 'how did I implement' triggers context-retriever."""
         result = run_hook("how did I implement authentication?", str(hook_path), hook_env)
 
-        assert "hookSpecificOutput" in result
-        context = result["hookSpecificOutput"]["additionalContext"]
+        assert "systemMessage" in result
+        context = result["systemMessage"]
         assert "chronicle-context-retriever" in context
 
     def test_context_what_did_i_do(self, hook_path, hook_env):
         """Test that 'what did I do yesterday' triggers context-retriever."""
         result = run_hook("what did I do yesterday?", str(hook_path), hook_env)
 
-        assert "hookSpecificOutput" in result
-        context = result["hookSpecificOutput"]["additionalContext"]
+        assert "systemMessage" in result
+        context = result["systemMessage"]
         assert "chronicle-context-retriever" in context
 
     def test_context_find_sessions(self, hook_path, hook_env):
         """Test that 'find sessions about' triggers context-retriever."""
         result = run_hook("find sessions about database optimization", str(hook_path), hook_env)
 
-        assert "hookSpecificOutput" in result
-        context = result["hookSpecificOutput"]["additionalContext"]
+        assert "systemMessage" in result
+        context = result["systemMessage"]
         assert "chronicle-context-retriever" in context
 
     def test_context_exclusion_mcp_search(self, hook_path, hook_env):
@@ -151,24 +152,24 @@ class TestUserPromptSubmitHook:
         """Test that 'what's next' triggers project-tracker."""
         result = run_hook("what's next on the roadmap?", str(hook_path), hook_env)
 
-        assert "hookSpecificOutput" in result
-        context = result["hookSpecificOutput"]["additionalContext"]
+        assert "systemMessage" in result
+        context = result["systemMessage"]
         assert "chronicle-project-tracker" in context
 
     def test_tracker_show_roadmap(self, hook_path, hook_env):
         """Test that 'show roadmap' triggers project-tracker."""
         result = run_hook("show me the roadmap", str(hook_path), hook_env)
 
-        assert "hookSpecificOutput" in result
-        context = result["hookSpecificOutput"]["additionalContext"]
+        assert "systemMessage" in result
+        context = result["systemMessage"]
         assert "chronicle-project-tracker" in context
 
     def test_tracker_create_milestone(self, hook_path, hook_env):
         """Test that 'create milestone' triggers project-tracker."""
         result = run_hook("create a milestone for the API refactor", str(hook_path), hook_env)
 
-        assert "hookSpecificOutput" in result
-        context = result["hookSpecificOutput"]["additionalContext"]
+        assert "systemMessage" in result
+        context = result["systemMessage"]
         assert "chronicle-project-tracker" in context
 
     # ===== Chronicle Workflow Tests =====
@@ -177,16 +178,16 @@ class TestUserPromptSubmitHook:
         """Test that 'start session' triggers workflow."""
         result = run_hook("start a new session", str(hook_path), hook_env)
 
-        assert "hookSpecificOutput" in result
-        context = result["hookSpecificOutput"]["additionalContext"]
+        assert "systemMessage" in result
+        context = result["systemMessage"]
         assert "chronicle-workflow" in context
 
     def test_workflow_is_tracked(self, hook_path, hook_env):
         """Test that 'is this tracked' triggers workflow."""
         result = run_hook("is this session being tracked?", str(hook_path), hook_env)
 
-        assert "hookSpecificOutput" in result
-        context = result["hookSpecificOutput"]["additionalContext"]
+        assert "systemMessage" in result
+        context = result["systemMessage"]
         assert "chronicle-workflow" in context
 
     # ===== Chronicle Remote Summarizer Tests =====
@@ -195,16 +196,16 @@ class TestUserPromptSubmitHook:
         """Test that 'summarize on freebsd' triggers remote-summarizer."""
         result = run_hook("summarize session on freebsd server", str(hook_path), hook_env)
 
-        assert "hookSpecificOutput" in result
-        context = result["hookSpecificOutput"]["additionalContext"]
+        assert "systemMessage" in result
+        context = result["systemMessage"]
         assert "chronicle-remote-summarizer" in context
 
     def test_remote_import_session(self, hook_path, hook_env):
         """Test that 'import session from' triggers remote-summarizer."""
         result = run_hook("import session from remote host", str(hook_path), hook_env)
 
-        assert "hookSpecificOutput" in result
-        context = result["hookSpecificOutput"]["additionalContext"]
+        assert "systemMessage" in result
+        context = result["systemMessage"]
         assert "chronicle-remote-summarizer" in context
 
     # ===== Test-Driven Development Skill Tests =====
@@ -213,8 +214,8 @@ class TestUserPromptSubmitHook:
         """Test that 'let's implement' triggers TDD skill."""
         result = run_hook("let's implement the authentication feature", str(hook_path), hook_env)
 
-        assert "hookSpecificOutput" in result
-        context = result["hookSpecificOutput"]["additionalContext"]
+        assert "systemMessage" in result
+        context = result["systemMessage"]
         assert "test-driven-development" in context
         assert "TDD ENFORCER" in context
 
@@ -222,32 +223,32 @@ class TestUserPromptSubmitHook:
         """Test that 'let's add' triggers TDD skill."""
         result = run_hook("let's add a new function for validation", str(hook_path), hook_env)
 
-        assert "hookSpecificOutput" in result
-        context = result["hookSpecificOutput"]["additionalContext"]
+        assert "systemMessage" in result
+        context = result["systemMessage"]
         assert "test-driven-development" in context
 
     def test_tdd_yeah_lets_build(self, hook_path, hook_env):
         """Test that 'yeah let's build' triggers TDD skill."""
         result = run_hook("yeah let's build that feature", str(hook_path), hook_env)
 
-        assert "hookSpecificOutput" in result
-        context = result["hookSpecificOutput"]["additionalContext"]
+        assert "systemMessage" in result
+        context = result["systemMessage"]
         assert "test-driven-development" in context
 
     def test_tdd_i_want_to_create(self, hook_path, hook_env):
         """Test that 'I want to create' triggers TDD skill."""
         result = run_hook("I want to create a new class for handling exports", str(hook_path), hook_env)
 
-        assert "hookSpecificOutput" in result
-        context = result["hookSpecificOutput"]["additionalContext"]
+        assert "systemMessage" in result
+        context = result["systemMessage"]
         assert "test-driven-development" in context
 
     def test_tdd_write_function(self, hook_path, hook_env):
         """Test that 'write a function' triggers TDD skill."""
         result = run_hook("write a function that calculates totals", str(hook_path), hook_env)
 
-        assert "hookSpecificOutput" in result
-        context = result["hookSpecificOutput"]["additionalContext"]
+        assert "systemMessage" in result
+        context = result["systemMessage"]
         assert "test-driven-development" in context
 
     def test_tdd_exclusion_write_test(self, hook_path, hook_env):
@@ -255,7 +256,7 @@ class TestUserPromptSubmitHook:
         result = run_hook("let's write a test for the authentication", str(hook_path), hook_env)
 
         # Should not trigger TDD skill since we're already writing tests
-        context = result.get("hookSpecificOutput", {}).get("additionalContext", "")
+        context = result.get("systemMessage", "")
         assert "test-driven-development" not in context
 
     def test_tdd_exclusion_what_does(self, hook_path, hook_env):
@@ -263,7 +264,7 @@ class TestUserPromptSubmitHook:
         result = run_hook("what does this function do?", str(hook_path), hook_env)
 
         # Should not trigger TDD skill (asking about existing code)
-        context = result.get("hookSpecificOutput", {}).get("additionalContext", "")
+        context = result.get("systemMessage", "")
         assert "test-driven-development" not in context
 
     def test_tdd_exclusion_how_does(self, hook_path, hook_env):
@@ -271,7 +272,7 @@ class TestUserPromptSubmitHook:
         result = run_hook("how does the export feature work?", str(hook_path), hook_env)
 
         # Should not trigger TDD skill
-        context = result.get("hookSpecificOutput", {}).get("additionalContext", "")
+        context = result.get("systemMessage", "")
         assert "test-driven-development" not in context
 
     def test_tdd_exclusion_explain(self, hook_path, hook_env):
@@ -279,7 +280,7 @@ class TestUserPromptSubmitHook:
         result = run_hook("explain this code to me", str(hook_path), hook_env)
 
         # Should not trigger TDD skill
-        context = result.get("hookSpecificOutput", {}).get("additionalContext", "")
+        context = result.get("systemMessage", "")
         assert "test-driven-development" not in context
 
     def test_tdd_exclusion_show_me(self, hook_path, hook_env):
@@ -287,7 +288,7 @@ class TestUserPromptSubmitHook:
         result = run_hook("show me the implementation", str(hook_path), hook_env)
 
         # Should not trigger TDD skill
-        context = result.get("hookSpecificOutput", {}).get("additionalContext", "")
+        context = result.get("systemMessage", "")
         assert "test-driven-development" not in context
 
     # ===== Chronicle Assistant Guide Tests =====
@@ -296,8 +297,8 @@ class TestUserPromptSubmitHook:
         """Test that 'how do I use chronicle' triggers assistant-guide."""
         result = run_hook("how do I use chronicle?", str(hook_path), hook_env)
 
-        assert "hookSpecificOutput" in result
-        context = result["hookSpecificOutput"]["additionalContext"]
+        assert "systemMessage" in result
+        context = result["systemMessage"]
         assert "chronicle-assistant-guide" in context
 
     # ===== Priority System Tests =====
@@ -307,8 +308,8 @@ class TestUserPromptSubmitHook:
         # "document session" matches documenter (90) and might match others
         result = run_hook("document this session", str(hook_path), hook_env)
 
-        assert "hookSpecificOutput" in result
-        context = result["hookSpecificOutput"]["additionalContext"]
+        assert "systemMessage" in result
+        context = result["systemMessage"]
 
         # Should only show ONE skill (the highest priority one)
         # Count number of "SKILL DETECTED" occurrences
@@ -323,8 +324,8 @@ class TestUserPromptSubmitHook:
         # "implement" triggers Advocate, "how did I implement" triggers context-retriever
         result = run_hook("how did I implement this feature?", str(hook_path), hook_env)
 
-        assert "hookSpecificOutput" in result
-        context = result["hookSpecificOutput"]["additionalContext"]
+        assert "systemMessage" in result
+        context = result["systemMessage"]
 
         # Should have BOTH messages
         assert "SEARCH CHRONICLE FIRST" in context
@@ -336,7 +337,7 @@ class TestUserPromptSubmitHook:
         result = run_hook("view the session details", str(hook_path), hook_env)
 
         # "view" is excluded from Chronicle Advocate
-        context = result.get("hookSpecificOutput", {}).get("additionalContext", "")
+        context = result.get("systemMessage", "")
         assert "SEARCH CHRONICLE FIRST" not in context
 
     # ===== Edge Cases =====
@@ -369,11 +370,10 @@ class TestUserPromptSubmitHook:
 
             # If not empty, must have correct structure
             if result:
-                assert "hookSpecificOutput" in result
-                assert "hookEventName" in result["hookSpecificOutput"]
-                assert result["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
-                assert "additionalContext" in result["hookSpecificOutput"]
-                assert isinstance(result["hookSpecificOutput"]["additionalContext"], str)
+                assert "systemMessage" in result
+                assert isinstance(result["systemMessage"], str)
+                assert "decision" in result
+                assert result["decision"] == "approve"
 
 
 class TestHookConfiguration:
@@ -381,12 +381,12 @@ class TestHookConfiguration:
 
     def test_skill_rules_file_exists(self):
         """Test that skill-rules.json exists."""
-        rules_path = PROJECT_ROOT / ".claude" / "config" / "skill-rules.json"
+        rules_path = PROJECT_ROOT / ".claude" / "skill-rules.json"
         assert rules_path.exists()
 
     def test_skill_rules_valid_json(self):
         """Test that skill-rules.json is valid JSON."""
-        rules_path = PROJECT_ROOT / ".claude" / "config" / "skill-rules.json"
+        rules_path = PROJECT_ROOT / ".claude" / "skill-rules.json"
 
         with open(rules_path) as f:
             rules = json.load(f)
@@ -396,7 +396,7 @@ class TestHookConfiguration:
 
     def test_all_skills_have_required_fields(self):
         """Test that all skills have required fields."""
-        rules_path = PROJECT_ROOT / ".claude" / "config" / "skill-rules.json"
+        rules_path = PROJECT_ROOT / ".claude" / "skill-rules.json"
 
         with open(rules_path) as f:
             rules = json.load(f)

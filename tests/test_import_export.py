@@ -342,7 +342,7 @@ def test_import_session_valid_json(temp_db, sample_session_json, monkeypatch):
     monkeypatch.setenv('CHRONICLE_DB', db_path)
 
     runner = CliRunner()
-    result = runner.invoke(cli, ['import-session'], input=json.dumps(sample_session_json))
+    result = runner.invoke(cli, ['import-session-json'], input=json.dumps(sample_session_json))
 
     assert result.exit_code == 0
 
@@ -359,7 +359,7 @@ def test_import_session_invalid_json(temp_db, monkeypatch):
     monkeypatch.setenv('CHRONICLE_DB', db_path)
 
     runner = CliRunner()
-    result = runner.invoke(cli, ['import-session'], input='{invalid json}')
+    result = runner.invoke(cli, ['import-session-json'], input='{invalid json}')
 
     assert result.exit_code == 1
     assert "Invalid JSON" in result.output
@@ -380,7 +380,7 @@ def test_import_session_missing_required_fields(temp_db, monkeypatch):
     }
 
     runner = CliRunner()
-    result = runner.invoke(cli, ['import-session'], input=json.dumps(bad_json))
+    result = runner.invoke(cli, ['import-session-json'], input=json.dumps(bad_json))
 
     assert result.exit_code == 1
 
@@ -393,7 +393,7 @@ def test_import_session_generates_new_id(temp_db, sample_session_json, monkeypat
     original_id = sample_session_json["session"]["original_id"]
 
     runner = CliRunner()
-    result = runner.invoke(cli, ['import-session'], input=json.dumps(sample_session_json))
+    result = runner.invoke(cli, ['import-session-json'], input=json.dumps(sample_session_json))
 
     assert result.exit_code == 0
 
@@ -427,7 +427,7 @@ def test_import_session_with_special_characters(temp_db, monkeypatch):
     }
 
     runner = CliRunner()
-    result = runner.invoke(cli, ['import-session'], input=json.dumps(special_json))
+    result = runner.invoke(cli, ['import-session-json'], input=json.dumps(special_json))
 
     assert result.exit_code == 0
 
@@ -449,7 +449,7 @@ def test_import_session_handles_list_files_mentioned(temp_db, sample_session_jso
     monkeypatch.setenv('CHRONICLE_DB', db_path)
 
     runner = CliRunner()
-    result = runner.invoke(cli, ['import-session'], input=json.dumps(sample_session_json))
+    result = runner.invoke(cli, ['import-session-json'], input=json.dumps(sample_session_json))
 
     assert result.exit_code == 0
 
