@@ -44,6 +44,7 @@ def run_all_migrations():
         migrate_v9_to_v10()
     except Exception as e:
         console.print(f"[red]✗[/red] Migration failed: {e}")
+        console.print(f"[dim]Debug info: Exception type: {type(e).__name__}[/dim]")
         raise
 
 
@@ -507,9 +508,14 @@ def update(check_only: bool):
         try:
             run_all_migrations()
             console.print("[green]✓[/green] Database schema is up to date")
+        except ImportError as e:
+            console.print(f"[yellow]⚠[/yellow] Migration import error: {e}")
+            console.print("[dim]Database migrations skipped - please run 'chronicle init' to update schema[/dim]")
+            console.print("[dim]Manual fix: python3 -c \"from backend.database.migrate import migrate_v9_to_v10; migrate_v9_to_v10()\"[/dim]")
         except Exception as e:
             console.print(f"[yellow]⚠[/yellow] Database migration warning: {e}")
             console.print("[dim]Chronicle will continue working, but some features may be limited[/dim]")
+            console.print("[dim]Manual fix: python3 -c \"from backend.database.migrate import migrate_v9_to_v10; migrate_v9_to_v10()\"[/dim]")
 
         # Success
         console.print("\n[bold green]Update Complete![/bold green]")
