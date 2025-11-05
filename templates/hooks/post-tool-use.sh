@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Chronicle PostToolUse Hook
-# Tracks edited files for future build checking
+# Tracks edited files and enforces skills over MCP tools
 
 set -euo pipefail
 
@@ -15,25 +15,61 @@ LOG_FILE="$SCRIPT_DIR/../edit-log.txt"
 # Get current timestamp
 timestamp=$(date '+%Y-%m-%d %H:%M:%S')
 
+# Function to output skill recommendations
+output_skill_recommendation() {
+    local message="$1"
+    jq -n \
+        --arg msg "$message" \
+        '{
+            "decision": "approve",
+            "reason": $msg,
+            "systemMessage": $msg
+        }'
+}
+
 # Extract relevant information from the hook input
-if echo "$input_json" | jq -e '.toolInvocations[0]' >/dev/null 2>&1; then
-    # Parse tool invocations if available
-    tool_info=$(echo "$input_json" | jq -r '.toolInvocations[0] // empty')
-    tool_name=$(echo "$tool_info" | jq -r '.name // "unknown"')
+tool_name=$(echo "$input_json" | jq -r '.tool_name // "unknown"')
 
-    if [[ "$tool_name" != "unknown" ]]; then
-        # Log the tool usage with timestamp
-        echo "[$timestamp] Tool: $tool_name" >> "$LOG_FILE"
+if [[ "$tool_name" != "unknown" ]]; then
+    # Log the tool usage with timestamp
+    echo "[$timestamp] Tool: $tool_name" >> "$LOG_FILE"
 
-        # If it's a file editing tool, we could extract file paths in the future
-        case "$tool_name" in
-            "Edit"|"Write"|"NotebookEdit")
-                # Future enhancement: extract file paths and track for builds
-                echo "[$timestamp] File edit detected: $tool_name" >> "$LOG_FILE"
-                ;;
-        esac
-    fi
+    # Check for MCP tools that should have used skills instead
+    case "$tool_name" in
+        "mcp__chronicle__search_sessions"|"mcp__chronicle__get_session_summary"|"mcp__chronicle__get_current_session")
+            # These Chronicle MCP tools should use skills instead
+            recommendation="⚠️ SKILLS PREFERRED OVER MCP TOOLS
+
+You used $tool_name - consider using skills instead:
+
+🔍 For searching past sessions: Use chronicle-context-retriever skill
+   - Complete workflow guidance
+   - Better context extraction
+   - Structured output with examples
+
+📊 For project tracking: Use chronicle-project-tracker skill
+   - Database-tracked milestones
+   - Roadmap visualization
+
+🔄 For Chronicle workflows: Use chronicle-workflow skill
+   - Session tracking guidance
+   - Best practices
+
+📝 For documenting sessions: Use chronicle-session-documenter skill
+   - Obsidian integration
+   - Structured note creation
+
+💡 Skills provide complete workflows, not just individual operations
+💡 Skills work even when MCP server is unavailable (CLI fallback)
+💡 Skills include best practices and error handling
+
+Load skills with: Skill(command=\"skill-name\")"
+            output_skill_recommendation "$recommendation"
+            ;;
+        "Edit"|"Write"|"NotebookEdit")
+            echo "[$timestamp] File edit detected: $tool_name" >> "$LOG_FILE"
+            ;;
+    esac
 fi
 
-# Exit silently (PostToolUse hooks should not produce output for user)
 exit 0

@@ -155,9 +155,10 @@ class SessionManager:
         import subprocess
         import sys
 
-        # Run summarization in background (detached from this process)
+        # Run smart summarization in background (detached from this process)
+        # Uses summarize-session command which auto-selects best method based on size
         subprocess.Popen(
-            [sys.executable, "-m", "backend.main", "summarize-chunked", str(session_id)],
+            [sys.executable, "-m", "backend.main", "summarize-session", str(session_id), "--quiet"],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             start_new_session=True  # Detach from parent process

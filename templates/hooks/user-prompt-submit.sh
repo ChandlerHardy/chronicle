@@ -9,16 +9,15 @@ set -euo pipefail
 input_json=$(cat)
 user_prompt=$(echo "$input_json" | jq -r '.user_prompt // empty')
 
-# Function to output JSON with additional context
+# Function to output JSON with system message
 output_context() {
     local message="$1"
     jq -n \
         --arg msg "$message" \
         '{
-            "hookSpecificOutput": {
-                "hookEventName": "UserPromptSubmit",
-                "additionalContext": $msg
-            }
+            "decision": "approve",
+            "reason": $msg,
+            "systemMessage": $msg
         }'
 }
 
@@ -60,7 +59,7 @@ Proof: Sessions 21, 30, 31 show reinventing wastes time"
 fi
 
 # TDD skill triggers (highest priority - 95)
-tdd_phrases="(let'?s (implement|add|build|write|create)|yeah let'?s (implement|add|build|write|create)|(I want|we should|can you)( to)? (implement|add|build|write|create)|(write|add|create) (a |the |some )?(function|class|method|feature|code))"
+tdd_phrases="(let'?s (implement|add|build|write|create|fix|debug|resolve)|yeah let'?s (implement|add|build|write|create|fix|debug|resolve)|(I want|we should|can you)( to)? (implement|add|build|write|create|fix|debug|resolve)|(write|add|create) (a |the |some )?(function|class|method|feature|code))"
 tdd_excludes="(test|write.*test|TDD|red-green-refactor|what (does|is)|how (does|do)|show me|explain)"
 
 if echo "$user_prompt" | grep -iqE "$tdd_phrases"; then

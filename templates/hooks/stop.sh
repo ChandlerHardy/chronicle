@@ -14,10 +14,9 @@ output_message() {
     jq -n \
         --arg msg "$message" \
         '{
-            "hookSpecificOutput": {
-                "hookEventName": "Stop",
-                "additionalContext": $msg
-            }
+            "decision": "approve",
+            "reason": $msg,
+            "systemMessage": $msg
         }'
 }
 
@@ -47,7 +46,8 @@ checklist+="
 checklist+="
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-# Output the checklist
+# Output the checklist to both stderr (to ensure visibility) and proper JSON format
+echo "$checklist" >&2
 output_message "$checklist"
 
 exit 0

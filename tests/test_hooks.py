@@ -2,6 +2,11 @@
 
 These tests verify that the UserPromptSubmit hook correctly detects
 skill activation triggers and injects appropriate messages.
+
+NOTE: Updated for Claude Code hooks format change (Nov 2025):
+- Old format: result["hookSpecificOutput"]["additionalContext"]
+- New format: result["systemMessage"]
+All test assertions updated to use the new format.
 """
 
 import json
@@ -73,8 +78,8 @@ class TestUserPromptSubmitHook:
         """Test that 'document session' triggers chronicle-session-documenter."""
         result = run_hook("document session 75 to Obsidian", str(hook_path), hook_env)
 
-        assert "hookSpecificOutput" in result
-        context = result["hookSpecificOutput"]["additionalContext"]
+        assert "systemMessage" in result
+        context = result["systemMessage"]
         assert "chronicle-session-documenter" in context
         assert "SKILL DETECTED" in context
 

@@ -11,7 +11,19 @@
       ],
       "excludes": ["read", "view", "show", "explain", "what is", "search.*chronicle", "mcp__chronicle"]
     },
-    "message": "🔍 SEARCH CHRONICLE FIRST\n\n⚠️ Before implementing, run:\nmcp__chronicle__search_sessions(query=\"relevant keywords\")\n\nWHY: 2,700x ROI - 1 second vs 20 minutes\nProof: Sessions 21, 30, 31 show reinventing wastes time"
+    "message": "🔍 SEARCH CHRONICLE FIRST\n\n⚠️ Before implementing, use chronicle-context-retriever skill\n\nLoad with: Skill(command=\"chronicle-context-retriever\")\n\nWHY: 2,700x ROI - 1 second vs 20 minutes\nProof: Sessions 21, 30, 31 show reinventing wastes time"
+  },
+  "skillsOverMcp": {
+    "triggers": {
+      "keywords": ["mcp__chronicle"],
+      "phrases": [
+        "(?i)mcp__chronicle__search_sessions",
+        "(?i)mcp__chronicle__get_session_summary",
+        "(?i)mcp__chronicle__get_current_session"
+      ],
+      "excludes": []
+    },
+    "message": "⚠️ SKILLS PREFERRED OVER MCP TOOLS\n\nYou're using MCP tools directly - consider using skills instead:\n\n🔍 Use chronicle-context-retriever for searching past sessions\n📊 Use chronicle-project-tracker for project management\n🔄 Use chronicle-workflow for session tracking\n📝 Use chronicle-session-documenter for Obsidian export\n\n💡 Skills provide complete workflows with CLI fallback\n💡 Skills work even when MCP server is unavailable\n💡 Skills include best practices and error handling\n\nLoad with: Skill(command=\"skill-name\")"
   },
   "tddReminder": {
     "triggers": {

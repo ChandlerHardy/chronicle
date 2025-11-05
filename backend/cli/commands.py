@@ -487,17 +487,15 @@ def session(session_id: int):
     # Check if we need to generate a summary
     if interaction.is_session and not interaction.summary_generated:
         console.print(f"[cyan]Generating summary for session {session_id}...[/cyan]")
-        console.print("[dim]Using chunked summarization (handles sessions of any size)[/dim]\n")
+        console.print("[dim]Using smart summarization (automatically chooses best method)[/dim]\n")
 
         try:
             summarizer = Summarizer()
 
-            # Use chunked summarization (works for all session sizes)
-            # Chunk size is automatically optimized based on session size:
-            # - Small (<10K lines): 3K chunks → uses Flash-Preview 2.5
-            # - Medium (10-50K lines): 5K chunks → uses Flash-Preview 2.5
-            # - Large (>50K lines): 10K chunks → uses Flash 2.0 (1M TPM)
-            summarizer.summarize_session_chunked(
+            # Use smart summarization (chooses best method based on session size):
+            # - Small sessions (≤8K lines): Fast regular summarization
+            # - Large sessions (>8K lines): Chunked summarization with optimized chunks
+            summarizer.summarize_session_smart(
                 session_id=session_id,
                 db_session=db_session,
                 use_cli=False,  # Use Gemini API (reliable, free tier)
@@ -1550,22 +1548,29 @@ def test_gemini():
     help="Which CLI tool to use with --use-cli",
 )
 def summarize_chunked(session_id: int, chunk_size: int, use_cli: bool, cli_tool: str):
-    """Summarize a large session using incremental chunked summarization.
+    """Summarize a session using chunked summarization (force chunked mode).
 
-    This is designed for very large sessions (> 50,000 lines) that are too big
-    for standard summarization. It processes the transcript in chunks, maintaining
-    a rolling summary that gets updated with each new chunk.
+    This command forces the use of chunked summarization, even for small sessions.
+    Most users should use 'chronicle summarize-session' instead, which automatically
+    chooses the best method based on session size.
+
+    Use this command when you need:
+    - Manual control over chunk sizes (--chunk-size)
+    - Force chunked mode for testing/debugging
+    - Very large sessions (> 50,000 lines) with custom settings
 
     Benefits:
     - No token limits - works with sessions of any size
     - Progressive summarization - see intermediate results
     - Resumable - chunks are saved to database
-    - Uses Gemini API (200 free requests/day) or local CLI tools
+    - Custom chunk sizes for fine-tuning
 
     Examples:
-        chronicle summarize-chunked 10                          # Use default 8,000 lines/chunk
-        chronicle summarize-chunked 10 --chunk-size 5000        # Smaller chunks
-        chronicle summarize-chunked 10 --use-cli --cli-tool qwen # Use Qwen CLI (bypasses rate limits)
+        chronicle summarize-chunked 10                          # Force chunked mode
+        chronicle summarize-chunked 10 --chunk-size 5000        # Custom chunk size
+        chronicle summarize-chunked 10 --use-cli --cli-tool qwen # Use Qwen CLI
+
+    Note: For automatic summarization, use 'chronicle summarize-session' instead.
     """
     from backend.services.summarizer import Summarizer
 
@@ -1616,6 +1621,95 @@ def summarize_chunked(session_id: int, chunk_size: int, use_cli: bool, cli_tool:
         import traceback
 
         traceback.print_exc()
+
+    finally:
+        db_session.close()
+
+
+@cli.command()
+@click.argument("session_id", type=int)
+@click.option(
+    "--use-cli",
+    is_flag=True,
+    help="Use CLI tool (qwen/gemini) instead of API",
+)
+@click.option(
+    "--cli-tool",
+    type=click.Choice(["qwen", "gemini"]),
+    default="qwen",
+    help="Which CLI tool to use with --use-cli",
+)
+@click.option(
+    "--quiet",
+    is_flag=True,
+    help="Suppress status messages (for background processing)",
+)
+def summarize_session(session_id: int, use_cli: bool, cli_tool: str, quiet: bool):
+    """Summarize a session using smart mode (auto-selects best method).
+
+    This command intelligently chooses between regular and chunked summarization
+    based on session size:
+    - Small sessions (≤8K lines): Fast regular summarization
+    - Large sessions (>8K lines): Chunked summarization with optimized chunks
+
+    This is the recommended command for automatic background summarization.
+
+    Examples:
+        chronicle summarize-session 10                    # Smart mode (auto-detect)
+        chronicle summarize-session 10 --quiet            # Silent mode (for background)
+        chronicle summarize-session 10 --use-cli          # Use CLI instead of API
+    """
+    from backend.services.summarizer import Summarizer
+
+    db_session = get_session()
+
+    # Check if session exists
+    session = db_session.query(AIInteraction).filter_by(id=session_id).first()
+    if not session:
+        if not quiet:
+            console.print(f"[red]✗[/red] Session {session_id} not found")
+        db_session.close()
+        return
+
+    if not session.is_session:
+        if not quiet:
+            console.print(f"[red]✗[/red] ID {session_id} is not a session")
+        db_session.close()
+        return
+
+    if not quiet:
+        console.print(f"\n[bold cyan]Smart Summarization: Session {session_id}[/bold cyan]")
+        console.print("═" * 80)
+        mode_str = f"{cli_tool.upper()} CLI" if use_cli else "Gemini API"
+        console.print(f"[yellow]Mode:[/yellow] {mode_str}")
+        console.print()
+
+    try:
+        summarizer = Summarizer()
+        summarizer.summarize_session_smart(
+            session_id=session_id,
+            db_session=db_session,
+            use_cli=use_cli,
+            cli_tool=cli_tool,
+            quiet=quiet,
+        )
+
+        if not quiet:
+            console.print("\n[bold green]✓ Summarization Complete![/bold green]")
+            console.print(f"\nView summary with: [cyan]chronicle session {session_id}[/cyan]")
+
+    except ValueError as e:
+        if not quiet:
+            console.print(f"[red]✗[/red] Configuration Error: {e}")
+            console.print("\n[yellow]Troubleshooting:[/yellow]")
+            console.print("1. Check your API key: chronicle config --list")
+            console.print("2. Verify provider: chronicle config summarization.provider")
+
+    except Exception as e:
+        if not quiet:
+            console.print(f"[red]✗[/red] Error: {e}")
+            import traceback
+            traceback.print_exc()
 
     finally:
         db_session.close()

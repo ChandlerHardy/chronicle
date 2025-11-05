@@ -915,3 +915,113 @@ class TestGeminiCommands:
         assert result.exit_code == 0
 
 
+class TestSummarizeSessionCommand:
+    """Tests for 'chronicle summarize-session' command."""
+
+    def test_summarize_session_uses_smart_mode(self, temp_db, runner):
+        """Test that summarize-session command uses smart summarization."""
+        session, db_path = temp_db
+
+        # Create a test session with a small transcript file
+        home = Path.home()
+        sessions_dir = home / ".ai-session" / "sessions"
+        sessions_dir.mkdir(parents=True, exist_ok=True)
+
+        # Create session in database
+        interaction = AIInteraction(
+            timestamp=datetime.now(),
+            ai_tool="claude-session",
+            prompt="Test session",
+            is_session=True,
+            duration_ms=60000,
+            working_directory="/test",
+            summary_generated=False,
+        )
+        session.add(interaction)
+        session.commit()
+        session_id = interaction.id
+
+        # Create a small cleaned transcript file (< 8K lines)
+        cleaned_file = sessions_dir / f"session_{session_id}.cleaned"
+        test_transcript = "Test line\n" * 100  # Only 100 lines
+        cleaned_file.write_text(test_transcript)
+
+        try:
+            # Mock the Summarizer class (imported inside the function)
+            with patch('backend.services.summarizer.Summarizer') as mock_summarizer_class:
+                mock_summarizer = Mock()
+                mock_summarizer_class.return_value = mock_summarizer
+                mock_summarizer.summarize_session_smart.return_value = "Test summary"
+
+                with patch.dict(os.environ, {'CHRONICLE_DB': db_path}):
+                    result = runner.invoke(cli, ['summarize-session', str(session_id)])
+
+                # Verify smart summarization was called
+                assert result.exit_code == 0
+                mock_summarizer.summarize_session_smart.assert_called_once()
+                call_kwargs = mock_summarizer.summarize_session_smart.call_args[1]
+                assert call_kwargs['session_id'] == session_id
+                assert call_kwargs['quiet'] is False
+
+        finally:
+            # Cleanup
+            if cleaned_file.exists():
+                cleaned_file.unlink()
+
+    def test_summarize_session_quiet_mode(self, temp_db, runner):
+        """Test that summarize-session respects --quiet flag."""
+        session, db_path = temp_db
+
+        # Create a test session
+        home = Path.home()
+        sessions_dir = home / ".ai-session" / "sessions"
+        sessions_dir.mkdir(parents=True, exist_ok=True)
+
+        interaction = AIInteraction(
+            timestamp=datetime.now(),
+            ai_tool="claude-session",
+            prompt="Test session",
+            is_session=True,
+            duration_ms=60000,
+            working_directory="/test",
+            summary_generated=False,
+        )
+        session.add(interaction)
+        session.commit()
+        session_id = interaction.id
+
+        cleaned_file = sessions_dir / f"session_{session_id}.cleaned"
+        cleaned_file.write_text("Test line\n" * 100)
+
+        try:
+            with patch('backend.services.summarizer.Summarizer') as mock_summarizer_class:
+                mock_summarizer = Mock()
+                mock_summarizer_class.return_value = mock_summarizer
+                mock_summarizer.summarize_session_smart.return_value = "Test summary"
+
+                with patch.dict(os.environ, {'CHRONICLE_DB': db_path}):
+                    result = runner.invoke(cli, ['summarize-session', str(session_id), '--quiet'])
+
+                # Verify quiet flag was passed
+                assert result.exit_code == 0
+                call_kwargs = mock_summarizer.summarize_session_smart.call_args[1]
+                assert call_kwargs['quiet'] is True
+
+                # Verify no output in quiet mode
+                assert "Smart Summarization" not in result.output
+
+        finally:
+            if cleaned_file.exists():
+                cleaned_file.unlink()
+
+    def test_summarize_session_nonexistent(self, temp_db, runner):
+        """Test summarize-session with nonexistent session ID."""
+        _, db_path = temp_db
+
+        with patch.dict(os.environ, {'CHRONICLE_DB': db_path}):
+            result = runner.invoke(cli, ['summarize-session', '99999'])
+
+        assert result.exit_code == 0  # Command doesn't fail, just returns
+        assert "not found" in result.output.lower()
+
+

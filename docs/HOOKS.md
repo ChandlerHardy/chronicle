@@ -397,10 +397,9 @@ exit 0  # Shows in transcript
 jq -n \
   --arg msg "Context to inject" \
   '{
-    "hookSpecificOutput": {
-      "hookEventName": "UserPromptSubmit",
-      "additionalContext": $msg
-    }
+    "decision": "approve",
+    "reason": $msg,
+    "systemMessage": $msg
   }'
 ```
 
