@@ -11,6 +11,7 @@ from rich.console import Console
 from rich.table import Table
 
 from backend.database.models import get_session, AIInteraction, ProjectMilestone, NextStep
+from backend.database.migrate import migrate_v1_to_v2, migrate_v2_to_v3, migrate_v3_to_v4, migrate_v4_to_v5, migrate_v5_to_v6, migrate_v6_to_v7, migrate_v7_to_v8, migrate_v8_to_v9, migrate_v9_to_v10
 from backend.services.git_monitor import GitMonitor
 from backend.services.ai_tracker import AITracker
 from backend.services.claude_provider import ClaudeProviderSwitcher
@@ -28,6 +29,24 @@ from backend.cli.formatters import (
 console = Console()
 
 
+def run_all_migrations():
+    """Run all database migrations to ensure schema is up to date."""
+    try:
+        # Run all migrations in order - each one checks if it's needed
+        migrate_v1_to_v2()
+        migrate_v2_to_v3()
+        migrate_v3_to_v4()
+        migrate_v4_to_v5()
+        migrate_v5_to_v6()
+        migrate_v6_to_v7()
+        migrate_v7_to_v8()
+        migrate_v8_to_v9()
+        migrate_v9_to_v10()
+    except Exception as e:
+        console.print(f"[red]✗[/red] Migration failed: {e}")
+        raise
+
+
 @click.group()
 @click.version_option(version="0.1.0")
 def cli():
@@ -38,10 +57,16 @@ def cli():
 @cli.command()
 def init():
     """Initialize Chronicle."""
+    console.print("[bold cyan]Initializing Chronicle[/bold cyan]")
+
     # Create config directory
     home = Path.home()
     config_dir = home / ".ai-session"
     config_dir.mkdir(exist_ok=True)
+
+    # Run database migrations (creates tables if needed, updates schema if outdated)
+    console.print("Running database migrations...")
+    run_all_migrations()
 
     # Initialize database
     db_session = get_session()
@@ -476,6 +501,15 @@ def update(check_only: bool):
                 return
 
             console.print("[green]✓[/green] Dependencies reinstalled")
+
+        # Run database migrations after update
+        console.print("\nChecking database schema...")
+        try:
+            run_all_migrations()
+            console.print("[green]✓[/green] Database schema is up to date")
+        except Exception as e:
+            console.print(f"[yellow]⚠[/yellow] Database migration warning: {e}")
+            console.print("[dim]Chronicle will continue working, but some features may be limited[/dim]")
 
         # Success
         console.print("\n[bold green]Update Complete![/bold green]")
