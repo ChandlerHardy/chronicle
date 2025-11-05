@@ -53,3 +53,4 @@ Thumbs.db
 # Scratch/analysis documents
 REMOTE_SUMMARIZE_WORKFLOW.md
 docs/REDDIT_INTEGRATION_ANALYSIS.md
+.claude/
