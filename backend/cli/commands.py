@@ -3349,10 +3349,10 @@ def import_and_summarize(chunk_size: int, quiet: bool):
         try:
             # Summarize it
             summarizer = Summarizer()
-            summary = summarizer.summarize_session_chunked(
+            summary = summarizer.summarize_session_smart(
                 session_id=temp_session.id,
-                chunk_size_lines=chunk_size,
                 db_session=db_session,
+                use_cli=False,  # Use Gemini API for better quality
                 quiet=quiet,
             )
 
