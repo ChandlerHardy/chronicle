@@ -407,7 +407,7 @@ chronicle setup-hooks
 
 **What gets installed:**
 - **Hook scripts** in `~/.claude/hooks/` - UserPromptSubmit, Stop, PostToolUse
-- **Settings configuration** in `~/.claude/settings.local.json` - Registers hooks with Claude Code
+- **Settings configuration** in `~/.claude/settings.json` - Registers hooks with Claude Code
 - **Universal CLAUDE.md** in `~/.claude/CLAUDE.md` - Development best practices
 
 **Hook Behaviors:**

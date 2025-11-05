@@ -283,7 +283,7 @@ Defines trigger patterns for each enforcement:
 
 ### Settings
 
-**File:** `.claude/settings.local.json`
+**File:** `.claude/settings.json`
 
 Registers hooks with Claude Code:
 
@@ -428,7 +428,7 @@ claude --debug
 
 1. **Hook doesn't run:**
    - Check executable: `chmod +x .claude/hooks/*.sh`
-   - Check settings: `cat .claude/settings.local.json`
+   - Check settings: `cat .claude/settings.json`
    - Restart Claude Code to reload config
 
 2. **Hook times out:**

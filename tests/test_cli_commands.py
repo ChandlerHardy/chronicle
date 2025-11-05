@@ -709,14 +709,8 @@ class TestSetupHooksCommand:
             claude_dir = home_dir / ".claude"
             hooks_dir = claude_dir / "hooks"
 
-            # Create mock source hooks directory
-            source_hooks_dir = Path.cwd() / ".claude" / "hooks"
-            source_hooks_dir.mkdir(parents=True, exist_ok=True)
-
-            test_hook = "#!/bin/bash\necho 'test hook'"
-            (source_hooks_dir / "user-prompt-submit.sh").write_text(test_hook)
-            (source_hooks_dir / "stop.sh").write_text(test_hook)
-            (source_hooks_dir / "post-tool-use.sh").write_text(test_hook)
+            # Note: This test uses the REAL templates/hooks directory in the repo
+            # We verify the scripts are copied, not their exact content
 
             with patch.dict(os.environ, {'HOME': str(home_dir)}):
                 result = runner.invoke(cli, ['setup-hooks', '--force'])
@@ -726,11 +720,13 @@ class TestSetupHooksCommand:
             # Hook scripts should be copied and be executable
             for hook_file in ["user-prompt-submit.sh", "stop.sh", "post-tool-use.sh"]:
                 hook_path = hooks_dir / hook_file
-                assert hook_path.exists()
-                assert hook_path.read_text() == test_hook
+                assert hook_path.exists(), f"{hook_file} should exist"
+                # Verify it starts with shebang
+                content = hook_path.read_text()
+                assert content.startswith("#!/bin/bash"), f"{hook_file} should have bash shebang"
                 # Check if executable (on Unix systems)
                 if os.name == 'posix':
-                    assert os.access(hook_path, os.X_OK)
+                    assert os.access(hook_path, os.X_OK), f"{hook_file} should be executable"
 
     def test_setup_hooks_creates_universal_claude_md(self, runner):
         """GREEN phase: Test 'chronicle setup-hooks' creates universal CLAUDE.md file."""
@@ -806,16 +802,14 @@ class TestSetupHooksCommand:
             assert "Setup cancelled" in result.output
 
     def test_setup_hooks_creates_settings_json(self, runner):
-        """Test 'chronicle setup-hooks' creates settings.local.json with hooks configuration."""
+        """Test 'chronicle setup-hooks' creates settings.json with hooks configuration."""
         with tempfile.TemporaryDirectory() as tmpdir:
             home_dir = Path(tmpdir)
             claude_dir = home_dir / ".claude"
-            settings_file = claude_dir / "settings.local.json"
+            settings_file = claude_dir / "settings.json"
 
-            # Create mock source hooks directory
-            source_hooks_dir = Path.cwd() / ".claude" / "hooks"
-            source_hooks_dir.mkdir(parents=True, exist_ok=True)
-            (source_hooks_dir / "user-prompt-submit.sh").write_text("#!/bin/bash")
+            # Note: This test uses the REAL templates/hooks directory in the repo
+            # We don't create mocks because the real templates should always exist
 
             with patch.dict(os.environ, {'HOME': str(home_dir)}):
                 result = runner.invoke(cli, ['setup-hooks', '--force'])
@@ -829,7 +823,7 @@ class TestSetupHooksCommand:
             assert "UserPromptSubmit" in settings["hooks"]
             assert "Stop" in settings["hooks"]
             assert "PostToolUse" in settings["hooks"]
-            assert "Updated settings.local.json" in result.output
+            assert "Updated settings.json" in result.output
 
     def test_setup_hooks_checks_superpowers_skills(self, runner):
         """Test 'chronicle setup-hooks' checks for superpowers skills availability."""

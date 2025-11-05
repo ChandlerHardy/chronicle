@@ -3586,8 +3586,8 @@ def setup_hooks(force: bool):
             else:
                 console.print(f"[yellow]⚠[/yellow]  {config_file} not found in templates")
 
-        # Create or update settings.local.json with hooks configuration
-        settings_file = claude_dir / "settings.local.json"
+        # Create or update settings.json with hooks configuration
+        settings_file = claude_dir / "settings.json"
         settings = {}
 
         # Load existing settings if file exists
@@ -3633,7 +3633,7 @@ def setup_hooks(force: bool):
 
         # Write settings file
         settings_file.write_text(json.dumps(settings, indent=2))
-        console.print("[green]✓[/green] Updated settings.local.json")
+        console.print("[green]✓[/green] Updated settings.json")
 
         # Create universal CLAUDE.md
         universal_claude_md = """# Universal Development Directives
