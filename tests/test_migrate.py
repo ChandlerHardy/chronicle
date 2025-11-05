@@ -17,6 +17,7 @@ from backend.database.migrate import (
     migrate_v6_to_v7,
     migrate_v7_to_v8,
     migrate_v8_to_v9,
+    migrate_v9_to_v10,
 )
 
 
@@ -637,6 +638,66 @@ class TestMigrationV8ToV9:
         conn.close()
 
 
+class TestMigrationV9ToV10:
+    """Test migration from v9 to v10 (git branch tracking)."""
+
+    def test_migrate_v9_to_v10_adds_branch_column(self, temp_db):
+        """Test that migration adds branch column."""
+        # Create v9 database
+        conn = sqlite3.connect(temp_db)
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE ai_interactions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp DATETIME,
+                prompt TEXT,
+                title TEXT,
+                keywords TEXT
+            )
+        """)
+        conn.commit()
+        conn.close()
+
+        # Run migration
+        migrate_v9_to_v10(temp_db)
+
+        # Verify column was added
+        conn = sqlite3.connect(temp_db)
+        cursor = conn.cursor()
+        cursor.execute("PRAGMA table_info(ai_interactions)")
+        columns = [row[1] for row in cursor.fetchall()]
+
+        assert 'branch' in columns
+        conn.close()
+
+    def test_migrate_v9_to_v10_skips_existing_branch(self, temp_db):
+        """Test that migration skips branch column if it already exists."""
+        # Create database with branch column already present
+        conn = sqlite3.connect(temp_db)
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE ai_interactions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp DATETIME,
+                prompt TEXT,
+                branch TEXT
+            )
+        """)
+        conn.commit()
+        conn.close()
+
+        # Run migration
+        migrate_v9_to_v10(temp_db)
+
+        # Should complete without errors
+        conn = sqlite3.connect(temp_db)
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM ai_interactions")
+        count = cursor.fetchone()[0]
+        assert count == 0
+        conn.close()
+
+
 class TestMigrationIntegration:
     """Test migration integration and edge cases."""
 
@@ -665,6 +726,7 @@ class TestMigrationIntegration:
         migrate_v6_to_v7(temp_db)
         migrate_v7_to_v8(temp_db)
         migrate_v8_to_v9(temp_db)
+        migrate_v9_to_v10(temp_db)
 
         # Verify final state
         conn = sqlite3.connect(temp_db)

@@ -72,6 +72,7 @@ def format_session_dict(session: AIInteraction, include_summary: bool = True) ->
         "summary_generated": bool(session.summary_generated),
         "repo_path": session.repo_path,
         "working_directory": session.working_directory,
+        "branch": session.branch,
         "files_mentioned": session.files_list,
         "related_commit_id": session.related_commit_id,
         # Session organization (v7)

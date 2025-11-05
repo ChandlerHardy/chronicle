@@ -602,6 +602,40 @@ class TestSessionManipulation:
 
         assert result.exit_code == 0
 
+    def test_set_branch(self, temp_db, runner):
+        """Test 'chronicle set-branch' sets branch for a session."""
+        db_session, db_path = temp_db
+
+        # Create a session to set branch for
+        interaction = AIInteraction(
+            ai_tool="claude-session",
+            prompt="Test prompt",
+            timestamp=datetime.now(),
+            is_session=True
+        )
+        db_session.add(interaction)
+        db_session.commit()
+        session_id = interaction.id
+
+        with patch.dict(os.environ, {'CHRONICLE_DB': db_path}):
+            result = runner.invoke(cli, ['set-branch', str(session_id), 'feature/test-branch'])
+
+        assert result.exit_code == 0
+
+        # Verify branch was set
+        db_session.refresh(interaction)
+        assert interaction.branch == 'feature/test-branch'
+
+    def test_set_branch_nonexistent_session(self, temp_db, runner):
+        """Test 'chronicle set-branch' handles nonexistent session."""
+        _, db_path = temp_db
+
+        with patch.dict(os.environ, {'CHRONICLE_DB': db_path}):
+            result = runner.invoke(cli, ['set-branch', '999', 'main'])
+
+        assert result.exit_code == 0
+        assert "not found" in result.output
+
     def test_link_session_to_milestone(self, temp_db, runner):
         """Test 'chronicle link-session' links session to milestone."""
         db_session, db_path = temp_db

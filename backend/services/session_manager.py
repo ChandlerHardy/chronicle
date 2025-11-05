@@ -43,6 +43,7 @@ class SessionManager:
         # Detect current working directory and git repo
         cwd = os.getcwd()
         repo_path = self._find_git_root(cwd)
+        current_branch = self._get_current_branch(repo_path) if repo_path else None
 
         # Create session record immediately
         session = AIInteraction(
@@ -55,6 +56,7 @@ class SessionManager:
             session_transcript=None,
             working_directory=cwd,
             repo_path=repo_path,
+            branch=current_branch,
         )
         self.db.add(session)
         self.db.commit()
@@ -280,3 +282,46 @@ class SessionManager:
             current = current.parent
 
         return None
+
+    def _get_current_branch(self, repo_path: Optional[str]) -> Optional[str]:
+        """Get the current git branch name.
+
+        Args:
+            repo_path: Path to git repository root
+
+        Returns:
+            Current branch name or None if not in a git repo or error
+        """
+        if not repo_path:
+            return None
+
+        try:
+            # Use git rev-parse to get the current branch name
+            # This works for both regular branches and detached HEAD states
+            result = subprocess.run(
+                ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+                cwd=repo_path,
+                capture_output=True,
+                text=True,
+                timeout=5  # Add timeout to prevent hanging
+            )
+
+            if result.returncode == 0:
+                branch = result.stdout.strip()
+                # Handle detached HEAD state
+                if branch == "HEAD":
+                    # Get the commit hash for detached HEAD
+                    commit_result = subprocess.run(
+                        ["git", "rev-parse", "--short", "HEAD"],
+                        cwd=repo_path,
+                        capture_output=True,
+                        text=True,
+                        timeout=5
+                    )
+                    if commit_result.returncode == 0:
+                        return f"detached-HEAD-{commit_result.stdout.strip()}"
+                    return "detached-HEAD"
+                return branch
+            return None
+        except (subprocess.TimeoutExpired, subprocess.CalledProcessError, FileNotFoundError):
+            return None

@@ -509,6 +509,43 @@ def migrate_v8_to_v9(db_path: str = None):
     print("   Multi-word searches now work: 'gemini model fallback' finds all three words")
 
 
+def migrate_v9_to_v10(db_path: str = None):
+    """Migrate database from v9 to v10 (add git branch tracking).
+
+    Adds branch column to ai_interactions table to track which git branch
+    a session was recorded on. Essential for understanding development context.
+    """
+    if db_path is None:
+        home = Path.home()
+        db_path = home / ".ai-session" / "sessions.db"
+
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+
+    # Check if column already exists
+    cursor.execute("PRAGMA table_info(ai_interactions)")
+    columns = [row[1] for row in cursor.fetchall()]
+
+    if 'branch' in columns:
+        print("✅ Database is already at v10 (branch tracking enabled)")
+        conn.close()
+        return
+
+    print(f"📝 Running migration to v10 (git branch tracking)...")
+
+    # Add branch column
+    cursor.execute("ALTER TABLE ai_interactions ADD COLUMN branch TEXT")
+    print(f"  - Adding column: branch")
+
+    conn.commit()
+    conn.close()
+
+    print("✅ Migration to v10 complete!")
+    print("   New column: branch (git branch name for session context)")
+    print("   New sessions will automatically capture current branch")
+    print("   Use 'chronicle set-branch <session-id> <branch-name>' for existing sessions")
+
+
 if __name__ == "__main__":
     print("Running all migrations...")
     migrate_v1_to_v2()
@@ -519,3 +556,4 @@ if __name__ == "__main__":
     migrate_v6_to_v7()
     migrate_v7_to_v8()
     migrate_v8_to_v9()
+    migrate_v9_to_v10()

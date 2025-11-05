@@ -1331,6 +1331,45 @@ Generate ONLY the title, nothing else:"""
     db_session.close()
 
 
+@cli.command("set-branch")
+@click.argument("session_id", type=int)
+@click.argument("branch", type=str)
+def set_branch(session_id: int, branch: str):
+    """Set the git branch for a session.
+
+    Useful for updating existing sessions that don't have branch information.
+    New sessions automatically capture the current branch.
+
+    Examples:
+        chronicle set-branch 32 main
+        chronicle set-branch 30 feature/authentication
+        chronicle set-branch 28 detached-HEAD-abc123
+    """
+    db_session = get_session()
+
+    # Find session
+    session = db_session.query(AIInteraction).filter_by(id=session_id).first()
+
+    if not session:
+        console.print(f"[red]✗[/red] Session {session_id} not found")
+        db_session.close()
+        return
+
+    # Update branch
+    old_branch = session.branch or "(no branch)"
+    session.branch = branch
+    db_session.commit()
+
+    console.print(f"[green]✓[/green] Updated branch for session {session_id}")
+    console.print(f"  [dim]Old:[/dim] {old_branch}")
+    console.print(f"  [dim]New:[/dim] {branch}")
+
+    if session.title:
+        console.print(f"  [dim]Title:[/dim] {session.title}")
+
+    db_session.close()
+
+
 @cli.command()
 @click.option(
     "--sessions", "session_range", type=str, help='Session range (e.g., "28-32" or "30,31,32")'

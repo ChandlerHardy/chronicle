@@ -64,6 +64,7 @@ class AIInteraction(Base):
     # Project/repo tracking
     working_directory = Column(String(500))  # Directory where session was started
     repo_path = Column(String(500))  # Git repository root (if in a git repo)
+    branch = Column(String(255))  # Git branch name (if in a git repo)
 
     # Session organization (added in v7)
     title = Column(String(500))  # Descriptive title: "MCP Response Optimization"

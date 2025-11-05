@@ -434,3 +434,127 @@ class TestSessionManager:
         assert "backend.main" in call_args[0][0]
         assert "summarize-session" in call_args[0][0]
         assert str(session.id) in call_args[0][0]
+
+    @patch('backend.services.session_manager.subprocess.run')
+    @patch('backend.services.session_manager.print_chronicle_banner')
+    @patch('backend.services.session_manager.os.getcwd')
+    def test_start_session_captures_git_branch(self, mock_getcwd, mock_banner, mock_subprocess, session_manager, temp_db):
+        """start_session captures current git branch when in a git repository."""
+        db_session, _ = temp_db
+
+        # Mock current working directory
+        mock_getcwd.return_value = "/path/to/repo"
+
+        # Mock subprocess to return immediately
+        mock_subprocess.return_value = Mock(returncode=0)
+
+        # Mock _finalize_session to prevent background process spawn
+        with patch.object(session_manager, '_finalize_session'):
+            # Mock git root detection and branch detection
+            with patch.object(session_manager, '_find_git_root', return_value="/path/to/repo"), \
+                 patch.object(session_manager, '_get_current_branch', return_value="main"):
+                session_id = session_manager.start_session('claude')
+
+        # Verify database record includes branch
+        session = db_session.query(AIInteraction).filter_by(id=session_id).first()
+        assert session is not None
+        assert session.branch == "main"
+        assert session.repo_path == "/path/to/repo"
+        assert session.working_directory == "/path/to/repo"
+
+    @patch('backend.services.session_manager.subprocess.run')
+    @patch('backend.services.session_manager.print_chronicle_banner')
+    @patch('backend.services.session_manager.os.getcwd')
+    def test_start_session_without_git_repo(self, mock_getcwd, mock_banner, mock_subprocess, session_manager, temp_db):
+        """start_session handles sessions outside of git repositories."""
+        db_session, _ = temp_db
+
+        # Mock current working directory
+        mock_getcwd.return_value = "/path/to/non-git"
+
+        # Mock subprocess to return immediately
+        mock_subprocess.return_value = Mock(returncode=0)
+
+        # Mock _finalize_session to prevent background process spawn
+        with patch.object(session_manager, '_finalize_session'):
+            # Mock git root detection returning None (not in git repo)
+            with patch.object(session_manager, '_find_git_root', return_value=None):
+                session_id = session_manager.start_session('claude')
+
+        # Verify database record has no branch info
+        session = db_session.query(AIInteraction).filter_by(id=session_id).first()
+        assert session is not None
+        assert session.branch is None
+        assert session.repo_path is None
+        assert session.working_directory == "/path/to/non-git"
+
+    def test_get_current_branch_normal_branch(self, session_manager, tmp_path):
+        """_get_current_branch returns branch name for normal branches."""
+        # Mock subprocess.run to simulate git rev-parse success
+        mock_result = Mock()
+        mock_result.returncode = 0
+        mock_result.stdout = "feature/new-functionality\n"
+
+        with patch('backend.services.session_manager.subprocess.run', return_value=mock_result):
+            branch = session_manager._get_current_branch(str(tmp_path))
+
+        assert branch == "feature/new-functionality"
+
+    def test_get_current_branch_detached_head(self, session_manager, tmp_path):
+        """_get_current_branch handles detached HEAD state."""
+        # First call returns "HEAD" (detached), second returns commit hash
+        mock_head_result = Mock()
+        mock_head_result.returncode = 0
+        mock_head_result.stdout = "HEAD\n"
+
+        mock_commit_result = Mock()
+        mock_commit_result.returncode = 0
+        mock_commit_result.stdout = "abc123def\n"
+
+        with patch('backend.services.session_manager.subprocess.run') as mock_run:
+            mock_run.side_effect = [mock_head_result, mock_commit_result]
+            branch = session_manager._get_current_branch(str(tmp_path))
+
+        assert branch == "detached-HEAD-abc123def"
+
+    def test_get_current_branch_detached_head_fallback(self, session_manager, tmp_path):
+        """_get_current_branch falls back to generic detached-HEAD on error."""
+        # First call returns "HEAD" (detached), second fails
+        mock_head_result = Mock()
+        mock_head_result.returncode = 0
+        mock_head_result.stdout = "HEAD\n"
+
+        mock_commit_result = Mock()
+        mock_commit_result.returncode = 1  # Error
+
+        with patch('backend.services.session_manager.subprocess.run') as mock_run:
+            mock_run.side_effect = [mock_head_result, mock_commit_result]
+            branch = session_manager._get_current_branch(str(tmp_path))
+
+        assert branch == "detached-HEAD"
+
+    def test_get_current_branch_git_command_fails(self, session_manager, tmp_path):
+        """_get_current_branch returns None when git command fails."""
+        # Mock subprocess.run to simulate git failure
+        mock_result = Mock()
+        mock_result.returncode = 1  # Error
+
+        with patch('backend.services.session_manager.subprocess.run', return_value=mock_result):
+            branch = session_manager._get_current_branch(str(tmp_path))
+
+        assert branch is None
+
+    def test_get_current_branch_no_repo_path(self, session_manager):
+        """_get_current_branch returns None when no repo path provided."""
+        branch = session_manager._get_current_branch(None)
+        assert branch is None
+
+    def test_get_current_branch_timeout(self, session_manager, tmp_path):
+        """_get_current_branch handles git command timeout."""
+        # Mock subprocess.run to raise TimeoutExpired
+        import subprocess
+        with patch('backend.services.session_manager.subprocess.run',
+                  side_effect=subprocess.TimeoutExpired('git', 5)):
+            branch = session_manager._get_current_branch(str(tmp_path))
+
+        assert branch is None
