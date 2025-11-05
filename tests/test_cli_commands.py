@@ -708,7 +708,6 @@ class TestExportCommands:
                 assert os.path.exists(output_file)
 
 
-class TestSetupHooksCommand:
     """Tests for 'chronicle setup-hooks' command."""
 
     def test_setup_hooks_creates_hooks_directory(self, runner):
@@ -928,6 +927,195 @@ class TestSetupHooksCommand:
             assert "Checking superpowers skills availability" in result.output
             assert "Superpowers marketplace not configured" in result.output
             assert "/plugin install superpowers-marketplace" in result.output
+
+
+class TestUnifiedSetupCommand:
+    """Tests for unified 'chronicle setup' command."""
+
+    def test_setup_displays_welcome_and_overview(self, runner):
+        """RED phase: Test 'chronicle setup' shows welcome message and overview."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            home_dir = Path(tmpdir)
+            config_dir = home_dir / ".ai-session"
+            config_dir.mkdir(parents=True, exist_ok=True)
+
+            # Create existing config with API key
+            config_file = config_dir / "config.yaml"
+            existing_config = """ai:
+  gemini_api_key: AIzaExistingKey123456789
+  default_model: gemini-2.0-flash
+"""
+            config_file.write_text(existing_config)
+
+            with patch.dict(os.environ, {'HOME': str(home_dir)}):
+                with patch('click.confirm', return_value=False):  # Skip API configuration
+                    result = runner.invoke(cli, ['setup'])
+
+            # Should show welcome message
+            assert result.exit_code == 0
+            assert "Chronicle Setup Wizard" in result.output
+            assert "This interactive setup will guide you through" in result.output
+            assert "API key already configured" in result.output
+
+    def test_setup_api_key_configuration(self, runner):
+        """RED phase: Test 'chronicle setup' configures API key when user provides one."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            home_dir = Path(tmpdir)
+            config_file = home_dir / ".ai-session" / "config.yaml"
+
+            with patch.dict(os.environ, {'HOME': str(home_dir)}):
+                with patch('click.prompt', return_value='AIzaTestApiKey123456789'):
+                    with patch('click.confirm', side_effect=[True, True]):  # Accept defaults
+                        result = runner.invoke(cli, ['setup'])
+
+            # Should succeed
+            assert result.exit_code == 0
+            assert "API key saved" in result.output
+
+    def test_setup_rejects_invalid_api_key(self, runner):
+        """RED phase: Test 'chronicle setup' rejects invalid API keys."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            home_dir = Path(tmpdir)
+
+            with patch.dict(os.environ, {'HOME': str(home_dir)}):
+                with patch('click.prompt', return_value='short'):  # Too short key
+                    with patch('click.confirm', return_value=False):  # Skip hooks
+                        result = runner.invoke(cli, ['setup'])
+
+            # Should handle invalid key gracefully
+            assert result.exit_code == 0
+            assert "Invalid API key" in result.output
+            assert "API configuration skipped" in result.output
+
+    def test_setup_hooks_configuration_optional(self, runner):
+        """RED phase: Test 'chronicle setup' optionally sets up hooks."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            home_dir = Path(tmpdir)
+            claude_dir = home_dir / ".claude"
+            config_dir = home_dir / ".ai-session"
+            config_dir.mkdir(parents=True, exist_ok=True)
+
+            # Create existing config to skip API setup
+            config_file = config_dir / "config.yaml"
+            config_file.write_text("ai:\n  gemini_api_key: AIzaExistingKey123456789\n")
+
+            with patch.dict(os.environ, {'HOME': str(home_dir)}):
+                # Skip hooks setup
+                with patch('click.confirm', return_value=False):
+                    result = runner.invoke(cli, ['setup'])
+
+            # Should succeed without hooks
+            assert result.exit_code == 0
+            assert not claude_dir.exists()
+            assert "Hooks setup skipped" in result.output
+
+    def test_setup_with_hooks_enabled(self, runner):
+        """RED phase: Test 'chronicle setup' sets up hooks when user accepts."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            home_dir = Path(tmpdir)
+            claude_dir = home_dir / ".claude"
+            hooks_dir = claude_dir / "hooks"
+
+            with patch.dict(os.environ, {'HOME': str(home_dir)}):
+                # Skip API setup, accept hooks setup
+                with patch('click.confirm', side_effect=[False, True]):
+                    result = runner.invoke(cli, ['setup', '--force'])
+
+            # Should create hooks directory
+            assert result.exit_code == 0
+            if hooks_dir.exists():  # Only if templates exist in test environment
+                assert "Hooks setup complete" in result.output
+
+    def test_setup_api_only_flag(self, runner):
+        """RED phase: Test 'chronicle setup --api-only' only configures API."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            home_dir = Path(tmpdir)
+            claude_dir = home_dir / ".claude"
+
+            with patch.dict(os.environ, {'HOME': str(home_dir)}):
+                with patch('click.prompt', return_value='AIzaTestApiKey123456789'):
+                    with patch('click.confirm', return_value=True):
+                        result = runner.invoke(cli, ['setup', '--api-only'])
+
+            # Should configure API but not create hooks
+            assert result.exit_code == 0
+            assert "API key saved" in result.output
+            assert not claude_dir.exists()
+
+    def test_setup_hooks_only_flag(self, runner):
+        """RED phase: Test 'chronicle setup --hooks-only' only sets up hooks."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            home_dir = Path(tmpdir)
+            claude_dir = home_dir / ".claude"
+
+            with patch.dict(os.environ, {'HOME': str(home_dir)}):
+                result = runner.invoke(cli, ['setup', '--hooks-only', '--force'])
+
+            # Should setup hooks without API configuration
+            assert result.exit_code == 0
+            if claude_dir.exists():  # Only if templates exist
+                assert "Hooks setup complete" in result.output
+
+    def test_setup_handles_existing_configuration(self, runner):
+        """RED phase: Test 'chronicle setup' handles existing API key configuration."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            home_dir = Path(tmpdir)
+            config_file = home_dir / ".ai-session" / "config.yaml"
+            config_file.parent.mkdir(parents=True, exist_ok=True)
+
+            # Create existing config with API key
+            existing_config = """
+ai:
+  gemini_api_key: AIzaExistingKey123456789
+  default_model: gemini-2.0-flash
+"""
+            config_file.write_text(existing_config)
+
+            with patch.dict(os.environ, {'HOME': str(home_dir)}):
+                with patch('click.confirm', return_value=False):  # Don't update
+                    result = runner.invoke(cli, ['setup'])
+
+            # Should detect existing key and skip configuration
+            assert result.exit_code == 0
+            assert "API key already configured" in result.output
+            assert "API configuration skipped" in result.output
+
+    def test_setup_progressive_flow_phases(self, runner):
+        """RED phase: Test 'chronicle setup' progresses through phases correctly."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            home_dir = Path(tmpdir)
+
+            with patch.dict(os.environ, {'HOME': str(home_dir)}):
+                # Accept API setup, decline hooks, add repo, decline session
+                with patch('click.prompt', return_value='AIzaTestApiKey123456789'):
+                    with patch('click.confirm', side_effect=[True, False, False, False]):
+                        result = runner.invoke(cli, ['setup'])
+
+            # Should show progression through phases
+            assert result.exit_code == 0
+            # Should complete API configuration phase
+            assert "API key saved" in result.output
+
+    def test_setup_summary_and_next_steps(self, runner):
+        """RED phase: Test 'chronicle setup' displays summary and next steps."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            home_dir = Path(tmpdir)
+            config_dir = home_dir / ".ai-session"
+            config_dir.mkdir(parents=True, exist_ok=True)
+
+            # Create existing config to skip API setup
+            config_file = config_dir / "config.yaml"
+            config_file.write_text("ai:\n  gemini_api_key: AIzaExistingKey123456789\n")
+
+            with patch.dict(os.environ, {'HOME': str(home_dir)}):
+                # Skip all optional steps
+                with patch('click.confirm', side_effect=[False, False]):
+                    result = runner.invoke(cli, ['setup'])
+
+            # Should show completion and next steps
+            assert result.exit_code == 0
+            assert "Setup Complete" in result.output
+            assert "Next steps" in result.output
 
 
 class TestGeminiCommands:

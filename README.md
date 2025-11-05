@@ -118,11 +118,8 @@ python3 -m pip install -e ".[mcp]"
 # Initialize Chronicle
 chronicle init
 
-# Configure Gemini API for summarization (interactive)
+# Interactive setup (API configuration + optional Claude Code hooks)
 chronicle setup
-
-# Set up Claude Code hooks for workflow automation (optional)
-chronicle setup-hooks
 
 # Add a repository to track
 chronicle add-repo /path/to/your/project
@@ -140,8 +137,7 @@ python3 -m pip install -e .
 
 # All CLI commands work normally
 chronicle init
-chronicle setup  # Configure API key
-chronicle setup-hooks  # Set up Claude Code hooks
+chronicle setup  # Unified interactive setup (API + optional hooks)
 chronicle start claude
 chronicle sessions
 chronicle search "your query"
@@ -394,8 +390,8 @@ chronicle config ai.default_model               # View default model
 Automatically enforce Chronicle best practices with Claude Code hooks:
 
 ```bash
-# Set up hooks for workflow automation
-chronicle setup-hooks
+# Set up hooks for workflow automation (included in unified setup)
+chronicle setup --hooks-only
 
 # Hooks will now automatically:
 # - Remind you to search Chronicle before implementing
@@ -436,10 +432,10 @@ The `~/.claude/CLAUDE.md` contains comprehensive development guidelines:
 - 🔄 **Cross-platform** - Works on macOS, Linux, and FreeBSD
 
 **Usage:**
-After running `chronicle setup-hooks`, restart Claude Code. The hooks will automatically activate based on your prompts and provide contextual reminders.
+After running `chronicle setup` (or `chronicle setup --hooks-only`), restart Claude Code. The hooks will automatically activate based on your prompts and provide contextual reminders.
 
 **For FreeBSD Systems:**
-The setup-hooks command will check for superpowers skills availability. If missing:
+The setup command will check for superpowers skills availability. If missing:
 1. Run `/plugin install superpowers-marketplace` in Claude Code
 2. Run `/plugin install superpowers@superpowers-marketplace`
 3. Restart Claude Code
