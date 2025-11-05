@@ -3784,7 +3784,24 @@ def test_export_session_with_file_fallback():
 
 ## =🔎 FTS5 Search Tips (Use Boolean Operators!)
 
-**When searching Chronicle, use these patterns:**
+**RECOMMENDED: TWO-PHASE SEARCH STRATEGY**
+
+1. **Phase 1 - Broad Discovery (OR):** Cast wide net to find relevant area
+2. **Phase 2 - Deep Dive (AND):** Get summaries, then precise search
+
+**Example workflow:**
+```python
+# Phase 1: Broad OR search to find relevant sessions
+results = mcp__chronicle__search_sessions(query="hooks json format", limit=10)
+# Returns sessions 110, 111, 112 (broad matches)
+
+# Phase 2: Review summaries, then dig deeper with precise AND search
+mcp__chronicle__get_sessions_summaries(session_ids=[110, 111, 112])
+# After reading, use AND for precision:
+results = mcp__chronicle__search_sessions(query="hookSpecificOutput AND systemMessage", limit=5)
+```
+
+**Search operator patterns:**
 
 - **Multiple words** = implicit OR (finds sessions with ANY word, broader results)
 - **AND operator** = require all words ("gemini AND model", "bug AND issue")

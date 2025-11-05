@@ -51,6 +51,45 @@ Search past work
 
 ## Search Strategies
 
+### ⭐ Two-Phase Search Workflow (RECOMMENDED)
+
+The most effective way to search Chronicle is using a two-phase approach:
+
+**Phase 1: Broad Discovery**
+- Use OR search (implicit or explicit) to cast a wide net
+- Find the relevant area/timeframe
+- Get 5-10 potential sessions
+
+**Phase 2: Deep Dive**
+- Review session summaries to identify most relevant ones
+- Use precise AND searches to narrow down
+- Extract specific information needed
+
+**Example workflow:**
+```python
+# Phase 1: Broad OR search (multiple words = implicit OR)
+results = mcp__chronicle__search_sessions(query="hooks json output", limit=10)
+# → Returns sessions 108, 109, 110, 111, 112 (any word matches)
+
+# Review the results - which sessions look most relevant?
+# Get full summaries for promising sessions
+summaries = mcp__chronicle__get_sessions_summaries(session_ids=[110, 111, 112])
+
+# Phase 2: After reading summaries, dig deeper with AND
+# Now you know the exact terms to search for
+precise_results = mcp__chronicle__search_sessions(
+    query="hookSpecificOutput AND decision/reason/systemMessage",
+    limit=5
+)
+# → Returns only sessions with BOTH terms (precise match)
+```
+
+**Why this works:**
+- ✅ Phase 1 finds the general area (prevents missing relevant sessions)
+- ✅ Phase 2 finds exact solutions (prevents information overload)
+- ✅ 2-3 searches total vs 10+ narrow searches that might miss context
+- ✅ ROI: 1-2 minutes to find exact solution vs 10-20 minutes reinventing
+
 ### By Topic/Keywords
 
 **With MCP:**
