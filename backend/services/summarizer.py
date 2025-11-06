@@ -417,12 +417,11 @@ Keywords (JSON array only):"""
         if min_length:
             length_requirement = f"""
 
-**LENGTH REQUIREMENT:**
-- Target: {min_length:,}-{max_length:,} characters
-- Minimum: {min_length:,} characters required
-- Maximum: {max_length:,} characters
-- Provide sufficient detail to meet the minimum requirement
-- Include specific implementation details, file names, and technical specifics"""
+**LENGTH GUIDANCE:**
+- Target: comprehensive technical summary (approximately {min_length:,}-{max_length:,} characters)
+- Focus on technical accuracy and completeness over strict character counting
+- Include specific implementation details, file names, and technical specifics
+- Provide sufficient detail to capture the technical work and decisions made"""
 
         prompt = f"""You are an expert development session analyzer for Chronicle, a tool that tracks AI-assisted coding sessions.
 
@@ -537,9 +536,8 @@ SUMMARY:"""
                 else:
                     return f"Unknown provider: {self.provider}"
 
-                # Ensure summary isn't too long
-                if len(summary) > max_length:
-                    summary = summary[:max_length-3] + "..."
+                # Remove strict length enforcement - trust AI to judge appropriate length
+                # Length guidance in prompt should be sufficient
 
                 # Check minimum length requirement and expand if needed
                 if min_length and len(summary) < min_length:
@@ -940,21 +938,21 @@ Summary:"""
 
         qprint(f"📦 Chunk size: {chunk_size_lines:,} lines (optimized for {complexity} session)")
 
-        # Adaptive summary length targets based on session complexity
+        # Adaptive length targets based on session complexity - smart sizing without strict enforcement
         target_summary_lengths = {
             "medium": 3500,      # 8K-10K lines: balanced detail
             "medium-large": 5000, # 10K-50K lines: more narrative depth
             "large": 6500        # >50K lines: comprehensive coverage
         }
         minimum_summary_lengths = {
-            "medium": 3000,      # 8K-10K lines: minimum detail
+            "medium": 2500,      # 8K-10K lines: minimum detail
             "medium-large": 3500, # 10K-50K lines: minimum comprehensive
             "large": 4500        # >50K lines: minimum thorough coverage
         }
 
         target_length = target_summary_lengths[complexity]
         min_length = minimum_summary_lengths[complexity]
-        qprint(f"📏 Target length: {min_length:,}-{target_length:,} characters")
+        qprint(f"📏 Target length: {min_length:,}-{target_length:,} characters (gentle guidance)")
 
         num_chunks = (total_lines + chunk_size_lines - 1) // chunk_size_lines  # Ceiling division
         qprint(f"🔢 Total chunks: {num_chunks}")
@@ -1021,12 +1019,11 @@ Summary:"""
                 # First chunk - just summarize it
                 prompt = f"""Summarize this development session transcript chunk. Tell the story of what was built - what problems were encountered, how they were solved, what was implemented, and what decisions were made.
 
-🎯 TARGET LENGTH: {min_length:,}-{target_length:,} characters
-- Minimum: {min_length:,} characters required
-- Maximum: {target_length:,} characters (flexible within 25%)
-- Target range: {min_length:,} to {int(target_length * 1.25)} characters
-- Provide sufficient detail to meet the minimum requirement
+🎯 COMPREHENSIVE TECHNICAL SUMMARY
+- Target: substantial technical detail (approximately {min_length:,}-{target_length:,} characters)
+- Focus on technical accuracy and completeness over strict character counting
 - Include specific implementation details, file names, and technical specifics
+- Provide sufficient detail to capture the technical work and decisions made
 
 **DETAILED ANALYSIS REQUIREMENTS:**
 
@@ -1076,13 +1073,12 @@ Summary (~{target_length} characters):"""
                 # Subsequent chunks - update the cumulative summary
                 prompt = f"""You are maintaining a running summary of a development session. Your task is to integrate new activity into the existing narrative while keeping the TOTAL updated summary within the target range.
 
-🎯 TARGET LENGTH: {min_length:,}-{target_length:,} characters
+🎯 INTEGRATE NEW TECHNICAL WORK
+- Target: comprehensive technical summary (approximately {min_length:,}-{target_length:,} characters)
 - Current summary length: {len(cumulative_summary)} characters
-- Minimum target: {min_length:,} characters
-- Maximum target: {target_length:,} characters (flexible within 25%)
-- Acceptable range: {min_length:,} to {int(target_length * 1.25)} characters
-- Only condense if you exceed {int(target_length * 1.25)} characters (25% grace period)
-- If below minimum, expand with additional details from the new activity
+- Focus on technical completeness over strict character counting
+- Integrate new work while preserving all technical details and structure
+- If summary seems too brief, expand with additional technical details from new activity
 
 STRUCTURE PRESERVATION (CRITICAL):
 - PRESERVE all structured sections from previous summary (bullets, headings, numbered lists)
@@ -1134,7 +1130,7 @@ NEW ACTIVITY (lines {start_line}-{end_line}):
 5. Documentation updates and user impact
 - Maintain structure quality: if previous summary had bullets/headers, keep them
 
-Updated Summary (~{target_length} characters, flexible):"""
+Updated Comprehensive Technical Summary:"""
 
             # Generate summary for this chunk with automatic retry
             max_retries = 5  # Increased from 3 to handle rate limits better
@@ -1250,28 +1246,8 @@ Updated Summary (~{target_length} characters, flexible):"""
                 # The chunk_summary IS the updated cumulative summary
                 cumulative_summary = chunk_summary
 
-            # Enforce length constraints with 25% grace period for maximum, strict minimum
-            max_length = int(target_length * 1.25)
-
-            # Store original for comparison
-            original_length = len(cumulative_summary)
-
-            if len(cumulative_summary) > max_length:
-                # Truncate to max_length, but try to end at sentence boundary
-                truncated = cumulative_summary[:max_length]
-                # Try to end at last sentence boundary
-                last_sentence_end = max(
-                    truncated.rfind('. '),
-                    truncated.rfind('! '),
-                    truncated.rfind('? '),
-                    truncated.rfind('\n')
-                )
-                if last_sentence_end > max_length * 0.8:  # Only if we get a good cut point
-                    cumulative_summary = truncated[:last_sentence_end + 1]
-                else:
-                    cumulative_summary = truncated + "..."
-
-                qprint(f"  📏 Length enforcement: truncated from {original_length} to {len(cumulative_summary)} chars")
+            # Remove strict length enforcement - trust AI to judge appropriate length
+            # Length targets are gentle guidance, not hard limits
 
             # Check minimum length (only on final summary or first chunk)
             is_final_chunk = (chunk_num == num_chunks - 1)
@@ -1392,7 +1368,7 @@ Please expand this summary with additional specific details from the development
 Current summary (expand this, don't replace it):
 {summary}
 
-Please provide an expanded version that meets the {target_min:,} character minimum without exceeding {target_max:,} characters. Focus on technical substance over fluff."""
+Please provide an expanded version that reaches approximately {target_min:,} characters with substantial technical detail. Focus on technical substance and implementation specifics over generic explanations."""
 
             if self.provider == "gemini":
                 response = self.model.generate_content(expansion_prompt)

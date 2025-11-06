@@ -206,7 +206,11 @@ def main():
     all_valid = True
 
     for hook_name, expected_schema in EXPECTED_SCHEMAS.items():
-        hook_file = hooks_dir / f"{hook_name.lower().replace('posttooluse', 'post-tool-use')}.sh"
+        # Convert hook names to kebab-case filenames
+        filename = hook_name.lower()
+        filename = filename.replace('posttooluse', 'post-tool-use')
+        filename = filename.replace('userpromptsubmit', 'user-prompt-submit')
+        hook_file = hooks_dir / f"{filename}.sh"
         print(f"\n📝 Checking {hook_name}:")
 
         is_valid = validate_hook_implementation(hook_file, expected_schema)
