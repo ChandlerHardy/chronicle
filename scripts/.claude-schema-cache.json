@@ -1,0 +1,31 @@
+{
+  "source": "https://code.claude.com/docs/en/hooks",
+  "fetched_at": "2025-11-05T22:22:07.404177",
+  "schemas": {
+    "UserPromptSubmit": {
+      "session_id": "string",
+      "transcript_path": "string",
+      "cwd": "string",
+      "permission_mode": "string",
+      "hook_event_name": "UserPromptSubmit",
+      "prompt": "string"
+    },
+    "Stop": {
+      "session_id": "string",
+      "transcript_path": "string",
+      "permission_mode": "string",
+      "hook_event_name": "Stop",
+      "stop_hook_active": "boolean"
+    },
+    "PostToolUse": {
+      "session_id": "string",
+      "transcript_path": "string",
+      "cwd": "string",
+      "permission_mode": "string",
+      "hook_event_name": "PostToolUse",
+      "tool_name": "string",
+      "tool_input": "object",
+      "tool_response": "object"
+    }
+  }
+}

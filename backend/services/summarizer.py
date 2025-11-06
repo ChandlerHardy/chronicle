@@ -377,12 +377,13 @@ Keywords (JSON array only):"""
 
         return []
 
-    def summarize_session(self, transcript: str, max_length: int = 2000) -> Optional[str]:
+    def summarize_session(self, transcript: str, max_length: int = 2000, min_length: int = None) -> Optional[str]:
         """Summarize a session transcript.
 
         Args:
             transcript: Full session transcript
             max_length: Maximum summary length in characters
+            min_length: Minimum summary length in characters (optional)
 
         Returns:
             Summary text or None if failed
@@ -411,41 +412,108 @@ Keywords (JSON array only):"""
                 last_part = transcript[-chunk_size:]
                 transcript = f"{first_part}\n\n[... section omitted ...]\n\n{middle_part}\n\n[... section omitted ...]\n\n{last_part}"
 
+        # Add length requirements to prompt if min_length specified
+        length_requirement = ""
+        if min_length:
+            length_requirement = f"""
+
+**LENGTH REQUIREMENT:**
+- Target: {min_length:,}-{max_length:,} characters
+- Minimum: {min_length:,} characters required
+- Maximum: {max_length:,} characters
+- Provide sufficient detail to meet the minimum requirement
+- Include specific implementation details, file names, and technical specifics"""
+
         prompt = f"""You are an expert development session analyzer for Chronicle, a tool that tracks AI-assisted coding sessions.
 
-TASK: Analyze this terminal session transcript and create a narrative summary that tells the story of what was built.
+TASK: Analyze this terminal session transcript and create a narrative summary that tells the story of what was built.{length_requirement}
 
 **SUMMARY STRUCTURE (required format):**
 
-1. **Opening (1-2 sentences):** What was accomplished? Start with the main feature/milestone/fix.
-   Example: "Implemented Milestone #13: Skill Auto-Activation System. The UserPromptSubmit hook now automatically detects and recommends relevant skills based on prompt analysis."
+1. **Opening (2-3 sentences):** What was accomplished and why it matters. Start with the main feature/milestone/fix, then add context about the problem or goal.
+   Example: "Implemented Milestone #13: Skill Auto-Activation System to reduce manual skill selection friction. The UserPromptSubmit hook now automatically detects and recommends relevant skills based on prompt analysis, improving workflow efficiency by 40%."
 
-2. **Implementation Details (bullet points):** List specific files, tests, and code changes.
-   - Created/modified files (be specific: "Created skill-rules.json with trigger patterns for 6 skills")
-   - Tests written (count them: "27 test cases in test_hooks.py, all passing")
-   - Bugs fixed (what and how)
-   - Git commit info if visible
+2. **Implementation Details (comprehensive bullet points):** Detailed technical implementation with specifics.
+   - **Files created/modified**: Full paths with line counts (e.g., "Modified backend/cli/commands.py (+127 lines, -45 lines)")
+   - **Code changes**: Specific functions, classes, or methods added/modified
+   - **Tests written**: Exact counts with pass/fail rates (e.g., "15 test cases in test_summarizer.py: 13 passing, 2 skipped")
+   - **Bugs fixed**: What the bug was, symptoms, root cause, and solution approach
+   - **Git commits**: Hash, full message, and files changed if visible
+   - **Configuration changes**: Settings, configs, or environment modifications
+   - **Dependencies**: New packages added or versions changed
 
-3. **Key Decisions (optional, if significant):** Why certain approaches were taken.
-   Example: "Gitignored .claude/ directory to keep user configs private."
+3. **Technical Challenges & Solutions**: Problems encountered and how they were resolved.
+   - Debugging steps taken
+   - Error messages and their resolution
+   - Platform-specific issues (FreeBSD, macOS, etc.)
+   - Performance considerations or optimizations
 
-4. **Future Work (optional, brief):** Only if relevant planning occurred.
-   Example: "Created Milestone #22 for Phase 2 enhancements."
+4. **Key Decisions**: Why certain approaches were taken over alternatives.
+   - Architecture decisions and trade-offs
+   - Tool/library choices and reasoning
+   - Design patterns applied and why
+   - Performance vs. maintainability considerations
 
-**WHAT TO EXTRACT:**
-- ✅ Git commit messages (best signal - use verbatim if found)
-- ✅ What feature/milestone was completed
-- ✅ Specific files created/modified
-- ✅ Test counts and results
-- ✅ Bug fixes with context
-- ⚠️ Skip background discussions unless they led to implementation
-- ❌ Ignore repeated content (LangChain explanation repeated 20x → mention once or skip)
+5. **Testing & Validation**: How the implementation was verified.
+   - Manual testing procedures
+   - Automated test coverage
+   - Integration testing performed
+   - Edge cases considered
 
-**TONE:**
-- Tell a story, not a file list
-- "Built X" not "Modified Y"
-- "Fixed false positive in trigger detection" not "Modified .claude/config/file.json"
-- Technical but readable
+6. **Impact & User Benefits**: What users or the system gains from this work.
+   - Performance improvements
+   - User experience enhancements
+   - Reliability or stability gains
+   - New capabilities enabled
+
+7. **Future Work**: Next steps, follow-up tasks, or known limitations.
+   - Planned enhancements
+   - Technical debt identified
+   - Areas for further improvement
+
+**WHAT TO EXTRACT (search for these details):**
+
+**Primary Evidence (highest priority):**
+- ✅ Git commit messages (use verbatim - they contain the authoritative summary)
+- ✅ Pull request titles and descriptions
+- ✅ Test execution output (pytest results, coverage reports)
+- ✅ Error messages and stack traces (show problems encountered)
+- ✅ Build output (compilation results, warnings, errors)
+
+**Implementation Details:**
+- ✅ File paths and function names mentioned in output
+- ✅ Line numbers from error messages or debug output
+- ✅ Import statements and dependency changes
+- ✅ Configuration file modifications
+- ✅ Database schema changes or migrations
+- ✅ API endpoint changes or additions
+- ✅ CLI command modifications
+
+**Process & Context:**
+- ✅ Debugging steps and commands run
+- ✅ Platform-specific issues and solutions
+- ✅ Performance measurements or benchmarks
+- ✅ User testing or validation results
+- ✅ Documentation updates or README changes
+
+**Quantity Requirements:**
+- Aim for 8-12 substantial bullet points in Implementation Details
+- Include at least 3-4 Technical Challenges if present
+- Provide specific numbers, counts, and measurements wherever possible
+- Quote key error messages, test results, or commit messages verbatim
+
+**What to Skip:**
+- ⚠️ Repetitive explanations (same concept explained multiple times)
+- ⚠️ Background theory unless it led to specific implementation decisions
+- ⚠️ UI chrome or decorative output
+- ❌ Generic troubleshooting steps that didn't resolve the issue
+
+**TONE & STYLE:**
+- Tell a technical story with cause-and-effect relationships
+- Use specific technical language with clear explanations
+- "Implemented X to solve Y, resulting in Z" not "Modified file Y"
+- Include quantitative data and measurable outcomes
+- Balance technical depth with readability
 
 SESSION TRANSCRIPT:
 {transcript}
@@ -472,6 +540,13 @@ SUMMARY:"""
                 # Ensure summary isn't too long
                 if len(summary) > max_length:
                     summary = summary[:max_length-3] + "..."
+
+                # Check minimum length requirement and expand if needed
+                if min_length and len(summary) < min_length:
+                    print(f"  ⚠️  Summary below minimum: {len(summary)} chars (minimum: {min_length})")
+                    print(f"  🔄 Attempting to expand summary...")
+                    summary = self._expand_short_summary(summary, min_length, len(summary), max_length)
+                    print(f"  ✅ Expanded summary: {len(summary)} chars")
 
                 return summary
             except Exception as e:
@@ -706,12 +781,16 @@ Summary:"""
             # Set adaptive max_length based on session size
             if total_lines <= 2000:
                 max_length = 2500  # Very small sessions
+                min_length = 1500  # Minimum for very small sessions
             elif total_lines <= 5000:
                 max_length = 3500  # Small sessions
+                min_length = 2000  # Minimum for small sessions
             else:
                 max_length = 4500  # Upper end of small sessions
+                min_length = 2500  # Minimum for medium-small sessions
 
-            summary = self.summarize_session(transcript, max_length=max_length)
+            qprint(f"📏 Target length: {min_length:,}-{max_length:,} characters")
+            summary = self.summarize_session(transcript, max_length=max_length, min_length=min_length)
 
             # Extract keywords and update session
             keywords = self.extract_keywords(summary)
@@ -838,13 +917,13 @@ Summary:"""
             # Math: 10K lines × 80 chars × 0.25 tokens/char ≈ 200K tokens (20% of 1M TPM)
             chunk_size_lines = 10000
         elif total_lines > 10000:
-            complexity = "medium"
-            # Medium sessions: 5K chunks balance speed and safety
+            complexity = "medium-large"
+            # Medium-large sessions: 5K chunks balance speed and safety
             chunk_size_lines = 5000
-        else:
-            complexity = "small"
-            # Small sessions: 3K chunks (provided default)
-            # Already safe for all models
+        else:  # 8000-10000 lines
+            complexity = "medium"
+            # Medium sessions: 3K chunks (smaller for medium-sized sessions)
+            chunk_size_lines = 3000
 
         # Check which model we'll likely use and adjust chunk size if needed
         # This ensures large sessions use smaller chunks when falling back to 2.5 models (250K TPM)
@@ -863,12 +942,19 @@ Summary:"""
 
         # Adaptive summary length targets based on session complexity
         target_summary_lengths = {
-            "small": 3500,   # Good detail for quick sessions
-            "medium": 5000,  # Balanced detail with more narrative depth
-            "large": 6500    # Comprehensive for complex sessions
+            "medium": 3500,      # 8K-10K lines: balanced detail
+            "medium-large": 5000, # 10K-50K lines: more narrative depth
+            "large": 6500        # >50K lines: comprehensive coverage
         }
+        minimum_summary_lengths = {
+            "medium": 3000,      # 8K-10K lines: minimum detail
+            "medium-large": 3500, # 10K-50K lines: minimum comprehensive
+            "large": 4500        # >50K lines: minimum thorough coverage
+        }
+
         target_length = target_summary_lengths[complexity]
-        qprint(f"📏 Target summary length: {target_length:,} characters")
+        min_length = minimum_summary_lengths[complexity]
+        qprint(f"📏 Target length: {min_length:,}-{target_length:,} characters")
 
         num_chunks = (total_lines + chunk_size_lines - 1) // chunk_size_lines  # Ceiling division
         qprint(f"🔢 Total chunks: {num_chunks}")
@@ -933,27 +1019,54 @@ Summary:"""
             # Generate prompt based on whether this is the first chunk
             if chunk_num == 0:
                 # First chunk - just summarize it
-                prompt = f"""Summarize this development session transcript chunk in approximately {target_length} characters. Tell the story of what was built - what problems were encountered, how they were solved, what was implemented, and what decisions were made.
+                prompt = f"""Summarize this development session transcript chunk. Tell the story of what was built - what problems were encountered, how they were solved, what was implemented, and what decisions were made.
 
-🎯 TARGET LENGTH: ~{target_length} characters (flexible within 25%)
-- Target range: {int(target_length * 0.75)} to {int(target_length * 1.25)} characters
-- Prioritize completeness and structure over strict length limits
-- If naturally shorter, that's fine - don't pad unnecessarily
-- If naturally longer, include the detail - truncation only at 25% over target
+🎯 TARGET LENGTH: {min_length:,}-{target_length:,} characters
+- Minimum: {min_length:,} characters required
+- Maximum: {target_length:,} characters (flexible within 25%)
+- Target range: {min_length:,} to {int(target_length * 1.25)} characters
+- Provide sufficient detail to meet the minimum requirement
+- Include specific implementation details, file names, and technical specifics
 
-FOCUS ON (in priority order):
-1. **Implementation work**: What code/features were actually built
-2. **Specific files created/modified** (with details)
-3. **Tests written** (count them!)
-4. **Git commits** (reference by hash and short title only, e.g., "Commit abc1234: Fix bug in...")
-5. **Technical decisions and why**
+**DETAILED ANALYSIS REQUIREMENTS:**
 
-IGNORE:
-- Repeated conversations (if same explanation appears 20x, mention once)
-- Background Q&A that didn't lead to implementation
-- UI chrome and decorations
+**Primary Implementation Evidence:**
+1. **Code changes**: Specific functions, classes, methods added/modified
+2. **File modifications**: Full paths with line change counts where visible
+3. **Testing activity**: Test commands run, results shown, coverage reports
+4. **Error patterns**: Stack traces, error messages, and their resolution process
+5. **Build output**: Compilation results, warnings, success/failure indicators
 
-Keep the summary narrative and technical while respecting the target length.
+**Development Process Details:**
+6. **Debugging steps**: Commands run, investigation methods, problem-solving approach
+7. **Platform-specific issues**: OS-specific problems and solutions (FreeBSD, macOS, etc.)
+8. **Configuration changes**: Settings files, environment variables, database changes
+9. **Dependency management**: Package installations, version updates, import changes
+
+**Quantitative Data to Extract:**
+- Line counts: "+127 lines, -45 lines"
+- Test results: "15 tests passing, 2 failing, 3 skipped"
+- Performance metrics: timing measurements, memory usage, file sizes
+- Error counts: "Encountered 3 similar errors with different causes"
+- File operations: "Created 4 new files, modified 2 existing"
+
+**Narrative Structure:**
+- Start with the main technical accomplishment
+- Include specific technical challenges encountered
+- Show the progression from problem to solution
+- End with measurable outcomes or impacts
+
+**IGNORE:**
+- Repetitive conceptual explanations (same point made 5+ times)
+- Generic troubleshooting that didn't lead to solutions
+- UI decorations or formatting output
+- Vague discussions without technical specifics
+
+**STYLE GUIDELINES:**
+- Use precise technical terminology
+- Include specific numbers, file paths, and function names
+- Quote key error messages or commit snippets when relevant
+- Maintain technical accuracy while ensuring readability
 
 Transcript chunk:
 {chunk_text}
@@ -961,13 +1074,15 @@ Transcript chunk:
 Summary (~{target_length} characters):"""
             else:
                 # Subsequent chunks - update the cumulative summary
-                prompt = f"""You are maintaining a running summary of a development session. Your task is to integrate new activity into the existing narrative while keeping the TOTAL updated summary around {target_length} characters.
+                prompt = f"""You are maintaining a running summary of a development session. Your task is to integrate new activity into the existing narrative while keeping the TOTAL updated summary within the target range.
 
-🎯 TARGET LENGTH: ~{target_length} characters (flexible within 25%)
+🎯 TARGET LENGTH: {min_length:,}-{target_length:,} characters
 - Current summary length: {len(cumulative_summary)} characters
-- Target total length: {target_length} characters
-- Acceptable range: {int(target_length * 0.75)} to {int(target_length * 1.25)} characters
+- Minimum target: {min_length:,} characters
+- Maximum target: {target_length:,} characters (flexible within 25%)
+- Acceptable range: {min_length:,} to {int(target_length * 1.25)} characters
 - Only condense if you exceed {int(target_length * 1.25)} characters (25% grace period)
+- If below minimum, expand with additional details from the new activity
 
 STRUCTURE PRESERVATION (CRITICAL):
 - PRESERVE all structured sections from previous summary (bullets, headings, numbered lists)
@@ -981,12 +1096,42 @@ PREVIOUS SUMMARY (everything up to line {start_line}):
 NEW ACTIVITY (lines {start_line}-{end_line}):
 {chunk_text}
 
-INSTRUCTIONS:
-- Tell the story - integrate new info into narrative, don't just append
-- Prioritize implementation work (code, tests, commits) over discussion
-- Skip repeated conversations (if LangChain explained 10x, you already summarized it once)
-- Reference git commits by hash and short title only (e.g., "Commit abc1234: Fix bug"), NOT verbatim
-- Keep it cohesive and well-organized
+**INTEGRATION INSTRUCTIONS:**
+
+**Content Analysis (from NEW ACTIVITY):**
+- Extract specific implementation details: functions, classes, files modified
+- Look for test results, error messages, debugging steps
+- Identify quantitative data: line counts, test results, timing information
+- Find new technical challenges and their solutions
+- Note any architectural decisions or design patterns applied
+
+**Narrative Integration:**
+- Weave new information into existing sections naturally
+- Update Implementation Details with new files/code changes
+- Add new Technical Challenges to existing list or create new section
+- Incorporate test results and validation outcomes
+- Update impact statements with new capabilities or improvements
+
+**Detail Expansion Requirements:**
+- If current length < {min_length}: Expand with specific technical details
+- Add missing implementation specifics from new activity
+- Include error messages, stack traces, and resolution steps
+- Incorporate platform-specific issues and solutions
+- Add quantitative measurements and outcomes where available
+
+**Quality Standards:**
+- Maintain technical accuracy and specificity
+- Include file paths, function names, and line counts when visible
+- Quote key error messages or commit snippets when relevant
+- Preserve all structured formatting (bullets, numbered lists, headings)
+- Ensure narrative flow shows cause-and-effect relationships
+
+**Content Priorities:**
+1. Implementation work and code changes (highest priority)
+2. Testing activities and results
+3. Error resolution and debugging steps
+4. Configuration and dependency changes
+5. Documentation updates and user impact
 - Maintain structure quality: if previous summary had bullets/headers, keep them
 
 Updated Summary (~{target_length} characters, flexible):"""
@@ -1105,9 +1250,11 @@ Updated Summary (~{target_length} characters, flexible):"""
                 # The chunk_summary IS the updated cumulative summary
                 cumulative_summary = chunk_summary
 
-            # Enforce length constraints with 25% grace period
-            min_length = int(target_length * 0.75)
+            # Enforce length constraints with 25% grace period for maximum, strict minimum
             max_length = int(target_length * 1.25)
+
+            # Store original for comparison
+            original_length = len(cumulative_summary)
 
             if len(cumulative_summary) > max_length:
                 # Truncate to max_length, but try to end at sentence boundary
@@ -1124,10 +1271,16 @@ Updated Summary (~{target_length} characters, flexible):"""
                 else:
                     cumulative_summary = truncated + "..."
 
-                qprint(f"  📏 Length enforcement: truncated from {len(chunk_summary)} to {len(cumulative_summary)} chars")
-            elif len(cumulative_summary) < min_length and chunk_num == 0:
-                # Only warn for short summaries on first chunk (subsequent chunks are updates)
-                qprint(f"  ⚠️  Summary shorter than expected: {len(cumulative_summary)} chars (target: {target_length})")
+                qprint(f"  📏 Length enforcement: truncated from {original_length} to {len(cumulative_summary)} chars")
+
+            # Check minimum length (only on final summary or first chunk)
+            is_final_chunk = (chunk_num == num_chunks - 1)
+            if len(cumulative_summary) < min_length and (chunk_num == 0 or is_final_chunk):
+                actual_min = min_length
+                if chunk_num == 0:
+                    qprint(f"  ⚠️  First chunk summary below minimum: {len(cumulative_summary)} chars (minimum: {actual_min})")
+                else:
+                    qprint(f"  ⚠️  Final summary below minimum: {len(cumulative_summary)} chars (minimum: {actual_min})")
 
             # Save this chunk to database (delete existing if present to avoid duplicates)
             db_session.query(SessionSummaryChunk).filter_by(
@@ -1167,12 +1320,21 @@ Updated Summary (~{target_length} characters, flexible):"""
                     time.sleep(delay)
                     qprint()
 
-        # Check if summary exceeded target length
+        # Check if summary exceeded target length or is below minimum
         final_length = len(cumulative_summary)
         if final_length > target_length * 1.2:  # 20% buffer
             qprint(f"⚠️  Summary length ({final_length} chars) exceeds target ({target_length} chars) by {((final_length/target_length - 1) * 100):.1f}%")
+        elif final_length < min_length:
+            qprint(f"⚠️  Final summary below minimum: {final_length} chars (minimum: {min_length})")
+            qprint(f"🔄 Attempting to expand final summary...")
+            cumulative_summary = self._expand_short_summary(cumulative_summary, min_length, final_length, target_length)
+            final_length = len(cumulative_summary)
+            if final_length >= min_length:
+                qprint(f"✅ Expanded final summary: {final_length} chars (meets minimum)")
+            else:
+                qprint(f"⚠️  Expanded summary still below minimum: {final_length} chars (minimum: {min_length})")
         else:
-            qprint(f"✅ Summary length: {final_length} chars (target: {target_length})")
+            qprint(f"✅ Summary length: {final_length} chars (target: {min_length:,}-{target_length:,})")
 
         # Extract keywords from final summary
         qprint()
@@ -1192,3 +1354,86 @@ Updated Summary (~{target_length} characters, flexible):"""
         qprint(f"Saved {num_chunks} chunks to database")
 
         return cumulative_summary
+
+    def _expand_short_summary(self, summary: str, min_length: int, current_length: int, max_length: int = None) -> str:
+        """Expand a summary that is below the minimum length requirement.
+
+        Args:
+            summary: Current summary that's too short
+            min_length: Required minimum length
+            current_length: Current summary length
+            max_length: Maximum allowed length (optional)
+
+        Returns:
+            Expanded summary or original if expansion fails
+        """
+        try:
+            # Calculate target expansion range
+            target_min = min_length
+            target_max = max_length if max_length else min_length + 1000  # Default max if not provided
+
+            expansion_prompt = f"""The following summary is too short ({current_length} chars, minimum required: {target_min:,} chars).
+
+Please expand this summary with additional specific details from the development session. Focus on:
+
+1. **Specific implementation details**: More granular description of what was built
+2. **File names and paths**: exact locations of changes
+3. **Error messages and debugging steps**: specific problems encountered
+4. **Brief code examples**: short illustrations of key changes (1-2 lines each)
+5. **Technical decisions**: more detail about why certain approaches were taken
+6. **Test results**: specific test counts and outcomes
+
+🎯 LENGTH TARGET: {target_min:,}-{target_max:,} characters
+- Minimum: {target_min:,} characters required
+- Maximum: {target_max:,} characters (do not exceed)
+- Target: {target_min + 200:,}-{target_max - 200:,} characters (ideal range)
+- Be concise but thorough - prioritize technical accuracy over length
+
+Current summary (expand this, don't replace it):
+{summary}
+
+Please provide an expanded version that meets the {target_min:,} character minimum without exceeding {target_max:,} characters. Focus on technical substance over fluff."""
+
+            if self.provider == "gemini":
+                response = self.model.generate_content(expansion_prompt)
+                expanded = response.text.strip()
+            elif self.provider == "ollama":
+                response = self.ollama_client.generate(
+                    model=self.model_name,
+                    prompt=expansion_prompt
+                )
+                expanded = response['response'].strip()
+            else:
+                return summary  # Cannot expand
+
+            # Validate expansion result
+            expanded_length = len(expanded)
+            meets_minimum = expanded_length >= min_length
+            exceeds_maximum = max_length and expanded_length > max_length
+
+            if exceeds_maximum:
+                # Truncate to max_length if it exceeded the limit
+                print(f"  ⚠️  Expansion exceeded maximum: {expanded_length} chars (maximum: {max_length})")
+                # Try to end at sentence boundary
+                truncated = expanded[:max_length]
+                last_sentence_end = max(
+                    truncated.rfind('. '),
+                    truncated.rfind('! '),
+                    truncated.rfind('? '),
+                    truncated.rfind('\n')
+                )
+                if last_sentence_end > max_length * 0.8:  # Only if we get a good cut point
+                    expanded = truncated[:last_sentence_end + 1]
+                else:
+                    expanded = truncated + "..."
+                print(f"  📏 Truncated expansion: {len(expanded)} chars")
+                return expanded
+            elif meets_minimum:
+                print(f"  ✅ Expansion successful: {expanded_length} chars (within target range)")
+                return expanded
+            else:
+                print(f"  ⚠️  Expansion still too short: {expanded_length} chars (minimum: {min_length})")
+                return expanded  # Return expanded even if still short
+        except Exception as e:
+            print(f"  ⚠️  Failed to expand summary: {e}")
+            return summary

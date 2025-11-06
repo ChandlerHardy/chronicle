@@ -7,16 +7,34 @@ set -euo pipefail
 
 # Read JSON input from stdin
 input_json=$(cat)
-user_prompt=$(echo "$input_json" | jq -r '.user_prompt // empty')
+user_prompt=$(echo "$input_json" | jq -r '.prompt // empty')
 
-# Function to output JSON with system message
+# Flag to track if specific skill has been triggered
+skill_triggered=false
+
+# Function to output JSON with system message and reasoning
 output_context() {
     local message="$1"
+    local reasoning="$2"
+    local trigger="$3"
+
+    # Create detailed output with reasoning
+    local detailed_reason="🤔 HOOK REASONING:
+Trigger: $trigger
+Analysis: $reasoning
+Decision: Inject skill recommendation
+
+📋 Context: $message"
+
+    # Set flag that a specific skill has been triggered
+    skill_triggered=true
+
     jq -n \
         --arg msg "$message" \
+        --arg reason "$detailed_reason" \
         '{
             "decision": "approve",
-            "reason": $msg,
+            "reason": $reason,
             "systemMessage": $msg
         }'
 }
@@ -51,7 +69,9 @@ if [[ ! -f "$CONFIG_FILE" ]]; then
 'How did I implement X last time?' or 'What was the blocker with Y?'
 
 WHY: 2,700x ROI - 1 second vs 20 minutes
-Proof: Sessions 21, 30, 31 show reinventing wastes time"
+Proof: Sessions 21, 30, 31 show reinventing wastes time" \
+                "User prompt contains implementation keywords but no search/reading keywords. Pattern matches development work that should first check Chronicle for prior implementations to avoid reinventing solutions." \
+                "Implementation keywords detected (no config file)"
             exit 0
         fi
     fi
@@ -75,7 +95,9 @@ Before writing implementation code, we MUST:
 
 No exceptions. The test-driven-development skill has comprehensive guidance.
 
-Load with: Skill(command=\"test-driven-development\")"
+Load with: Skill(command=\"test-driven-development\")" \
+        "User prompt contains TDD trigger patterns (implement/build/write/create) but no test-related exclusions. This indicates new implementation work that violates TDD principles. According to TDD skill: 'NO PRODUCTION CODE WITHOUT A FAILING TEST FIRST' - this is a red flag requiring immediate intervention." \
+        "TDD violation detected"
         exit 0
     fi
 fi
@@ -91,7 +113,9 @@ This skill automates:
 - Creating structured Obsidian notes
 - Adding metadata, wikilinks, and tags
 
-Load with: Skill(command=\"chronicle-session-documenter\")"
+Load with: Skill(command=\"chronicle-session-documenter\")" \
+        "User prompt contains keywords related to Obsidian export and session documentation. Pattern matches workflow for saving Chronicle sessions to knowledge base, which should be automated rather than done manually." \
+        "Obsidian export detected"
     exit 0
 fi
 
@@ -106,7 +130,9 @@ This skill helps:
 - Find similar problems and solutions
 - Recall previous decisions and rationale
 
-Load with: Skill(command=\"chronicle-context-retriever\")"
+Load with: Skill(command=\"chronicle-context-retriever\")" \
+        "User prompt contains context retrieval patterns (how did I/what did I/show me past work). This indicates need for historical development context which should be retrieved via specialized skill rather than manual searching." \
+        "Context retrieval request"
     exit 0
 fi
 
@@ -122,20 +148,26 @@ This skill manages:
 - Progress reports
 - Session-to-milestone linking
 
-Load with: Skill(command=\"chronicle-project-tracker\")"
+Load with: Skill(command=\"chronicle-project-tracker\")" \
+        "User prompt contains project management keywords (roadmap/milestone/what's next/progress). This indicates planning or tracking work that should use the specialized project tracking system rather than ad-hoc management." \
+        "Project tracking request"
     exit 0
 fi
 
-# Basic Chronicle Advocate search reminder
-if echo "$user_prompt" | grep -iqE "(implement|add|create|build|fix|debug)"; then
-    if ! echo "$user_prompt" | grep -iqE "(read|view|show|explain)"; then
-        output_context "🔍 SEARCH CHRONICLE FIRST
+# Basic Chronicle Advocate search reminder (only if no specific skill triggered)
+if [[ "$skill_triggered" == "false" ]]; then
+    if echo "$user_prompt" | grep -iqE "(implement|add|create|build|fix|debug)"; then
+        if ! echo "$user_prompt" | grep -iqE "(read|view|show|explain)"; then
+            output_context "🔍 SEARCH CHRONICLE FIRST
 
 ⚠️ Before implementing, use chronicle-context-retriever skill:
 'How did I implement X last time?' or 'What was the blocker with Y?'
 
 WHY: 2,700x ROI - 1 second vs 20 minutes
-Proof: Sessions 21, 30, 31 show reinventing wastes time"
+Proof: Sessions 21, 30, 31 show reinventing wastes time" \
+                    "General implementation keywords detected without specific skill matches. Default behavior: recommend Chronicle search to avoid reinventing solutions and leverage prior work." \
+                    "General implementation detected"
+        fi
     fi
 fi
 
