@@ -295,6 +295,39 @@ class Summarizer:
         finally:
             db.close()
 
+    def _strip_code_blocks(self, text: str) -> str:
+        """Remove markdown code block wrappers from AI responses.
+
+        Sometimes AI models wrap their responses in ```text or ```markdown blocks.
+        This method strips those wrappers to get the actual content.
+
+        Args:
+            text: Raw AI response text
+
+        Returns:
+            Cleaned text without code block wrappers
+        """
+        text = text.strip()
+
+        # Check if wrapped in code blocks
+        if text.startswith("```"):
+            # Split by ``` and get the content
+            parts = text.split("```")
+            if len(parts) >= 3:
+                # Get the middle part (between opening and closing ```)
+                content = parts[1]
+                # Remove language identifier if present (e.g., "text\n" or "markdown\n")
+                if '\n' in content:
+                    lines = content.split('\n', 1)
+                    # If first line is a language identifier, skip it
+                    if lines[0].strip() in ['text', 'markdown', 'md', '']:
+                        content = lines[1] if len(lines) > 1 else ''
+                    else:
+                        content = '\n'.join(lines)
+                return content.strip()
+
+        return text
+
     def extract_keywords(self, summary: str) -> list:
         """Extract searchable keywords from a session summary.
 
@@ -526,13 +559,13 @@ SUMMARY:"""
             try:
                 if self.provider == "gemini":
                     response = self.model.generate_content(prompt)
-                    summary = response.text.strip()
+                    summary = self._strip_code_blocks(response.text)
                 elif self.provider == "ollama":
                     response = self.ollama_client.generate(
                         model=self.model_name,
                         prompt=prompt
                     )
-                    summary = response['response'].strip()
+                    summary = self._strip_code_blocks(response['response'])
                 else:
                     return f"Unknown provider: {self.provider}"
 
@@ -1185,7 +1218,7 @@ Updated Comprehensive Technical Summary:"""
                         # Create a temporary client for this specific model
                         temp_model = self.genai.GenerativeModel(model_name)
                         response = temp_model.generate_content(prompt)
-                        chunk_summary = response.text.strip()
+                        chunk_summary = self._strip_code_blocks(response.text)
 
                         # Track usage for this model
                         input_chars = len(prompt)
@@ -1196,7 +1229,7 @@ Updated Comprehensive Technical Summary:"""
                             model=self.model_name,
                             prompt=prompt
                         )
-                        chunk_summary = response['response'].strip()
+                        chunk_summary = self._strip_code_blocks(response['response'])
                     else:
                         raise ValueError(f"Unknown provider: {self.provider}")
 
@@ -1372,13 +1405,13 @@ Please provide an expanded version that reaches approximately {target_min:,} cha
 
             if self.provider == "gemini":
                 response = self.model.generate_content(expansion_prompt)
-                expanded = response.text.strip()
+                expanded = self._strip_code_blocks(response.text)
             elif self.provider == "ollama":
                 response = self.ollama_client.generate(
                     model=self.model_name,
                     prompt=expansion_prompt
                 )
-                expanded = response['response'].strip()
+                expanded = self._strip_code_blocks(response['response'])
             else:
                 return summary  # Cannot expand
 
