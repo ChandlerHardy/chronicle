@@ -1,0 +1,302 @@
+# Universal Development Directives
+
+> **=🔍 For Chronicle-Specific Context**: See `~/repos/chronicle/CLAUDE.md`
+>
+> **This file**: Universal best practices that apply to ALL development work
+
+---
+
+## =🔍 CRITICAL: SEARCH FIRST (MANDATORY)
+
+**BEFORE IMPLEMENTING ANYTHING, YOU MUST SEARCH CHRONICLE:**
+
+```python
+# Basic search (multiple words = OR, any order - broader results)
+mcp__chronicle__search_sessions(query="relevant keywords", limit=10)
+
+# Use AND for precise searches, NOT to exclude, quotes for exact phrases
+mcp__chronicle__search_sessions(query="authentication AND authorization", limit=10)
+```
+
+**WHY THIS IS MANDATORY:**
+- Searching: **1 second**
+- Reinventing: **10-20 minutes**
+- **ROI: 2,700x** (proven from Sessions 21, 30, 31 - 45+ minutes wasted)
+
+**This is not optional. This is not a suggestion. Search first, ALWAYS.**
+
+**Trigger phrases that REQUIRE searching:**
+- User says "I can't believe..." → Search first!
+- User says "why isn't..." → Search first!
+- User says "this should work..." → Search first!
+- Before adding any feature → Check if it exists
+- When debugging → Check past sessions for similar issues
+
+---
+
+## 🚨 MANDATORY: FOLLOW HOOK SUGGESTIONS (NO EXCEPTIONS)
+
+**When UserPromptSubmit hook suggests a skill, you MUST use it. This is not optional.**
+
+### The Rule:
+1. **Acknowledge** the hook suggestion explicitly in your response
+2. **Use the Skill tool** with the exact command provided
+3. **Wait for skill completion** before proceeding
+4. **No judgment calls** - if the hook suggests it, you use it
+
+### Example Hook Output:
+```
+🚨 REQUIRED ACTION: Use Skill(command="chronicle-context-retriever")
+YOU MUST run this skill before proceeding. No exceptions.
+```
+
+**Your Response Must Be:**
+```
+I see the UserPromptSubmit hook is requiring me to use the chronicle-context-retriever skill.
+Let me do that now.
+
+[Uses Skill tool with the suggested command]
+[Waits for result]
+[Then proceeds with the task]
+```
+
+### Why This Is Mandatory:
+- Hooks catch mistakes I'm about to make
+- They're based on proven patterns (2,700x ROI for search)
+- They prevent wasted time and reinventing solutions
+- User has explicitly configured these rules
+
+**Violations will be called out. Follow hook suggestions without exception.**
+
+---
+
+## <🎯 Skills (Use These First!)
+
+**BEFORE manually calling MCP tools, check if a skill exists for the task:**
+
+| Task | Use This Skill | Instead of Manual |
+|------|----------------|-------------------|
+| =🧪 Test-driven development | `superpowers:test-driven-development` | Writing code without tests first |
+| =📝 Export session to Obsidian | `chronicle-session-documenter` | Manual `mcp__chronicle__get_session_summary()` + `mcp__obsidian__write_note()` calls |
+| =🔍 Search past sessions for context | `chronicle-context-retriever` | Manual search and analysis across multiple sessions |
+| =🔄 Complete Chronicle workflow guidance | `chronicle-workflow` | Ad-hoc workflow instructions |
+| =📊 Manage milestones and roadmap | `chronicle-project-tracker` | Manual milestone/next step operations |
+| =💡 Brainstorming and design refinement | `brainstorming` | Ad-hoc ideation |
+
+### How to Invoke Skills
+
+**Method 1: Let skill auto-activate (preferred)**
+```
+User: "Export session 75 to Obsidian"
+→ Skill should auto-activate based on description match
+→ Follow skill's guidance
+```
+
+**Method 2: Explicit invocation**
+```python
+Skill(command="chronicle-session-documenter")
+→ Skill loads and provides detailed instructions
+→ Follow the workflow it describes
+```
+
+### Why Use Skills Over Manual MCP Calls?
+
+- ✅ **Complete workflows** - Skills guide through entire process, not just one MCP call
+- ✅ **Best practices** - Skills encode correct patterns (formatting, error handling, etc.)
+- ✅ **Consistency** - Same structured output every time
+- ✅ **Examples** - Skills include usage examples and common patterns
+- ✅ **Maintenance** - Update skill once, all uses benefit
+
+---
+
+## ⚡ USE MCP OVER CLI (MANDATORY)
+
+**Always prefer MCP tools, NEVER use CLI for programmatic access:**
+
+```python
+# ✅ CORRECT (MCP - fast, structured JSON):
+sessions = mcp__chronicle__search_sessions(query="storage", limit=5)
+roadmap = mcp__chronicle__get_roadmap(days=7)
+
+# ❌ WRONG (CLI - slow, hard to parse):
+Bash("chronicle search 'storage'")
+Bash("chronicle roadmap")
+```
+
+**Why MCP over CLI:**
+- **Speed**: MCP queries DB directly (<10ms), CLI spawns subprocess (>100ms)
+- **Programmatic**: Returns structured JSON, not formatted text
+- **Reliable**: No parsing of human-readable output
+
+---
+
+## =📋 CHECK ROADMAP BEFORE PLANNING (REQUIRED)
+
+**Avoid duplicate work:**
+```python
+mcp__chronicle__get_roadmap(days=7)
+mcp__chronicle__get_next_steps(completed=False)
+```
+
+**Failure to check roadmap can result in duplicating already-planned work**
+
+---
+
+## =🔍 CHECK SESSION STATUS (REQUIRED)
+
+**Verify if current session is being tracked:**
+```python
+# Check if conversation is being tracked
+status = mcp__chronicle__get_current_session()
+# Returns: {"active": true, "session": {...}} or {"active": false}
+```
+
+**If not tracking:**
+- Current session NOT tracked unless started with `chronicle start claude`
+- **YOU MUST suggest exit and restart if meaningful work is happening
+- User can verify with: `chronicle status` command
+
+---
+
+## =🧪 USE TDD SKILL (TEST-DRIVEN DEVELOPMENT)
+
+**Check for TDD skill first before implementing:**
+
+```python
+# TDD is available as a skill - use it!
+Skill(command="superpowers:test-driven-development")
+```
+
+**When to use TDD skill:**
+- New features, bug fixes, refactoring (always!)
+- Writing implementation without a failing test first violates TDD principles
+
+**Why use the TDD skill:**
+- Complete TDD workflow guidance
+- Proper test-first discipline
+- Edge case discovery before implementation
+- Prevents technical debt from untested code
+
+---
+
+## =🔎 FTS5 Search Tips (Use Boolean Operators!)
+
+**RECOMMENDED: TWO-PHASE SEARCH STRATEGY**
+
+1. **Phase 1 - Broad Discovery (OR):** Cast wide net to find relevant area
+2. **Phase 2 - Deep Dive (AND):** Get summaries, then precise search
+
+**Example workflow:**
+```python
+# Phase 1: Broad OR search to find relevant sessions
+results = mcp__chronicle__search_sessions(query="hooks json format", limit=10)
+# Returns sessions 110, 111, 112 (broad matches)
+
+# Phase 2: Review summaries, then dig deeper with precise AND search
+mcp__chronicle__get_sessions_summaries(session_ids=[110, 111, 112])
+# After reading, use AND for precision:
+results = mcp__chronicle__search_sessions(query="hookSpecificOutput AND systemMessage", limit=5)
+```
+
+**Search operator patterns:**
+
+- **Multiple words** = implicit OR (finds sessions with ANY word, broader results)
+- **AND operator** = require all words ("gemini AND model", "bug AND issue")
+- **OR operator** = find either topic ("gemini OR claude", "bug OR issue")
+- **NOT operator** = exclude terms ("testing NOT deprecated", "api NOT legacy")
+- **Quotes** = exact phrase match ('"data corruption"' vs 'data corruption')
+- **Combine** = "(gemini OR claude) AND testing"
+
+**When to use which pattern:**
+```python
+# User asks about a specific feature/bug → Use AND for precision
+mcp__chronicle__search_sessions(query="authentication AND session")
+
+# User asks "did we work on X or Y?" → Use OR for breadth
+mcp__chronicle__search_sessions(query="authentication OR authorization")
+
+# User asks "X but not Y" → Use NOT
+mcp__chronicle__search_sessions(query="api NOT deprecated")
+
+# User mentions exact error message → Use quotes
+mcp__chronicle__search_sessions(query='"OperationalError: database is locked"')
+
+# User asks broad question → Cast wide net with OR
+mcp__chronicle__search_sessions(query="bug OR issue OR error OR problem")
+```
+
+---
+
+## <📝 SUGGEST SESSION ORGANIZATION (REQUIRED)
+
+**After significant work:**
+- YOU MUST propose descriptive title
+- YOU MUST suggest relevant tags (technologies, features, bugs)
+- YOU MUST link to related sessions
+
+---
+
+## =📋 PRE-FLIGHT CHECKLIST (FOR EVERY TASK)
+
+**Before starting ANY development task, run this checklist:**
+
+1. **SEARCH CHRONICLE** (1 second, saves 10-20 minutes):
+   ```python
+   mcp__chronicle__search_sessions(query="<your task>", limit=10)
+   ```
+
+2. **CHECK ROADMAP** (avoid duplicate planning):
+   ```python
+   mcp__chronicle__get_roadmap(days=7)
+   mcp__chronicle__get_next_steps(completed=False)
+   ```
+
+3. **CHECK FOR SKILLS** (use workflows, not manual calls):
+   - Check if a skill exists for your task
+   - Use Skill tool instead of manual MCP calls
+   - For TDD: `Skill(command="superpowers:test-driven-development")`
+
+**Violating this checklist wastes time and frustrates the user. Follow it religiously.**
+
+---
+
+## ⚠️ Common Mistakes to Avoid
+
+**Learn from real violations:**
+
+### Mistake #1: Not Searching Chronicle First
+**Impact**: Wasted 20+ minutes debugging, user had to remind me
+**Solution**: Always search first - ROI is 2,700x
+
+### Mistake #2: Writing Code Without Tests
+**Impact**: Had to write 17 tests retroactively, added extra work
+**Solution**: TDD red-green-refactor cycle
+
+### Mistake #3: Using CLI Instead of MCP
+**Impact**: 10x slower, fragile parsing of human-readable output
+**Solution**: Always use MCP tools for programmatic access
+
+### Mistake #4: Not Checking Roadmap
+**Impact**: Duplicating already-planned work
+**Solution**: Check roadmap before implementing anything
+
+---
+
+## <💡 Final Reminder
+
+**Before you start working on any task:**
+
+1. **SEARCH CHRONICLE FIRST** - `mcp__chronicle__search_sessions(query="...", limit=10)`
+2. **CHECK ROADMAP** - `mcp__chronicle__get_roadmap(days=7)`
+3. **CHECK FOR SKILLS** - Use Skill tool for complete workflows
+4. **USE MCP OVER CLI** - 10x faster, structured data
+5. **VERIFY SESSION TRACKING** - `mcp__chronicle__get_current_session()` to check if active
+
+**This is mandatory. Every single time. No exceptions.**
+
+**If you hear trigger phrases ("I can't believe...", "why isn't..."), STOP and search Chronicle.**
+
+---
+
+**For project-specific context (Chronicle development, architecture, etc.), see:**
+- `~/repos/chronicle/CLAUDE.md` - Chronicle project-specific guide

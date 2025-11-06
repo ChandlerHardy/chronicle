@@ -121,18 +121,19 @@ tdd_excludes="(test|write.*test|TDD|red-green-refactor|what (does|is)|how (does|
 if echo "$user_prompt" | grep -iqE "$tdd_phrases"; then
     if ! echo "$user_prompt" | grep -iqE "$tdd_excludes"; then
         checks_performed+=("✅ 🧪 TDD patterns - MATCHED (implement/build/write keywords found, no test exclusions)")
-        output_context "🧪 TDD ENFORCER ACTIVATED
+        output_context "🚨 REQUIRED ACTION: TDD Skill Must Be Used
 
-Before writing implementation code, we MUST:
+YOU MUST use the test-driven-development skill before writing any implementation code.
 
+Required steps:
 1. Write a failing test FIRST
 2. Watch it fail (RED)
 3. Write minimal code to pass (GREEN)
 4. Refactor if needed
 
-No exceptions. The test-driven-development skill has comprehensive guidance.
+🎯 MANDATORY: Use Skill(command=\"test-driven-development\")
 
-Load with: Skill(command=\"test-driven-development\")" \
+This is not optional. No exceptions." \
         "User prompt contains TDD trigger patterns (implement/build/write/create) but no test-related exclusions. This indicates new implementation work that violates TDD principles. According to TDD skill: 'NO PRODUCTION CODE WITHOUT A FAILING TEST FIRST' - this is a red flag requiring immediate intervention." \
         "TDD violation detected"
         exit 0
@@ -146,16 +147,18 @@ fi
 # Other skill triggers with priorities
 if echo "$user_prompt" | grep -iqE "(document session|export.*to obsidian|save.*to (vault|obsidian)|create (note|obsidian note) for)"; then
     checks_performed+=("✅ 📝 Obsidian export - MATCHED (document/export keywords found)")
-    output_context "🎯 SKILL DETECTED: chronicle-session-documenter
+    output_context "🚨 REQUIRED ACTION: Use chronicle-session-documenter Skill
 
-Your prompt matches documenting sessions to Obsidian vault.
+Your prompt requires the chronicle-session-documenter skill.
 
 This skill automates:
 - Fetching session summary from Chronicle
 - Creating structured Obsidian notes
 - Adding metadata, wikilinks, and tags
 
-Load with: Skill(command=\"chronicle-session-documenter\")" \
+🎯 MANDATORY: Use Skill(command=\"chronicle-session-documenter\")
+
+You must run this skill before proceeding. No exceptions." \
         "User prompt contains keywords related to Obsidian export and session documentation. Pattern matches workflow for saving Chronicle sessions to knowledge base, which should be automated rather than done manually." \
         "Obsidian export detected"
     exit 0
@@ -165,17 +168,19 @@ fi
 
 if echo "$user_prompt" | grep -iqE "(how did (I|we) (implement|fix|build|create|handle|solve)|what did (I|we) do (yesterday|last week|last month|before)|show me (all |past |previous )?work on|what was the blocker|when did (I|we) work on|find sessions? (about|on|for)|search (for |past )?sessions?)"; then
     checks_performed+=("✅ 🔍 Context retrieval - MATCHED (how did I/what did I/past work patterns found)")
-    output_context "🔍 SKILL DETECTED: chronicle-context-retriever
+    output_context "🚨 REQUIRED ACTION: Use chronicle-context-retriever Skill
 
-Your prompt matches searching past development sessions.
+Your prompt requires searching past development sessions.
 
-This skill helps:
+This skill provides:
 - Search Chronicle database for relevant sessions
 - Retrieve detailed context from past work
 - Find similar problems and solutions
 - Recall previous decisions and rationale
 
-Load with: Skill(command=\"chronicle-context-retriever\")" \
+🎯 MANDATORY: Use Skill(command=\"chronicle-context-retriever\")
+
+You must run this skill before proceeding. No exceptions." \
         "User prompt contains context retrieval patterns (how did I/what did I/show me past work). This indicates need for historical development context which should be retrieved via specialized skill rather than manual searching." \
         "Context retrieval request"
     exit 0
@@ -185,9 +190,9 @@ fi
 
 if echo "$user_prompt" | grep -iqE "(what'?s next|show (me )?(the )?roadmap|what should (I|we) work on|plan (new |a )?feature|create (a )?milestone|mark.*(milestone|step).*complete|what'?s in progress|view (the )?milestones?|track progress)"; then
     checks_performed+=("✅ 📊 Project tracking - MATCHED (roadmap/milestone/what's next keywords found)")
-    output_context "📊 SKILL DETECTED: chronicle-project-tracker
+    output_context "🚨 REQUIRED ACTION: Use chronicle-project-tracker Skill
 
-Your prompt matches project planning and tracking.
+Your prompt requires project planning and tracking.
 
 This skill manages:
 - Database-tracked milestones
@@ -196,7 +201,9 @@ This skill manages:
 - Progress reports
 - Session-to-milestone linking
 
-Load with: Skill(command=\"chronicle-project-tracker\")" \
+🎯 MANDATORY: Use Skill(command=\"chronicle-project-tracker\")
+
+You must run this skill before proceeding. No exceptions." \
         "User prompt contains project management keywords (roadmap/milestone/what's next/progress). This indicates planning or tracking work that should use the specialized project tracking system rather than ad-hoc management." \
         "Project tracking request"
     exit 0
@@ -209,13 +216,19 @@ if [[ "$skill_triggered" == "false" ]]; then
     if echo "$user_prompt" | grep -iqE "(implement|add|create|build|fix|debug)"; then
         if ! echo "$user_prompt" | grep -iqE "(read|view|show|explain)"; then
             checks_performed+=("✅ ⚙️ General implementation - MATCHED (implement/add/create keywords, no read/view exclusions)")
-            output_context "🔍 SEARCH CHRONICLE FIRST
+            output_context "🚨 REQUIRED ACTION: Use chronicle-context-retriever Skill
 
-⚠️ Before implementing, use chronicle-context-retriever skill:
+Before implementing anything, you MUST search Chronicle for prior art.
+
+Ask questions like:
 'How did I implement X last time?' or 'What was the blocker with Y?'
 
+🎯 MANDATORY: Use Skill(command=\"chronicle-context-retriever\")
+
 WHY: 2,700x ROI - 1 second vs 20 minutes
-Proof: Sessions 21, 30, 31 show reinventing wastes time" \
+Proof: Sessions 21, 30, 31 show reinventing wastes time
+
+You must run this skill before proceeding. No exceptions." \
                     "General implementation keywords detected without specific skill matches. Default behavior: recommend Chronicle search to avoid reinventing solutions and leverage prior work." \
                     "General implementation detected"
             exit 0
