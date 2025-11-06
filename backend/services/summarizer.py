@@ -909,7 +909,7 @@ Summary:"""
         qprint(f"📄 Total lines: {total_lines:,}")
 
         # Determine complexity and optimize chunk size based on session size
-        if total_lines > 50000:
+        if total_lines > 35000:
             complexity = "large"
             # Large sessions: use 10K chunks to leverage 2.0 Flash's 1M TPM
             # Math: 10K lines × 80 chars × 0.25 tokens/char ≈ 200K tokens (20% of 1M TPM)
