@@ -3329,8 +3329,8 @@ def import_and_summarize(chunk_size: int, quiet: bool):
                 # Fallback if file locking fails
                 cleaned_path.write_text(transcript_content, encoding="utf-8")
 
-            # Store the unique filename reference for cleanup
-            temp_session.session_transcript = str(cleaned_path.name)
+            # Store the actual transcript content in database for smart summarizer
+            temp_session.session_transcript = transcript_content
 
             if not quiet:
                 console.print(
