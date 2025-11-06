@@ -1,11 +1,15 @@
 # Chronicle - Project-Specific Development Guide
 
+> **📌 Project Status: SUNSET (November 2025)**
+>
+> **📌 Recommendation**: Use episodic-memory skill from superpowers repository for new implementations
+>
 > **📌 Universal Directives**: See `~/.claude/CLAUDE.md` for mandatory workflows
 >
 > **📌 Load the Chronicle Advocate Agent** for project-specific enforcement:
 > - See [AGENTS.md](./AGENTS.md) for agent prompts and setup
 >
-> **This file**: Chronicle-specific architecture, implementation details, and workflows
+> **This file**: Chronicle-specific architecture, implementation details, and workflows (preserved for historical reference)
 
 ---
 

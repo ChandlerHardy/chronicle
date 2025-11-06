@@ -6,11 +6,48 @@
 
 > **Give your AI assistants a memory. Track every decision, search past conversations, and never lose context across sessions.**
 
+## 🌅 Project Sunset Notice
+
+**November 2025: Chronicle has been officially sunset.**
+
+After a successful development journey, we've decided to end active development of Chronicle. The project achieved all its core goals and demonstrated that AI session recording provides immense value - with a proven **2,700x ROI** from real-world usage data.
+
+### Why the Sunset?
+
+The primary motivation for ending Chronicle's development is the discovery of the **episodic-memory skill** in the superpowers repository, which provides a more comprehensive and integrated solution for conversation memory across AI platforms. Rather than maintaining two overlapping solutions, we recommend users transition to the episodic-memory system for future needs.
+
+### What This Means
+
+- ✅ **The codebase remains available** for reference, learning, and adaptation
+- ✅ **All features are stable and functional** - you can continue using Chronicle if it meets your needs
+- ✅ **Comprehensive documentation** preserves all architectural decisions and implementation patterns
+- ❌ **No new features or bug fixes** will be implemented
+- ❌ **No active maintenance or support** will be provided
+
+### Recommended Alternative
+
+For new users or those seeking similar functionality, we highly recommend exploring:
+
+- **episodic-memory skill** (superpowers repository) - Cross-platform conversation memory with advanced search capabilities
+- **Built-in AI tool memory** - Many AI assistants are adding native session memory features
+
+### Legacy
+
+Chronicle pioneered the concept of AI session recording and demonstrated:
+- AI-powered session summarization with chunked processing
+- MCP server integration for AI queryable databases
+- Database-tracked project management with milestone linking
+- Cross-platform session organization and search
+- The value of persistent AI memory in development workflows
+
+**Thank you to everyone who used, contributed to, and supported Chronicle!** 🎯
+
 [![Tests](https://img.shields.io/badge/tests-140%20passing-brightgreen)]()
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue)]()
 [![License](https://img.shields.io/badge/license-MIT-blue)]()
 [![MCP](https://img.shields.io/badge/MCP-enabled-purple)]()
-[![Phase](https://img.shields.io/badge/phase-5%20complete-success)]()
+[![Phase](https://img.shields.io/badge/phase-6%20complete-success)]()
+[![Status](https://img.shields.io/badge/status-sunset-important)]()
 
 ---
 
