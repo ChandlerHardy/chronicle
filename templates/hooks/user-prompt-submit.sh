@@ -12,6 +12,9 @@ user_prompt=$(echo "$input_json" | jq -r '.prompt // empty')
 # Flag to track if specific skill has been triggered
 skill_triggered=false
 
+# Array to track all checks performed (for debug output)
+declare -a checks_performed=()
+
 # Function to output JSON with system message and reasoning
 output_context() {
     local message="$1"
@@ -32,6 +35,39 @@ Decision: Inject skill recommendation
     jq -n \
         --arg msg "$message" \
         --arg reason "$detailed_reason" \
+        '{
+            "decision": "approve",
+            "reason": $reason,
+            "systemMessage": $msg
+        }'
+}
+
+# Function to output debug reasoning when nothing triggered
+output_debug_reasoning() {
+    local prompt_preview="${user_prompt:0:60}"
+    if [[ ${#user_prompt} -gt 60 ]]; then
+        prompt_preview="${prompt_preview}..."
+    fi
+
+    # Build checks summary with actual newlines (like stop.sh does)
+    local checks_summary="🔍 HOOK ANALYSIS (Debug Mode)
+
+Prompt: \"${prompt_preview}\"
+
+Checks performed:
+"
+    for check in "${checks_performed[@]}"; do
+        checks_summary+="${check}
+"
+    done
+
+    checks_summary+="
+Decision: Approve without injection (no triggers matched)"
+
+    # Include in BOTH reason (for logging) and systemMessage (for display)
+    jq -n \
+        --arg reason "$checks_summary" \
+        --arg msg "$checks_summary" \
         '{
             "decision": "approve",
             "reason": $reason,
@@ -84,6 +120,7 @@ tdd_excludes="(test|write.*test|TDD|red-green-refactor|what (does|is)|how (does|
 
 if echo "$user_prompt" | grep -iqE "$tdd_phrases"; then
     if ! echo "$user_prompt" | grep -iqE "$tdd_excludes"; then
+        checks_performed+=("✅ 🧪 TDD patterns - MATCHED (implement/build/write keywords found, no test exclusions)")
         output_context "🧪 TDD ENFORCER ACTIVATED
 
 Before writing implementation code, we MUST:
@@ -99,11 +136,16 @@ Load with: Skill(command=\"test-driven-development\")" \
         "User prompt contains TDD trigger patterns (implement/build/write/create) but no test-related exclusions. This indicates new implementation work that violates TDD principles. According to TDD skill: 'NO PRODUCTION CODE WITHOUT A FAILING TEST FIRST' - this is a red flag requiring immediate intervention." \
         "TDD violation detected"
         exit 0
+    else
+        checks_performed+=("⚪ 🧪 TDD patterns - no violation (keywords found but excluded: test-related context)")
     fi
+else
+    checks_performed+=("⚪ 🧪 TDD patterns - no match (no implement/build/write keywords)")
 fi
 
 # Other skill triggers with priorities
 if echo "$user_prompt" | grep -iqE "(document session|export.*to obsidian|save.*to (vault|obsidian)|create (note|obsidian note) for)"; then
+    checks_performed+=("✅ 📝 Obsidian export - MATCHED (document/export keywords found)")
     output_context "🎯 SKILL DETECTED: chronicle-session-documenter
 
 Your prompt matches documenting sessions to Obsidian vault.
@@ -117,9 +159,12 @@ Load with: Skill(command=\"chronicle-session-documenter\")" \
         "User prompt contains keywords related to Obsidian export and session documentation. Pattern matches workflow for saving Chronicle sessions to knowledge base, which should be automated rather than done manually." \
         "Obsidian export detected"
     exit 0
+else
+    checks_performed+=("⚪ 📝 Obsidian export - no match (no document/export/vault keywords)")
 fi
 
 if echo "$user_prompt" | grep -iqE "(how did (I|we) (implement|fix|build|create|handle|solve)|what did (I|we) do (yesterday|last week|last month|before)|show me (all |past |previous )?work on|what was the blocker|when did (I|we) work on|find sessions? (about|on|for)|search (for |past )?sessions?)"; then
+    checks_performed+=("✅ 🔍 Context retrieval - MATCHED (how did I/what did I/past work patterns found)")
     output_context "🔍 SKILL DETECTED: chronicle-context-retriever
 
 Your prompt matches searching past development sessions.
@@ -134,9 +179,12 @@ Load with: Skill(command=\"chronicle-context-retriever\")" \
         "User prompt contains context retrieval patterns (how did I/what did I/show me past work). This indicates need for historical development context which should be retrieved via specialized skill rather than manual searching." \
         "Context retrieval request"
     exit 0
+else
+    checks_performed+=("⚪ 🔍 Context retrieval - no match (no 'how did I' or past work patterns)")
 fi
 
 if echo "$user_prompt" | grep -iqE "(what'?s next|show (me )?(the )?roadmap|what should (I|we) work on|plan (new |a )?feature|create (a )?milestone|mark.*(milestone|step).*complete|what'?s in progress|view (the )?milestones?|track progress)"; then
+    checks_performed+=("✅ 📊 Project tracking - MATCHED (roadmap/milestone/what's next keywords found)")
     output_context "📊 SKILL DETECTED: chronicle-project-tracker
 
 Your prompt matches project planning and tracking.
@@ -152,12 +200,15 @@ Load with: Skill(command=\"chronicle-project-tracker\")" \
         "User prompt contains project management keywords (roadmap/milestone/what's next/progress). This indicates planning or tracking work that should use the specialized project tracking system rather than ad-hoc management." \
         "Project tracking request"
     exit 0
+else
+    checks_performed+=("⚪ 📊 Project tracking - no match (no roadmap/milestone keywords)")
 fi
 
 # Basic Chronicle Advocate search reminder (only if no specific skill triggered)
 if [[ "$skill_triggered" == "false" ]]; then
     if echo "$user_prompt" | grep -iqE "(implement|add|create|build|fix|debug)"; then
         if ! echo "$user_prompt" | grep -iqE "(read|view|show|explain)"; then
+            checks_performed+=("✅ ⚙️ General implementation - MATCHED (implement/add/create keywords, no read/view exclusions)")
             output_context "🔍 SEARCH CHRONICLE FIRST
 
 ⚠️ Before implementing, use chronicle-context-retriever skill:
@@ -167,8 +218,15 @@ WHY: 2,700x ROI - 1 second vs 20 minutes
 Proof: Sessions 21, 30, 31 show reinventing wastes time" \
                     "General implementation keywords detected without specific skill matches. Default behavior: recommend Chronicle search to avoid reinventing solutions and leverage prior work." \
                     "General implementation detected"
+            exit 0
+        else
+            checks_performed+=("⚪ ⚙️ General implementation - has exclusions (implementation keywords found but excluded: read/view/show/explain)")
         fi
+    else
+        checks_performed+=("⚪ ⚙️ General implementation - no match (no implement/add/create keywords)")
     fi
 fi
 
+# No triggers matched - output debug reasoning
+output_debug_reasoning
 exit 0
